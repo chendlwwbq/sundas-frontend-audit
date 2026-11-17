@@ -1,0 +1,15 @@
+export type ReferenceImage = {
+    id: string;
+    name: string;
+    type: string;
+    dataUrl: string;
+    url?: string;
+    storageKey?: string;
+    width?: number;
+    height?: number;
+    bytes?: number;
+    uploading?: boolean;
+    queued?: boolean;
+    progress?: number;
+    error?: string;
+};

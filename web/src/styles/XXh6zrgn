@@ -1,0 +1,419 @@
+/* 创作工作台（图片 / 视频 / 对话）—— 即梦规范落地
+   侧栏 #171717 / 内容 #121212 / 合成器 24px 圆角 + 1px 亮箍 / 工具 pill 32px
+   主按钮反白 / 所有控件圆角 8 / 无发光无彩色渐变 */
+
+/* ---------------------------------------------------------------- 侧栏 */
+.creation-shell .creation-sidebar {
+    width: 240px;
+    background: var(--bg-rail);
+    border-right: 1px solid var(--line);
+}
+
+.creation-shell .creation-sidebar > div:first-child {
+    height: 64px;
+    padding: 0 16px;
+}
+
+.creation-shell .creation-sidebar h2 {
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 500;
+    color: var(--text-4);
+}
+
+.creation-shell .creation-sidebar nav a {
+    min-height: 36px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-3) !important;
+    transition:
+        background-color 160ms cubic-bezier(0.4, 0, 0.2, 1),
+        color 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-shell .creation-sidebar nav a:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1) !important;
+}
+
+.creation-shell .creation-sidebar nav a[aria-current="page"] {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-1) !important;
+}
+
+.creation-shell .creation-sidebar nav a > span:last-child {
+    font-size: 11px;
+    color: var(--text-5);
+}
+
+/* ------------------------------------------------------------ 顶栏/内容 */
+.creation-shell main .creation-top-actions {
+    height: 60px;
+    padding: 0 24px;
+    border-bottom: 0;
+    background: transparent;
+}
+
+.creation-shell main .creation-top-actions button {
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* 「加载更早记录」：居中胶囊，不再贴左悬空 */
+.creation-shell main .creation-load-earlier.ant-btn {
+    display: inline-flex;
+    margin: 0 auto 16px;
+    height: 32px;
+    padding: 0 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.creation-shell main .creation-load-earlier.ant-btn:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1);
+}
+
+/* -------------------------------------------------------------- 空态 */
+.creation-shell main .creation-empty-wrap {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+}
+
+.creation-shell main .creation-empty {
+    display: flex;
+    min-height: clamp(200px, 34dvh, 420px);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+    text-align: center;
+}
+
+.creation-shell main .creation-empty-icon {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-2);
+}
+
+.creation-shell main .creation-empty-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 1.5;
+}
+
+.creation-shell main .creation-empty h2 {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--text-1);
+}
+
+.creation-shell main .creation-empty p {
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 22px;
+    color: var(--text-4);
+}
+
+.creation-shell main .creation-empty .creation-tool-button {
+    margin-top: 16px;
+}
+
+/* ------------------------------------------------------------ 合成器 */
+.creation-shell main .creation-composer {
+    max-width: 960px;
+    padding: 0 24px 24px;
+    margin: 0 auto;
+}
+
+.creation-shell main .creation-composer .astryx-chat-composer {
+    padding: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 24px !important;
+    background: #1a1a1a !important;
+    box-shadow: none !important;
+    transition:
+        border-color 160ms cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-shell main .creation-composer .astryx-chat-composer:focus-within {
+    border-color: rgba(0, 158, 250, 0.55) !important;
+    box-shadow: 0 0 0 3px rgba(0, 158, 250, 0.12) !important;
+}
+
+.creation-shell main .creation-composer .astryx-chat-composer > div {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+/* 输入区：14/24，无边框无底色 */
+.creation-shell main .creation-composer textarea.ant-input {
+    min-height: 88px;
+    padding: 2px 2px 24px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: var(--text-1) !important;
+    font-size: 14px !important;
+    line-height: 24px !important;
+    box-shadow: none !important;
+}
+
+.creation-shell main .creation-composer textarea.ant-input::placeholder {
+    color: var(--text-5) !important;
+}
+
+.creation-shell main .creation-composer textarea.ant-input:focus {
+    box-shadow: none !important;
+}
+
+/* 工具条：与输入区之间一条发丝线，pill 统一 32px/8px 圆角 */
+.creation-shell main .creation-composer .creation-actions {
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+}
+
+.creation-shell main .creation-composer div:has(> .creation-actions) {
+    flex-wrap: wrap;
+    row-gap: 10px;
+}
+
+.creation-shell main .creation-composer .creation-costs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 14px;
+}
+
+.creation-shell main .creation-composer .creation-costs > span {
+    font-size: 11px;
+    color: var(--text-5);
+}
+
+/* -------------------------------------------------------- 工具条控件 */
+.creation-shell main .creation-tool-button,
+.creation-shell main .creation-icon-button {
+    display: inline-flex;
+    height: 32px;
+    min-height: 32px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 450;
+    line-height: 1;
+    transition:
+        background-color 140ms cubic-bezier(0.4, 0, 0.2, 1),
+        color 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-shell main .creation-icon-button {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+}
+
+.creation-shell main .creation-tool-button:hover,
+.creation-shell main .creation-icon-button:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1);
+}
+
+.creation-shell main .creation-tool-button[aria-pressed="true"] {
+    background: var(--jm-accent-soft);
+    color: #33b3ff;
+}
+
+/* 模式切换（图片/视频/对话）：透明轨道 + 白 8% 选中胶囊 */
+.creation-shell main .creation-mode-switch {
+    height: 32px;
+    padding: 0;
+    border-radius: 8px;
+    background: transparent !important;
+    gap: 2px;
+}
+
+.creation-shell main .creation-mode-switch [role="radio"] {
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 8px;
+    color: var(--text-3) !important;
+    font-size: 12px !important;
+    font-weight: 450 !important;
+    background: transparent !important;
+    transition:
+        background-color 140ms cubic-bezier(0.4, 0, 0.2, 1),
+        color 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-shell main .creation-mode-switch [role="radio"]:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: var(--text-1) !important;
+}
+
+.creation-shell main .creation-mode-switch [role="radio"][aria-checked="true"] {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-1) !important;
+    box-shadow: none !important;
+}
+
+.creation-shell main .creation-mode-switch [role="radio"] * {
+    color: inherit !important;
+}
+
+/* 模型选择器：32px 高、8px 圆角、描边 12% */
+.creation-shell main .creation-composer [role="combobox"] {
+    height: 32px !important;
+    min-width: 140px;
+    max-width: 220px;
+    border: 1px solid var(--line) !important;
+    border-radius: 8px !important;
+    background: transparent !important;
+    color: var(--text-2) !important;
+    font-size: 12px !important;
+    box-shadow: none !important;
+}
+
+.creation-shell main .creation-composer [role="combobox"]:hover {
+    border-color: var(--line-strong) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* ------------------------------------------------------------ 按钮 */
+.creation-shell main .astryx-button[data-variant="primary"] {
+    min-height: 36px;
+    padding-inline: 16px;
+    border-radius: 8px;
+    background: #ffffff !important;
+    color: #121212 !important;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: none !important;
+    filter: none !important;
+    transition: background-color 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-shell main .astryx-button[data-variant="primary"]:hover:not([aria-disabled="true"]):not(:disabled) {
+    background: #ededed !important;
+    transform: none;
+}
+
+.creation-shell main .astryx-button[data-variant="primary"]:active:not([aria-disabled="true"]) {
+    background: #e0e0e0 !important;
+}
+
+.creation-shell main .astryx-button[data-variant="primary"][aria-disabled="true"],
+.creation-shell main .astryx-button[data-variant="primary"]:disabled {
+    background: rgba(255, 255, 255, 0.16) !important;
+    color: rgba(255, 255, 255, 0.4) !important;
+    box-shadow: none !important;
+}
+
+.creation-shell main .astryx-button[data-variant="primary"] svg {
+    color: inherit;
+}
+
+.creation-shell main .record-actions {
+    gap: 8px;
+    padding-block: 6px;
+}
+
+.creation-shell main .record-actions .astryx-button {
+    border-radius: 8px;
+    font-size: 12px;
+}
+
+/* ------------------------------------------------------- 结果/消息卡 */
+.creation-shell main .creation-result-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg-card);
+    box-shadow: none;
+    transition:
+        border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+        background-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-shell main .creation-result-card:hover {
+    border-color: var(--line-strong);
+    background: #1f1f1f;
+}
+
+.creation-shell main .creation-result-card img {
+    transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.creation-shell main .creation-result-card:hover img {
+    transform: scale(1.02);
+}
+
+.creation-shell main .astryx-chat-message {
+    font-size: 14px;
+    line-height: 24px;
+}
+
+/* ---------------------------------------------------------- 响应式 */
+@media (max-width: 1024px) {
+    .creation-shell .creation-sidebar {
+        width: 100%;
+    }
+}
+
+@media (max-width: 640px) {
+    .creation-shell main .creation-composer {
+        padding: 0 12px 16px;
+    }
+    .creation-shell main .creation-composer .astryx-chat-composer {
+        border-radius: 20px !important;
+        padding: 12px;
+    }
+    .creation-shell main .creation-empty {
+        min-height: 30dvh;
+        padding: 20px 12px;
+    }
+    .creation-shell main .creation-empty h2 {
+        font-size: 18px;
+    }
+    .creation-shell main .creation-composer .creation-costs {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .creation-shell main .creation-result-card,
+    .creation-shell main .astryx-button[data-variant="primary"],
+    .creation-shell main .creation-composer .astryx-chat-composer {
+        transition: none;
+    }
+    .creation-shell main .creation-result-card:hover img {
+        transform: none;
+    }
+}

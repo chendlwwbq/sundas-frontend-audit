@@ -1,0 +1,958 @@
+/* ============================================================================
+ * 即梦（Jimeng）视觉层 —— 单一权威样式层
+ * 依据 https://jimeng.jianying.com/ 应用内暗色规范：
+ *   表面   #121212 页面 / #171717 侧栏 / #1A1A1A 卡面 / #202020 内嵌
+ *   层级   全部靠白色透明度（描边 .04/.08/.12，文字 .88/.70/.60/.40/.20）
+ *   强调   单一蓝 #009EFA（青 #00CAE0 仅 AI 语义，橙 #E56603 仅价格）
+ *   形状   控件 8 / 卡片 12 / 功能卡 16 / 合成器 24 / 胶囊 999，描边永远 1px
+ *   质感   1px 描边 + blur，卡片无阴影；只有浮层允许 0 8px 32px rgba(0,0,0,.28)
+ * 本文件在 globals.css 末尾引入，用于收敛历史「青柠绿 + 暖黑」遗留视觉。
+ * ========================================================================== */
+
+/* ---------------------------------------------------------------- 1. 令牌 */
+:root {
+    /* 表面 */
+    --bg-page: #121212;
+    --bg-rail: #171717;
+    --bg-card: #1a1a1a;
+    --bg-raised: #202020;
+    --bg-media: #333333;
+    --bg-glass: linear-gradient(rgba(26, 26, 26, 0.72), rgba(42, 42, 42, 0.72));
+    --bg-glass-card: linear-gradient(126deg, rgba(26, 26, 26, 0.9), rgba(26, 26, 26, 0.6));
+    /* 描边 */
+    --line: rgba(255, 255, 255, 0.08);
+    --line-soft: rgba(255, 255, 255, 0.04);
+    --line-strong: rgba(255, 255, 255, 0.12);
+    /* 文字阶梯 */
+    --text-1: #ffffff;
+    --text-2: rgba(255, 255, 255, 0.88);
+    --text-3: rgba(255, 255, 255, 0.7);
+    --text-4: rgba(255, 255, 255, 0.6);
+    --text-5: rgba(255, 255, 255, 0.4);
+    --text-6: rgba(255, 255, 255, 0.2);
+    /* 强调 */
+    --jm-accent: #009efa;
+    --jm-accent-hover: #33b3ff;
+    --jm-accent-active: #0086d6;
+    --jm-accent-soft: rgba(0, 158, 250, 0.12);
+    --jm-accent-line: rgba(0, 158, 250, 0.55);
+    --cyan: #00cae0;
+    --orange: #e56603;
+    --warm: #fcf2eb;
+    /* 语义 */
+    --success: #22c55e;
+    --warning: #f5a623;
+    --danger: #f5483b;
+    /* 圆角 */
+    --r-badge: 4px;
+    --r-control: 8px;
+    --r-card: 12px;
+    --r-feature: 16px;
+    --r-composer: 24px;
+    --r-pill: 999px;
+    /* 动效 */
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-control: cubic-bezier(0.4, 0, 0.2, 1);
+    --dur-1: 140ms;
+    --dur-2: 220ms;
+    --dur-3: 350ms;
+    /* 浮层阴影 */
+    --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.5);
+    --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+/* ------------------------------------------------------- 2. 基础排版/表面 */
+html.dark,
+html {
+    color-scheme: dark;
+    --font-sans: "CapCut Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    --font-heading: "FZYaShiHeiS", "CapCut Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+    --font-num: Montserrat, "CapCut Sans", "PingFang SC", Arial, sans-serif;
+}
+
+html,
+body {
+    font-family: var(--font-sans);
+    background: var(--bg-page);
+    color: var(--text-1);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+/* 标题一律 600，标题层级只靠字号与透明度，不靠 700/900 */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+h1 {
+    font-size: 30px;
+    line-height: 38px;
+    letter-spacing: -0.01em;
+}
+
+h2 {
+    font-size: 20px;
+    line-height: 28px;
+}
+
+h3 {
+    font-size: 15px;
+    line-height: 22px;
+}
+
+/* 数字统一等宽，避免积分/时长跳动 */
+.jm-num,
+.tabular-nums {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
+
+/* 选中文本：即梦蓝 24% */
+::selection {
+    background: rgba(0, 158, 250, 0.28);
+    color: #fff;
+}
+
+/* 焦点可见性：3px 浅蓝光圈，不用默认虚线框 */
+*:focus-visible {
+    outline: 2px solid var(--jm-accent-line);
+    outline-offset: 2px;
+}
+
+/* ------------------------------------------------- 3. 剥离旧版装饰性残留 */
+
+/* 页面级点阵/网格纹理（规范明确禁止）。资产页、404、画布刷新壳均使用内联 class，
+   这里按属性选择器兜底，保证任何遗留写法都不再露出纹理。 */
+[class*="radial-gradient"],
+[class*="bg-[radial-gradient"] {
+    background-image: none !important;
+}
+
+/* 旧「品牌绿」文本/描边兜底 */
+.text-lime-300,
+.bg-lime-300,
+.bg-lime-400 {
+    background-color: var(--jm-accent) !important;
+    color: #fff !important;
+}
+
+/* 旧版彩色渐变/发光阴影统一压掉（卡片不允许投影） */
+.jm-no-glow {
+    box-shadow: none !important;
+    filter: none !important;
+}
+
+/* ----------------------------------------------------------- 4. antd 控件 */
+
+/* 4.1 按钮：主按钮反白，表单型主按钮走即梦蓝 */
+html.dark .ant-btn {
+    border-radius: var(--r-control);
+    font-weight: 500;
+    box-shadow: none !important;
+    transition:
+        background-color var(--dur-1) var(--ease-control),
+        border-color var(--dur-1) var(--ease-control),
+        color var(--dur-1) var(--ease-control),
+        opacity var(--dur-1) var(--ease-control);
+}
+
+html.dark .ant-btn-color-primary.ant-btn-variant-solid {
+    background: var(--jm-accent) !important;
+    color: #fff !important;
+}
+
+html.dark .ant-btn-color-primary.ant-btn-variant-solid:hover:not(:disabled) {
+    background: var(--jm-accent-hover) !important;
+}
+
+html.dark .ant-btn-color-primary.ant-btn-variant-solid:active:not(:disabled) {
+    background: var(--jm-accent-active) !important;
+}
+
+html.dark .ant-btn-variant-outlined,
+html.dark .ant-btn-default {
+    border-color: var(--line-strong) !important;
+    background: transparent !important;
+    color: var(--text-2) !important;
+}
+
+html.dark .ant-btn-variant-outlined:hover:not(:disabled),
+html.dark .ant-btn-default:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: var(--text-1) !important;
+}
+
+html.dark .ant-btn-text {
+    color: var(--text-3) !important;
+}
+
+html.dark .ant-btn-text:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: var(--text-1) !important;
+}
+
+html.dark .ant-btn:disabled,
+html.dark .ant-btn[disabled] {
+    opacity: 0.4;
+    box-shadow: none !important;
+}
+
+/* 4.2 输入类 */
+html.dark .ant-input,
+html.dark .ant-input-affix-wrapper,
+html.dark .ant-input-number,
+html.dark .ant-select-selector,
+html.dark .ant-picker,
+html.dark textarea.ant-input {
+    border-radius: var(--r-control) !important;
+    border-color: var(--line-strong) !important;
+    background: var(--bg-card) !important;
+    color: #fafbff !important;
+    box-shadow: none !important;
+}
+
+html.dark .ant-input::placeholder,
+html.dark .ant-input-affix-wrapper input::placeholder,
+html.dark textarea.ant-input::placeholder {
+    color: var(--text-5) !important;
+}
+
+html.dark .ant-input:hover,
+html.dark .ant-input-affix-wrapper:hover,
+html.dark .ant-input-number:hover,
+html.dark .ant-picker:hover {
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+html.dark .ant-input:focus,
+html.dark .ant-input-affix-wrapper-focused,
+html.dark .ant-input-affix-wrapper:focus-within,
+html.dark .ant-select-focused .ant-select-selector,
+html.dark .ant-picker-focused {
+    border-color: rgba(0, 158, 250, 0.6) !important;
+    box-shadow: 0 0 0 3px rgba(0, 158, 250, 0.14) !important;
+}
+
+html.dark .ant-input-search .ant-input-search-button {
+    border-radius: 0 var(--r-control) var(--r-control) 0 !important;
+}
+
+/* 4.3 Tabs：去下划线，改胶囊底（即梦不用 ink-bar） */
+html.dark .ant-tabs-top > .ant-tabs-nav::before,
+html.dark .ant-tabs-bottom > .ant-tabs-nav::before,
+html.dark .ant-tabs-top > .ant-tabs-nav .ant-tabs-ink-bar,
+html.dark .ant-tabs .ant-tabs-ink-bar {
+    display: none !important;
+}
+
+html.dark .ant-tabs .ant-tabs-tab {
+    padding: 0 16px !important;
+    height: 36px;
+    border-radius: var(--r-pill);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-3);
+    transition:
+        background-color var(--dur-1) var(--ease-control),
+        color var(--dur-1) var(--ease-control);
+}
+
+html.dark .ant-tabs .ant-tabs-tab + .ant-tabs-tab {
+    margin-left: 8px !important;
+}
+
+html.dark .ant-tabs .ant-tabs-tab:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-1);
+}
+
+html.dark .ant-tabs .ant-tabs-tab.ant-tabs-tab-active {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+html.dark .ant-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+    color: var(--text-1) !important;
+    text-shadow: none !important;
+}
+
+html.dark .ant-tabs-nav-list {
+    gap: 0;
+}
+
+/* 4.4 分段控件：乳白渐变激活胶囊 */
+html.dark .ant-segmented {
+    padding: 2px;
+    border-radius: var(--r-pill);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .ant-segmented .ant-segmented-item {
+    border-radius: var(--r-pill);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-4);
+    transition:
+        color var(--dur-1) var(--ease-control),
+        background-color var(--dur-1) var(--ease-control);
+}
+
+html.dark .ant-segmented .ant-segmented-item:hover:not(.ant-segmented-item-selected) {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-2);
+}
+
+html.dark .ant-segmented .ant-segmented-item-selected,
+html.dark .ant-segmented .ant-segmented-thumb {
+    background: linear-gradient(90deg, #fceae0 0%, #fcf6f2 38%, #eaf7fd 70%, #d8f1fe 100%) !important;
+    color: #121212 !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6) !important;
+}
+
+html.dark .ant-segmented .ant-segmented-item-selected svg {
+    color: #121212;
+}
+
+/* 4.5 浮层：Modal / Drawer / Dropdown / Select / Popover / Tooltip */
+html.dark .ant-modal .ant-modal-content {
+    border-radius: var(--r-feature);
+    border: 1px solid var(--line);
+    background: var(--bg-card);
+    box-shadow: var(--shadow-modal);
+    padding: 24px;
+}
+
+html.dark .ant-modal .ant-modal-header {
+    margin-bottom: 16px;
+    background: transparent;
+}
+
+html.dark .ant-modal .ant-modal-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-1);
+}
+
+html.dark .ant-modal .ant-modal-close {
+    border-radius: var(--r-control);
+    color: var(--text-4);
+}
+
+html.dark .ant-modal .ant-modal-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-1);
+}
+
+html.dark .ant-modal .ant-modal-footer {
+    margin-top: 24px;
+    padding-top: 0;
+    border-top: 0;
+}
+
+html.dark .ant-modal-mask,
+html.dark .ant-drawer-mask {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: none;
+}
+
+html.dark .ant-drawer .ant-drawer-content {
+    background: var(--bg-rail);
+}
+
+html.dark .ant-drawer .ant-drawer-header {
+    border-bottom: 1px solid var(--line);
+    padding: 16px 20px;
+}
+
+html.dark .ant-drawer .ant-drawer-title {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+html.dark .ant-dropdown .ant-dropdown-menu,
+html.dark .ant-select-dropdown,
+html.dark .ant-picker-panel-container,
+html.dark .ant-popover .ant-popover-inner {
+    border-radius: var(--r-card);
+    border: 1px solid var(--line);
+    background: #1f1f1f;
+    box-shadow: var(--shadow-pop);
+    padding: 4px;
+}
+
+html.dark .ant-dropdown .ant-dropdown-menu-item,
+html.dark .ant-select-dropdown .ant-select-item {
+    min-height: 34px;
+    border-radius: var(--r-control);
+    padding: 0 10px;
+    font-size: 13px;
+    color: var(--text-2);
+}
+
+html.dark .ant-dropdown .ant-dropdown-menu-item:hover,
+html.dark .ant-select-dropdown .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-1);
+}
+
+html.dark .ant-select-dropdown .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-1) !important;
+    font-weight: 500;
+}
+
+html.dark .ant-popover .ant-popover-inner {
+    padding: 12px;
+}
+
+html.dark .ant-popover .ant-popover-arrow::before {
+    background: #1f1f1f;
+}
+
+html.dark .ant-tooltip .ant-tooltip-inner {
+    min-height: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-control);
+    background: rgba(28, 28, 28, 0.96);
+    color: var(--text-2);
+    font-size: 12px;
+    line-height: 18px;
+    box-shadow: none;
+}
+
+html.dark .ant-tooltip .ant-tooltip-arrow::before {
+    background: rgba(28, 28, 28, 0.96);
+}
+
+/* 4.6 消息与通知：暗卡 + 1px 描边（antd 静态方法不继承主题） */
+html.dark .ant-message .ant-message-notice-content {
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    background: #1f1f1f;
+    color: var(--text-2);
+    font-size: 13px;
+    box-shadow: var(--shadow-pop);
+}
+
+html.dark .ant-notification .ant-notification-notice {
+    border: 1px solid var(--line);
+    border-radius: var(--r-feature);
+    background: var(--bg-card);
+    color: var(--text-2);
+    box-shadow: var(--shadow-modal);
+    padding: 16px 18px;
+}
+
+html.dark .ant-notification .ant-notification-notice-message {
+    margin-bottom: 4px;
+    color: var(--text-1);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+html.dark .ant-notification .ant-notification-notice-description {
+    color: var(--text-3);
+    font-size: 12.5px;
+    line-height: 1.7;
+}
+
+html.dark .ant-notification .ant-notification-notice-close {
+    color: var(--text-4);
+    border-radius: var(--r-control);
+}
+
+html.dark .ant-notification .ant-notification-notice-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-1);
+}
+
+html.dark .ant-notification .ant-notification-notice-btn {
+    margin-top: 12px;
+}
+
+/* 4.7 表格、分页、表单标签 */
+html.dark .ant-table {
+    background: transparent;
+    font-size: 13px;
+}
+
+html.dark .ant-table-thead > tr > th {
+    border-bottom: 1px solid var(--line) !important;
+    background: transparent !important;
+    color: var(--text-4) !important;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+html.dark .ant-table-tbody > tr > td {
+    border-bottom: 1px solid var(--line-soft) !important;
+    color: var(--text-2);
+}
+
+html.dark .ant-table-tbody > tr:hover > td {
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+html.dark .ant-pagination .ant-pagination-item,
+html.dark .ant-pagination .ant-pagination-prev,
+html.dark .ant-pagination .ant-pagination-next {
+    border-radius: var(--r-control);
+    border-color: var(--line);
+    background: transparent;
+    font-size: 13px;
+}
+
+html.dark .ant-pagination .ant-pagination-item-active {
+    border-color: var(--jm-accent-line);
+    background: var(--jm-accent-soft);
+}
+
+html.dark .ant-pagination .ant-pagination-item-active a {
+    color: var(--jm-accent) !important;
+}
+
+html.dark .ant-form-item .ant-form-item-label > label {
+    color: var(--text-4);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* 4.8 开关 / 滑块 / 复选 */
+html.dark .ant-switch {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+html.dark .ant-switch.ant-switch-checked {
+    background: var(--jm-accent);
+}
+
+html.dark .ant-switch .ant-switch-handle::before {
+    box-shadow: none;
+}
+
+html.dark .ant-slider .ant-slider-rail {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+html.dark .ant-slider .ant-slider-track {
+    background: var(--jm-accent);
+}
+
+html.dark .ant-slider .ant-slider-handle::after {
+    box-shadow: 0 0 0 2px var(--jm-accent);
+}
+
+html.dark .ant-checkbox .ant-checkbox-inner,
+html.dark .ant-radio .ant-radio-inner {
+    border-radius: 4px;
+    border-color: var(--line-strong);
+    background: transparent;
+}
+
+html.dark .ant-radio .ant-radio-inner {
+    border-radius: 50%;
+}
+
+html.dark .ant-checkbox-checked .ant-checkbox-inner,
+html.dark .ant-radio-checked .ant-radio-inner {
+    border-color: var(--jm-accent) !important;
+    background: var(--jm-accent) !important;
+}
+
+/* 4.9 空态 / 骨架 / 加载 */
+html.dark .ant-empty .ant-empty-description {
+    color: var(--text-5);
+    font-size: 12px;
+}
+
+html.dark .ant-skeleton .ant-skeleton-content .ant-skeleton-title,
+html.dark .ant-skeleton .ant-skeleton-content .ant-skeleton-paragraph > li,
+html.dark .ant-skeleton .ant-skeleton-avatar {
+    background: linear-gradient(90deg, #202020, #2a2a2a, #202020);
+    background-size: 200% 100%;
+    animation: jm-skeleton 2s linear infinite;
+}
+
+@keyframes jm-skeleton {
+    from {
+        background-position: 100% 0;
+    }
+    to {
+        background-position: -100% 0;
+    }
+}
+
+/* 4.10 标签 / 徽章 / 卡片内嵌块 */
+html.dark .ant-tag {
+    border-radius: var(--r-badge);
+    border-color: var(--line);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-3);
+    font-size: 11px;
+}
+
+/* ------------------------------------------------------ 5. 即梦组件类 */
+
+/* 5.1 页面骨架：标题左对齐 30/600，说明 14/22 --text-3 */
+.jm-page {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    background: var(--bg-page);
+}
+
+.jm-page-inner {
+    width: 100%;
+    max-width: 1360px;
+    margin: 0 auto;
+    padding: 32px 24px 64px 40px;
+}
+
+.jm-page-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.jm-page-title {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 30px;
+    line-height: 38px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-1);
+}
+
+.jm-page-desc {
+    margin: 8px 0 0;
+    max-width: 640px;
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--text-3);
+}
+
+.jm-section-title {
+    margin: 0;
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 600;
+    color: var(--text-1);
+}
+
+/* 5.2 胶囊 tab 行（替代下划线 tab） */
+.jm-segment {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.jm-segment-item {
+    display: inline-flex;
+    height: 36px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: transparent;
+    color: var(--text-3);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        background-color var(--dur-1) var(--ease-control),
+        color var(--dur-1) var(--ease-control);
+}
+
+.jm-segment-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-1);
+}
+
+.jm-segment-item[aria-selected="true"],
+.jm-segment-item.is-active {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1);
+}
+
+/* 5.3 chip / 筛选胶囊 */
+.jm-chip {
+    display: inline-flex;
+    height: 28px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        background-color var(--dur-1) var(--ease-control),
+        border-color var(--dur-1) var(--ease-control),
+        color var(--dur-1) var(--ease-control);
+}
+
+.jm-chip:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--text-2);
+}
+
+.jm-chip.is-active,
+.jm-chip[aria-pressed="true"] {
+    border-color: var(--jm-accent-line);
+    background: var(--jm-accent-soft);
+    color: var(--jm-accent);
+}
+
+/* 5.4 卡片 */
+.jm-card {
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    background: var(--bg-card);
+    box-shadow: none;
+}
+
+.jm-card-feature {
+    border: 1px solid var(--line);
+    border-radius: var(--r-feature);
+    background: var(--bg-glass-card);
+    box-shadow: none;
+}
+
+.jm-card-hover {
+    transition:
+        background-color var(--dur-2) var(--ease-out),
+        border-color var(--dur-2) var(--ease-out);
+}
+
+.jm-card-hover:hover {
+    border-color: var(--line-strong);
+    background: #1f1f1f;
+}
+
+/* 5.5 主按钮反白（页面级一级动作，非表单提交） */
+.jm-btn {
+    display: inline-flex;
+    height: 36px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 16px;
+    border: 1px solid transparent;
+    border-radius: var(--r-control);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        background-color var(--dur-1) var(--ease-control),
+        border-color var(--dur-1) var(--ease-control),
+        color var(--dur-1) var(--ease-control);
+}
+
+.jm-btn-primary {
+    background: #fff;
+    color: #121212;
+}
+
+.jm-btn-primary:hover {
+    background: #ededed;
+}
+
+.jm-btn-primary:active {
+    background: #e0e0e0;
+}
+
+.jm-btn-primary:disabled {
+    background: rgba(255, 255, 255, 0.16);
+    color: var(--text-6);
+    cursor: not-allowed;
+}
+
+.jm-btn-secondary {
+    border-color: var(--line-strong);
+    background: transparent;
+    color: var(--text-2);
+}
+
+.jm-btn-secondary:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1);
+}
+
+.jm-btn-ghost {
+    background: transparent;
+    color: var(--text-3);
+}
+
+.jm-btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1);
+}
+
+/* 5.6 搜索框（大） */
+.jm-search {
+    display: flex;
+    height: 36px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    width: 300px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-4);
+    transition:
+        border-color var(--dur-1) var(--ease-control),
+        background-color var(--dur-1) var(--ease-control);
+}
+
+.jm-search:focus-within {
+    border-color: rgba(0, 158, 250, 0.6);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.jm-search input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text-1);
+    font-size: 13px;
+}
+
+.jm-search input::placeholder {
+    color: var(--text-5);
+}
+
+/* 5.7 空态：40px 图标 + 14/500 标题 + 12px 说明，padding 48 */
+.jm-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 48px 24px;
+    text-align: center;
+}
+
+.jm-empty-icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin-bottom: 4px;
+    color: var(--text-6);
+}
+
+.jm-empty-title {
+    margin: 0;
+    font-size: 14px;
+    line-height: 22px;
+    font-weight: 500;
+    color: var(--text-3);
+}
+
+.jm-empty-desc {
+    margin: 0;
+    max-width: 420px;
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--text-5);
+}
+
+/* 5.8 徽章 */
+.jm-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 4px;
+    border-radius: var(--r-badge);
+    background: rgba(0, 142, 229, 0.12);
+    color: var(--jm-accent);
+    font-size: 9px;
+    line-height: 16px;
+    font-weight: 400;
+}
+
+/* 5.9 分隔线 */
+.jm-divider {
+    height: 1px;
+    width: 100%;
+    background: var(--line);
+}
+
+/* ------------------------------------------------------------ 6. 动效 */
+@keyframes jm-fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.jm-enter {
+    animation: jm-fade-up 200ms var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jm-enter {
+        animation: none;
+    }
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ------------------------------------------------------- 7. 响应式收敛 */
+@media (max-width: 1024px) {
+    .jm-page-inner {
+        padding: 24px 20px 48px;
+    }
+    .jm-page-title {
+        font-size: 26px;
+        line-height: 34px;
+    }
+}
+
+@media (max-width: 640px) {
+    .jm-page-inner {
+        padding: 20px 16px 40px;
+    }
+    .jm-page-head {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+    }
+    .jm-search {
+        width: 100%;
+    }
+}

@@ -1,0 +1,410 @@
+/* ===== 登录弹窗（参照即梦登录页：遮罩 + 居中深色卡片） =====
+   规范沿用 jimeng-theme：深色面 #1A1A1A、1px 白描边分层、8px 控件圆角、
+   单一强调色 #D8FF3E、无渐变发光。z-index 低于 antd message(2010)，提示仍可见。 */
+
+.auth-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    font-family: var(--font-sans);
+    color: #fff;
+}
+
+.auth-modal-mask {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.62);
+    backdrop-filter: blur(3px);
+    animation: auth-modal-fade 0.18s ease-out;
+}
+
+.auth-modal-card {
+    position: relative;
+    width: 400px;
+    max-width: 100%;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    padding: 20px 24px 20px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background: #1a1a1a;
+    box-shadow: 0 28px 72px rgba(0, 0, 0, 0.55);
+    animation: auth-modal-in 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.auth-modal-card::-webkit-scrollbar {
+    width: 6px;
+}
+
+.auth-modal-card::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+}
+
+@keyframes auth-modal-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes auth-modal-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.985); }
+    to { opacity: 1; transform: none; }
+}
+
+/* ---------------- 头部：品牌 + 语言 / 关闭 ---------------- */
+
+.auth-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.auth-modal-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    opacity: 0.86;
+}
+
+.auth-modal-symbol {
+    width: 20px;
+    height: 20px;
+}
+
+.auth-modal-head-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.auth-modal-locale {
+    height: 26px;
+    min-width: 30px;
+    padding: 0 7px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 11.5px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.auth-modal-locale:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.auth-modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.45);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.auth-modal-close svg {
+    width: 16px;
+    height: 16px;
+}
+
+.auth-modal-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+
+/* ---------------- 标题 ---------------- */
+
+.auth-modal-heading {
+    margin-top: 20px;
+}
+
+.auth-modal-title {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 26px;
+    letter-spacing: -0.005em;
+    color: #fff;
+}
+
+.auth-modal-subtitle {
+    margin: 6px 0 0;
+    font-size: 12.5px;
+    line-height: 19px;
+    color: rgba(255, 255, 255, 0.42);
+}
+
+/* ---------------- 表单 ---------------- */
+
+.auth-modal-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    margin-top: 20px;
+}
+
+.auth-modal-field {
+    display: block;
+}
+
+.auth-modal-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 7px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 16px;
+}
+
+.auth-modal-optional {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.auth-modal-shell {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 42px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: #262626;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.auth-modal-shell:focus-within {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: #2b2b2b;
+}
+
+.auth-modal-icon {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.32);
+}
+
+.auth-modal-icon svg {
+    width: 15px;
+    height: 15px;
+}
+
+.auth-modal-input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #fff;
+    font-family: inherit;
+    font-size: 13.5px;
+    line-height: 20px;
+}
+
+.auth-modal-input::placeholder {
+    color: rgba(255, 255, 255, 0.28);
+}
+
+/* 浏览器自动填充仍然保持深色底 */
+.auth-modal-input:-webkit-autofill,
+.auth-modal-input:-webkit-autofill:hover,
+.auth-modal-input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #fff;
+    -webkit-box-shadow: 0 0 0 1000px #262626 inset;
+    caret-color: #fff;
+}
+
+.auth-modal-eye {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+}
+
+.auth-modal-eye svg {
+    width: 15px;
+    height: 15px;
+}
+
+.auth-modal-eye:hover {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+/* 验证码：输入框 + 独立获取按钮，行为对齐即梦 */
+.auth-modal-code-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 112px;
+    gap: 8px;
+}
+
+.auth-modal-code-btn {
+    height: 42px;
+    padding: 0 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: #2c2c2c;
+    color: rgba(255, 255, 255, 0.86);
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.auth-modal-code-btn:hover:not(:disabled) {
+    background: #343434;
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.auth-modal-code-btn:disabled {
+    color: rgba(255, 255, 255, 0.32);
+    cursor: not-allowed;
+}
+
+.auth-modal-submit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 44px;
+    margin-top: 7px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 8px;
+    background: #d8ff3e;
+    color: #11130a;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.auth-modal-submit:hover:not(:disabled) {
+    background: #b8e81c;
+}
+
+.auth-modal-submit:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.auth-modal-spin {
+    animation: auth-modal-spin 0.9s linear infinite;
+}
+
+@keyframes auth-modal-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ---------------- 切换入口与脚注 ---------------- */
+
+.auth-modal-alt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.auth-modal-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.42);
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 18px;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.auth-modal-link:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.auth-modal-link-strong {
+    color: #fff;
+    font-weight: 500;
+}
+
+.auth-modal-link:hover .auth-modal-link-strong {
+    color: #d8ff3e;
+}
+
+.auth-modal-foot {
+    margin: 18px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.28);
+    font-size: 11.5px;
+    line-height: 18px;
+}
+
+/* ---------------- 窄屏 ---------------- */
+
+@media (max-width: 480px) {
+    .auth-modal {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .auth-modal-card {
+        width: 100%;
+        max-height: 92vh;
+        padding: 18px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+        border-radius: 14px 14px 0 0;
+        border-bottom: 0;
+        animation: auth-modal-sheet 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+    }
+
+    .auth-modal-code-row {
+        grid-template-columns: minmax(0, 1fr) 104px;
+    }
+
+    @keyframes auth-modal-sheet {
+        from { opacity: 0; transform: translateY(24px); }
+        to { opacity: 1; transform: none; }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .auth-modal-mask,
+    .auth-modal-card,
+    .auth-modal-spin {
+        animation: none;
+    }
+}

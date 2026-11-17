@@ -1,0 +1,28 @@
+.creation-shell { --creation-control-radius: 9px; }
+.creation-shell .creation-tool-button, .creation-shell .creation-icon-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 6px 9px; border: 1px solid transparent; border-radius: var(--creation-control-radius); color: var(--muted-foreground); background: transparent; font-size: 12px; cursor: pointer; transition: background 140ms, color 140ms; }
+.creation-shell .creation-icon-button { width: 32px; padding: 6px; }
+.creation-shell .creation-tool-button:hover, .creation-shell .creation-icon-button:hover { background: var(--muted); color: var(--foreground); }
+.creation-shell .creation-tool-button[aria-pressed=true] { background: var(--muted); color: var(--foreground); }
+.creation-shell :is(button, a, input, textarea):focus-visible { outline: 2px solid #D8FF3E; outline-offset: 3px; }
+/* Ant Design 复合输入框由外层显示焦点边框，内部 input 不重复描边。 */
+.creation-shell .ant-input-affix-wrapper > input.ant-input:focus-visible { outline: none; box-shadow: none; }
+/* 同理：胶囊搜索框（.jm-search）的外框负责焦点，内部裸 input 不画第二层矩形框。 */
+.creation-shell .jm-search input:focus,
+.creation-shell .jm-search input:focus-visible { outline: none; box-shadow: none; }
+.creation-shell button:disabled { cursor: not-allowed; }
+.creation-shell .astryx-button[data-variant="primary"] { background: var(--brand); color: var(--brand-ink); }
+.creation-shell .astryx-button[data-variant="primary"] span { color: inherit; }
+.creation-shell button[aria-disabled="true"] { cursor: not-allowed; }
+.creation-shell .record-actions { min-height: 40px; }
+.creation-shell .creation-actions { row-gap: 10px; }
+.creation-shell .creation-sidebar-link[aria-current=page] { background: var(--muted); color: var(--foreground) !important; }
+.creation-shell .creation-sidebar-link { min-height: 40px; }
+@media (pointer: coarse) { .creation-shell .creation-tool-button, .creation-shell .creation-icon-button, .creation-shell .record-actions button { min-height: 40px; } }
+@media (prefers-reduced-motion: reduce) { .creation-shell .creation-tool-button, .creation-shell .creation-icon-button { transition: none; } }
+
+.creation-shell .ant-btn { border-radius: var(--creation-control-radius); }
+.creation-shell .ant-btn:not(.ant-btn-icon-only) { gap: 6px; }
+.creation-shell .ant-input-affix-wrapper, .creation-shell .ant-input { border-radius: var(--creation-control-radius); }
+.creation-shell .record-actions .creation-icon-button { margin-left: auto; }
+.creation-shell .creation-top-actions { border-bottom: 1px solid var(--border); background: var(--background); }
+.creation-mobile-drawer .ant-drawer-body { overflow: hidden; }

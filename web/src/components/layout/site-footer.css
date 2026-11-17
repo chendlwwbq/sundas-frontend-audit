@@ -1,0 +1,260 @@
+/* ===== site footer（参照 sundas-index.html 页脚）===== */
+
+.site-footer {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* 通栏分隔线：横线铺满视口，内容仍按 1360 居中 */
+.site-footer-band {
+    width: 100%;
+    border-top: 1px solid var(--border);
+}
+
+.site-footer-main {
+    display: grid;
+    width: min(100%, 1360px);
+    margin: 0 auto;
+    grid-template-columns: minmax(220px, 1.1fr) minmax(0, 2.4fr);
+    gap: clamp(32px, 5vw, 88px);
+    align-items: start;
+    padding: 52px 40px 44px;
+}
+
+.site-footer-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--foreground);
+    transition: opacity 160ms ease;
+}
+
+.site-footer-logo:hover {
+    opacity: 0.78;
+}
+
+.site-footer-symbol {
+    width: 26px;
+    height: 26px;
+}
+
+.site-footer-tagline {
+    max-width: 260px;
+    margin: 14px 0 0;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 12px;
+    line-height: 20px;
+}
+
+.site-footer-cols {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(20px, 3vw, 48px);
+}
+
+.site-footer-col h3 {
+    margin: 0 0 16px;
+    color: var(--foreground);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.site-footer-col ul {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.site-footer-col li {
+    color: var(--muted-foreground);
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+.site-footer-col li a,
+.site-footer-col li .promo-contact-link {
+    color: var(--muted-foreground);
+    font-size: 12.5px;
+    text-decoration: none;
+    transition: color 160ms ease;
+}
+
+.site-footer-col li a:hover,
+.site-footer-col li .promo-contact-link:hover {
+    color: var(--foreground);
+}
+
+/* 联系客服弹出面板（footer 作用域内向上弹出） */
+.site-footer .promo-contact-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+}
+
+.site-footer .promo-community-popover {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 0;
+    z-index: 30;
+    width: min(340px, 78vw);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    padding: 14px;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+
+.site-footer .promo-community-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.site-footer .promo-community-head strong {
+    display: block;
+    font-size: 13px;
+}
+
+.site-footer .promo-community-head span {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted-foreground);
+    font-size: 11px;
+}
+
+.site-footer .promo-community-close {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    cursor: pointer;
+}
+
+.site-footer .promo-community-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.site-footer .promo-community-grid.is-single {
+    grid-template-columns: 1fr;
+}
+
+.site-footer .promo-community-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--muted);
+    padding: 10px;
+    text-align: center;
+}
+
+.site-footer .promo-community-qr {
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.site-footer .promo-community-qr img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.site-footer .promo-community-name {
+    display: block;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--foreground);
+}
+
+.site-footer .promo-community-placeholder {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    color: var(--muted-foreground);
+}
+
+/* 底栏：版权 + 协议链接合成一组，整行水平居中，共享同一条基线 */
+.site-footer-bottom {
+    display: flex;
+    width: min(100%, 1360px);
+    margin: 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    flex-wrap: wrap;
+    padding: 22px 40px;
+    color: var(--muted-foreground);
+    font-size: 12.5px;
+    line-height: 20px;
+    text-align: center;
+}
+
+/* 版权：保持句子整体不折行，行盒固定 20px 便于与右侧链接对齐 */
+.site-footer-copy {
+    display: inline-block;
+    white-space: nowrap;
+    line-height: 20px;
+    vertical-align: middle;
+}
+
+/* 行内文字 logo 落在文字基线上，避免被 preflight 的 middle 抬高 */
+.site-footer-copy img {
+    display: inline-block;
+    vertical-align: baseline;
+}
+
+.site-footer-legal {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    line-height: 20px;
+}
+
+.site-footer-legal i {
+    width: 1px;
+    height: 10px;
+    background: var(--border);
+}
+
+@media (max-width: 900px) {
+    .site-footer-main,
+    .site-footer-bottom {
+        padding-left: 24px;
+        padding-right: 24px;
+    }
+
+    .site-footer-main {
+        grid-template-columns: 1fr;
+        gap: 36px;
+    }
+
+    .site-footer-bottom {
+        gap: 10px 18px;
+        padding-top: 20px;
+        padding-bottom: 20px;
+    }
+
+    .site-footer-copy {
+        line-height: 18px;
+    }
+}
