@@ -117,40 +117,40 @@ export function UserAccountMenu() {
             </button>
 
             {open ? (
-                <div className="absolute right-0 top-full z-[80] mt-2 w-[344px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl">
+                <div className="fixed right-3 top-[60px] z-[80] max-h-[calc(100dvh-76px)] w-[344px] max-w-[calc(100vw-24px)] overflow-y-auto rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:max-h-[calc(100dvh-84px)]">
                     <div className="flex items-start gap-3 border-b border-border px-4 py-4">
                         <Avatar size={38} className="!bg-foreground text-sm !text-white dark:!bg-muted dark:!text-foreground">
                             {(user.displayName || user.email).slice(0, 1).toUpperCase()}
                         </Avatar>
                         <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-semibold text-foreground">{user.displayName || user.email}</div>
-                            <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{user.email}</div>
+                            <div className="mt-0.5 truncate text-xs text-muted-foreground">{user.email}</div>
                         </div>
-                        <span className="rounded-full border border-border px-2 py-1 text-[10px] text-muted-foreground">{planName}</span>
+                        <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">{planName}</span>
                     </div>
 
                     <div className="space-y-2 p-3">
                         <div className="rounded-lg border border-border bg-muted/40 p-3">
-                            <div className="flex items-center justify-between gap-3 text-[11px]">
+                            <div className="flex items-center justify-between gap-3 text-xs">
                                 <span className="inline-flex items-center gap-1.5 text-muted-foreground"><CreditCard className="size-3.5" />{t("account.currentSubscription")}</span>
                                 <span className="font-medium text-foreground">{planName}</span>
                             </div>
-                            <div className="mt-1.5 text-[10px] text-muted-foreground">
+                            <div className="mt-1.5 text-xs text-muted-foreground">
                                 {wallet?.member && memberUntil ? t("account.memberUntil", { date: memberUntil }) : t("account.freePlanHint")}
                             </div>
                             {wallet?.member && <div className="mt-1.5 text-xs text-foreground">生成积分 · {formatGenerationDiscount(wallet.generationDiscount)}</div>}
                             <div className="mt-3 flex gap-2">
-                                <Link to="/account?tab=membership" onClick={close} className="inline-flex h-7 flex-1 items-center justify-center rounded-md bg-foreground text-[11px] font-medium text-background transition hover:opacity-85">
+                                <Link to="/account?tab=membership" onClick={close} className="inline-flex h-8 flex-1 items-center justify-center rounded-md bg-foreground text-xs font-medium text-background transition hover:opacity-85">
                                     查看会员权益
                                 </Link>
-                                <Link to="/account?tab=orders" onClick={close} className="inline-flex h-7 flex-1 items-center justify-center rounded-md border border-border text-[11px] text-foreground transition hover:bg-muted">
+                                <Link to="/account?tab=orders" onClick={close} className="inline-flex h-8 flex-1 items-center justify-center rounded-md border border-border text-xs text-foreground transition hover:bg-muted">
                                     {t("account.orders")}
                                 </Link>
                             </div>
                         </div>
 
                         <div className="rounded-lg border border-border px-3 py-2.5">
-                            <div className="flex items-center justify-between gap-3 text-[11px]">
+                            <div className="flex items-center justify-between gap-3 text-xs">
                                 <span className="inline-flex items-center gap-1.5 text-muted-foreground"><HardDrive className="size-3.5" />{t("account.storageSpace")}</span>
                                 <span className="tabular-nums text-muted-foreground">{formatStorage(usedBytes)} / {formatStorage(limitBytes)}</span>
                             </div>
@@ -159,20 +159,20 @@ export function UserAccountMenu() {
                             </div>
                             {storagePercent >= 90 ? <p className="mt-2 text-xs text-amber-500">{t("account.storageNearlyFull")}</p> : null}
                             <div className="mt-2 flex items-center justify-between gap-2">
-                                <Link to="/assets" onClick={close} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground transition hover:text-foreground">
+                                <Link to="/assets" onClick={close} className="inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
                                     {t("account.manageAssets")} <ChevronDown className="size-3 -rotate-90" />
                                 </Link>
-                                <Link to="/assets?tab=history" onClick={close} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground transition hover:text-foreground">
+                                <Link to="/assets?tab=history" onClick={close} className="inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
                                     {t("assets.tabHistory")} <ChevronDown className="size-3 -rotate-90" />
                                 </Link>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-1">
-                            <Link to="/account" onClick={close} className="flex items-center gap-2 rounded-md px-2.5 py-2 text-[11px] text-foreground transition hover:bg-muted">
+                            <Link to="/account" onClick={close} className="flex items-center gap-2 rounded-md px-2.5 py-2 text-xs text-foreground transition hover:bg-muted">
                                 <UserRound className="size-3.5 text-muted-foreground" />{t("account.title")}
                             </Link>
-                            <Link to="/account?tab=ledger" onClick={close} className="flex items-center gap-2 rounded-md px-2.5 py-2 text-[11px] text-foreground transition hover:bg-muted">
+                            <Link to="/account?tab=ledger" onClick={close} className="flex items-center gap-2 rounded-md px-2.5 py-2 text-xs text-foreground transition hover:bg-muted">
                                 <ReceiptText className="size-3.5 text-muted-foreground" />{t("account.ledger")}
                             </Link>
                         </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Key } from "react";
 import { App as AntApp, Button, Input, InputNumber, Modal, Select, Table } from "antd";
 import type { TableColumnsType } from "antd";
@@ -45,16 +45,19 @@ export function UsersTab() {
     const [batchNote, setBatchNote] = useState("");
     const [batchResult, setBatchResult] = useState<{ id: string; success: boolean; error?: string }[] | null>(null);
 
+    const loadSequence = useRef(0);
+
     async function load() {
+        const sequence = ++loadSequence.current;
         setLoading(true);
         try {
             const params = new URLSearchParams({ page: String(page), pageSize: "20", search: query, status: statusFilter });
             const result = await apiRequest<{ items: AdminUser[]; total: number }>(`/api/admin/users?${params}`);
-            setData(result);
+            if (sequence === loadSequence.current) setData(result);
         } catch (error) {
-            message.error(error instanceof Error ? error.message : String(error));
+            if (sequence === loadSequence.current) message.error(error instanceof Error ? error.message : String(error));
         } finally {
-            setLoading(false);
+            if (sequence === loadSequence.current) setLoading(false);
         }
     }
 

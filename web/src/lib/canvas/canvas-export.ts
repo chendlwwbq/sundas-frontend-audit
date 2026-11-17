@@ -56,17 +56,32 @@ export async function exportCanvasNodes(nodes: CanvasNodeData[], fileName = i18n
         nodes.map(async (node) => {
             const title = node.title || node.type;
             const storageKey = node.metadata?.storageKey || "";
+            const content = node.metadata?.content;
             if (storageKey) {
                 const blob = storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
                 if (blob) return void zipFiles.push({ name: uniqueName(title, fileExtension(blob.type, storageKey)), data: blob });
+                if (content?.startsWith("/media/")) {
+                    const remoteBlob = await downloadPackageMedia(content, checkSession);
+                    return void zipFiles.push({ name: uniqueName(title, fileExtension(remoteBlob.type, content)), data: remoteBlob });
+                }
             }
-            if (node.type === CanvasNodeType.Text) return void zipFiles.push({ name: uniqueName(title, "txt"), data: node.metadata?.content || node.metadata?.prompt || "" });
-            const content = node.metadata?.content;
+            if (node.type === CanvasNodeType.Text) return void zipFiles.push({ name: uniqueName(title, "txt"), data: content || node.metadata?.prompt || "" });
             if (content && content.startsWith("data:")) {
                 const blob = await (await fetch(content)).blob();
-                return void zipFiles.push({ name: uniqueName(title, fileExtension(blob.type, storageKey)), data: blob });
+                return void zipFiles.push({ name: uniqueName(title, fileExtension(blob.type, storageKey || content)), data: blob });
             }
             if (storageKey) throw new Error("节点引用的本地素材缺失，无法完整导出；请先恢复素材后重试。");
+            if (content && content.startsWith("/media/")) {
+                const remoteBlob = await downloadPackageMedia(content, checkSession);
+                return void zipFiles.push({ name: uniqueName(title, fileExtension(remoteBlob.type, content)), data: remoteBlob });
+            }
+            if (content && /^(blob:|https?:\/\/)/i.test(content)) {
+                const response = await fetch(content);
+                if (!response.ok) throw new Error(`无法获取「${title}」引用的媒体文件`);
+                const blob = await response.blob();
+                if (!blob.size) throw new Error(`「${title}」引用的媒体文件为空`);
+                return void zipFiles.push({ name: uniqueName(title, fileExtension(blob.type, content)), data: blob });
+            }
             zipFiles.push({ name: uniqueName(title, "json"), data: JSON.stringify(node, null, 2) });
         }),
     );
@@ -101,7 +116,7 @@ function safeFileName(value: string) {
     return value.replace(/[\\/:*?"<>|]/g, "_");
 }
 
-function fileExtension(mimeType: string, storageKey: string) {
+function fileExtension(mimeType: string, storageKeyOrUrl: string) {
     if (mimeType.includes("png")) return "png";
     if (mimeType.includes("jpeg")) return "jpg";
     if (mimeType.includes("webp")) return "webp";
@@ -111,5 +126,7 @@ function fileExtension(mimeType: string, storageKey: string) {
     if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
     if (mimeType.includes("wav")) return "wav";
     if (mimeType.includes("ogg")) return "ogg";
-    return storageKey.startsWith("image:") ? "png" : "bin";
+    const match = /\.([a-z0-9]{2,5})(?:[?#]|$)/i.exec(storageKeyOrUrl);
+    if (match) return match[1].toLowerCase();
+    return storageKeyOrUrl.startsWith("image:") ? "png" : "bin";
 }

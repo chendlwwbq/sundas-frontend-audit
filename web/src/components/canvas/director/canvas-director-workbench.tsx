@@ -113,7 +113,7 @@ export function CanvasDirectorWorkbench({ open, scene, projectId, imageNodes, on
     const [recording, setRecording] = useState(false);
     const [exportNotice, setExportNotice] = useState<{ kind: "success" | "warning" | "error"; text: string } | null>(null);
     useEffect(() => {
-        if (!exportNotice) return;
+        if (!exportNotice || exportNotice.kind !== "success") return;
         const timeout = window.setTimeout(() => setExportNotice(null), 6_000);
         return () => window.clearTimeout(timeout);
     }, [exportNotice]);
@@ -1693,7 +1693,7 @@ export function CanvasDirectorWorkbench({ open, scene, projectId, imageNodes, on
                     <span aria-label="导演台保存状态" aria-live="polite" title={saveIndicator.label} className="min-w-0 flex-1 truncate text-[10px]" style={{ color: saveIndicator.tone === "danger" ? "var(--status-error)" : undefined, opacity: saveIndicator.tone === "idle" ? 0.55 : 1 }}>{saveIndicator.label}</span>
                     <IconButton label={leftDockCollapsed ? "展开场景面板" : "折叠场景面板"} expanded={!leftDockCollapsed} controls="director-workbench-left-dock" onClick={() => setLeftDockCollapsed((collapsed) => !collapsed)}>{leftDockCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}</IconButton>
                 </div>
-                {exportNotice ? <DirectorExportNotice {...exportNotice} background={theme.toolbar.panel} /> : null}
+                {exportNotice ? <DirectorExportNotice {...exportNotice} background={theme.toolbar.panel} onDismiss={() => setExportNotice(null)} /> : null}
             </header>
 
             <div className={`grid min-h-0 flex-1 ${workspaceView === "preview" ? "grid-cols-1" : leftDockCollapsed ? "grid-cols-[48px_minmax(0,1fr)_280px] max-lg:grid-cols-[48px_minmax(0,1fr)]" : "grid-cols-[280px_minmax(0,1fr)_280px] max-lg:grid-cols-[220px_minmax(0,1fr)]"}`}>

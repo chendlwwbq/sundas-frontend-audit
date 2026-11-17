@@ -3,7 +3,7 @@ import { RecordActions } from "@/components/creation/record-actions";
 import { CreationToolbar } from "@/components/creation/creation-toolbar";
 import { Button as ActionButton } from "@astryxdesign/core/Button";
 import { CreationRequest, ContinuationNotice, continuationPrompt } from "@/components/creation/creation-conversation";
-import type { Continuation } from "@/components/creation/creation-drafts";
+import { isCreationDraftEmpty, loadCreationDraft, readCreationDraft, saveCreationDraft, type Continuation, type DraftSaveStatus } from "@/components/creation/creation-drafts";
 import { PromptOptimizationEstimate } from "@/components/creation/prompt-optimization-estimate";
 import { OtherCreationRecord, useOtherCreationHistory } from "@/components/creation/mixed-creation-history";
 import { ChatComposer } from "@astryxdesign/core/Chat";
@@ -11,7 +11,6 @@ import { Thumbnail } from "@astryxdesign/core/Thumbnail";
 import { CreationStream } from "@/components/creation/creation-stream";
 import { CreationRecordsRail, useNarrowRecords } from "@/components/creation/creation-records-rail";
 import { CreditEstimate } from "@/components/creation/credit-estimate";
-import { readCreationDraft, saveCreationDraft } from "@/components/creation/creation-drafts";
 import { useCreationHistory } from "@/components/creation/creation-history";
 import { useVisibleRecords } from "@/components/creation/use-visible-records";
 import { useReferenceTransfer } from "@/components/creation/use-reference-transfer";
@@ -65,12 +64,22 @@ type GeneratedVideo = {
     mimeType: string;
 };
 
+type VideoRequestSnapshot = {
+    text: string;
+    model: string;
+    config: AiConfig;
+    references: ReferenceImage[];
+    videos: ReferenceVideo[];
+    audios: ReferenceAudio[];
+};
+
 type GenerationResult = {
     id: string;
     status: "pending" | "success" | "failed" | "unavailable";
     video?: GeneratedVideo;
     error?: string;
     statusMessage?: string;
+    snapshot?: VideoRequestSnapshot;
 };
 
 type GenerationLog = {
@@ -133,9 +142,19 @@ export default function VideoPage() {
     const [submittedPrompt, setSubmittedPrompt] = useState("");
     const [referenceVideos, setReferenceVideos] = useState<ReferenceVideo[]>([]);
     const [referenceAudios, setReferenceAudios] = useState<ReferenceAudio[]>([]);
+    const [draftStatus, setDraftStatus] = useState<DraftSaveStatus>({ state: "idle" });
+    const hydratedDraftKeyRef = useRef("");
+    const userEditedBeforeHydrateRef = useRef(false);
     useEffect(() => {
         if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch) return;
-        saveCreationDraft("video", userId, sessionEpoch, { continuation, prompt, references, videos: referenceVideos, audios: referenceAudios });
+        const sessionKey = `${userId}:${sessionEpoch}`;
+        if (hydratedDraftKeyRef.current !== sessionKey) return;
+        const draft = { continuation, prompt, references, videos: referenceVideos, audios: referenceAudios };
+        const epoch = accountEpochRef.current;
+        if (!isCreationDraftEmpty(draft)) setDraftStatus({ state: "saving" });
+        void saveCreationDraft("video", userId, sessionEpoch, draft).then((status) => {
+            if (isCurrentUser(userId, sessionEpoch) && accountEpochRef.current === epoch) setDraftStatus(status);
+        });
     }, [userId, viewOwner, viewEpoch, sessionEpoch, continuation, prompt, references, referenceVideos, referenceAudios]);
     const [results, setResults] = useState<GenerationResult[]>([]);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
@@ -262,13 +281,38 @@ export default function VideoPage() {
     }, [running, startedAt]);
 
     useEffect(() => {
+        const epoch = accountEpochRef.current;
         historyPagerRef.current = userId ? new GenerationHistoryPager(userId, "video") : null;
         setHistoryHasMore(false); setLoadingEarlier(false);
         setLogs([]); setResults([]); setPreviewLog(null); setDetailsLog(null); setSelectedLogIds([]); setRunning(false); setStartedAt(0);
+        setDraftStatus({ state: "idle" });
+        hydratedDraftKeyRef.current = "";
+        userEditedBeforeHydrateRef.current = false;
+        const sessionKey = userId ? `${userId}:${sessionEpoch}` : "";
         const draft = userId ? readCreationDraft("video", userId, sessionEpoch) : undefined;
         setContinuation(draft?.continuation); setPrompt(draft?.prompt ?? ""); setReferences(draft?.references ?? []); setReferenceVideos(draft?.videos ?? []); setReferenceAudios(draft?.audios ?? []);
+        if (draft) {
+            hydratedDraftKeyRef.current = sessionKey;
+            setDraftStatus({ state: "saved", savedAt: draft.updatedAt });
+        }
         setViewOwner(userId); setViewEpoch(sessionEpoch);
-        if (userId) void refreshLogs();
+        if (userId) {
+            void refreshLogs();
+            if (!draft) {
+                void loadCreationDraft("video", userId, sessionEpoch).then((loaded) => {
+                    if (!isCurrentUser(userId, sessionEpoch) || accountEpochRef.current !== epoch) return;
+                    hydratedDraftKeyRef.current = sessionKey;
+                    if (!loaded || appliedInitialPrompt.current?.startsWith(`${sessionKey}:`) || userEditedBeforeHydrateRef.current) return;
+                    loaded.references.forEach((item) => { if (item.storageKey) void ensureImagePreview(item.storageKey); });
+                    setContinuation(loaded.continuation);
+                    setPrompt(loaded.prompt);
+                    setReferences(loaded.references);
+                    setReferenceVideos(loaded.videos);
+                    setReferenceAudios(loaded.audios);
+                    setDraftStatus({ state: "saved", savedAt: loaded.updatedAt });
+                });
+            }
+        }
     }, [userId, sessionEpoch]);
 
     const addReferences = async (files?: FileList | null) => {
@@ -401,14 +445,14 @@ export default function VideoPage() {
         }
     };
     const generationThread = useRef("");
-    const generate = async () => {
+    const generate = async (retrySnapshot?: VideoRequestSnapshot) => {
         const owner = userId;
         if (!owner || !isCurrentView()) return;
         const epoch = accountEpochRef.current;
         const active = () => isCurrentUser(owner, sessionEpoch) && accountEpochRef.current === epoch;
         const agentTaskId = agentTaskIdRef.current;
         agentTaskIdRef.current = undefined;
-        const snapshot = buildRequestSnapshot();
+        const snapshot = retrySnapshot ?? buildRequestSnapshot();
         if (!snapshot) {
             if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", error: t("videoWorkbench.invalidParams") });
             return;
@@ -420,23 +464,23 @@ export default function VideoPage() {
         setRunning(true);
         if (agentTaskId) updateAgentTask(agentTaskId, { status: "running", error: undefined });
         setPreviewLog(null);
-        setResults([{ id: nanoid(), status: "pending" }]);
+        setResults([{ id: nanoid(), status: "pending", snapshot }]);
         const batchStartedAt = performance.now();
         setStartedAt(batchStartedAt);
         try {
             const task = await createVideoGenerationTask(snapshot.config, snapshot.text, snapshot.references, { videos: snapshot.videos, audios: snapshot.audios, expectedUserId: owner });
             if (!active()) return;
-            const log = buildLog({ prompt: snapshot.text, model, config: snapshot.config, references: snapshot.references, referenceVideos: snapshot.videos, referenceAudios: snapshot.audios, durationMs: 0, status: "pending", task });
+            const log = buildLog({ prompt: snapshot.text, model: snapshot.model, config: snapshot.config, references: snapshot.references, referenceVideos: snapshot.videos, referenceAudios: snapshot.audios, durationMs: 0, status: "pending", task });
             saveCreationRecord(owner, log, generationThread.current);
             await saveLog(log, false);
-            void pollGenerationLog(log, snapshot.config, agentTaskId);
+            void pollGenerationLog(log, snapshot.config, agentTaskId, snapshot);
         } catch (error) {
             if (!active()) return;
             if (isVideoInsufficientCredits(error) || isVideoSubmissionRejected(error)) {
                 const errorMessage = (error as Error).message;
-                const log = buildLog({ prompt: snapshot.text, model, config: snapshot.config, references: snapshot.references, referenceVideos: snapshot.videos, referenceAudios: snapshot.audios, durationMs: performance.now() - batchStartedAt, status: "failed", error: errorMessage });
+                const log = buildLog({ prompt: snapshot.text, model: snapshot.model, config: snapshot.config, references: snapshot.references, referenceVideos: snapshot.videos, referenceAudios: snapshot.audios, durationMs: performance.now() - batchStartedAt, status: "failed", error: errorMessage });
             saveCreationRecord(owner, log, generationThread.current);
-                setResults([{ id: log.id, status: "failed", error: errorMessage }]);
+                setResults([{ id: log.id, status: "failed", error: errorMessage, snapshot }]);
                 if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", successCount: 0, failCount: 1, error: errorMessage });
                 message.error(errorMessage);
                 setRunning(false);
@@ -445,9 +489,9 @@ export default function VideoPage() {
             }
             // A lost submission response cannot establish whether a task was created.
             const errorMessage = `提交结果暂无法确认，请先查看生成记录或账户状态。${(error as Error)?.message || ""}`;
-            const log = buildLog({ prompt: snapshot.text, model, config: snapshot.config, references: snapshot.references, referenceVideos: snapshot.videos, referenceAudios: snapshot.audios, durationMs: performance.now() - batchStartedAt, status: "unavailable", error: errorMessage });
+            const log = buildLog({ prompt: snapshot.text, model: snapshot.model, config: snapshot.config, references: snapshot.references, referenceVideos: snapshot.videos, referenceAudios: snapshot.audios, durationMs: performance.now() - batchStartedAt, status: "unavailable", error: errorMessage });
             saveCreationRecord(owner, log, generationThread.current);
-            setResults([{ id: log.id, status: "unavailable", error: errorMessage }]);
+            setResults([{ id: log.id, status: "unavailable", error: errorMessage, snapshot }]);
             if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", successCount: 0, failCount: 1, error: errorMessage });
             message.error(errorMessage);
             await saveLog(log, false);
@@ -477,7 +521,7 @@ export default function VideoPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoRunToken]);
 
-    const buildRequestSnapshot = () => {
+    const buildRequestSnapshot = (): VideoRequestSnapshot | null => {
         const text = continuationPrompt(prompt, continuation);
         if (!text) {
             message.error(t("videoWorkbench.promptRequired"));
@@ -492,11 +536,11 @@ export default function VideoPage() {
             openConfigDialog(true);
             return null;
         }
-        return { text, config: buildVideoConfig(effectiveConfig, model), references: [...references], videos: [...referenceVideos], audios: [...referenceAudios] };
+        return { text, model, config: buildVideoConfig(effectiveConfig, model), references: references.map((item) => ({ ...item })), videos: referenceVideos.map((item) => ({ ...item })), audios: referenceAudios.map((item) => ({ ...item })) };
     };
 
-    const retryResult = () => {
-        void generate();
+    const retryResult = (snapshot?: VideoRequestSnapshot) => {
+        void generate(snapshot);
     };
 
     const downloadVideo = (video: GeneratedVideo) => {
@@ -523,13 +567,39 @@ export default function VideoPage() {
         if (!owner || !isCurrentView()) return;
         if (payload.kind === "text") {
             setPrompt(payload.content);
-        } else if (payload.kind === "image") {
+            setAssetPickerOpen(false);
+            return;
+        }
+        if (payload.kind === "image") {
+            if (limits.images <= 0) { message.warning("当前模型不支持图片参考素材"); return; }
             if (references.length >= limits.images) { message.warning(`当前模型最多支持 ${limits.images} 张参考图`); return; }
             const stored = await uploadImage(payload.dataUrl, { expectedOwner: owner });
             if (!isCurrentUser(owner, sessionEpoch) || accountEpochRef.current !== epoch) return;
             setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }].slice(0, limits.images));
+            setAssetPickerOpen(false);
+            return;
         }
-        setAssetPickerOpen(false);
+        if (payload.kind === "video") {
+            if (limits.videos <= 0) { message.warning("当前模型不支持视频参考素材"); return; }
+            if (referenceVideos.length >= limits.videos) { message.warning(`当前模型最多支持 ${limits.videos} 个参考视频`); return; }
+            const source = await resolveMediaUrl(payload.storageKey, payload.url);
+            if (!source) { message.error("无法读取所选视频素材，请先确认文件完整"); return; }
+            const media = await uploadMediaFile(source, "video", { expectedOwner: owner });
+            if (!isCurrentUser(owner, sessionEpoch) || accountEpochRef.current !== epoch) return;
+            setReferenceVideos((value) => [...value, { id: nanoid(), name: payload.title, type: media.mimeType || "video/mp4", url: media.url, storageKey: media.storageKey, bytes: media.bytes, width: media.width ?? payload.width, height: media.height ?? payload.height, durationMs: media.durationMs }].slice(0, limits.videos));
+            setAssetPickerOpen(false);
+            return;
+        }
+        if (payload.kind === "audio") {
+            if (limits.audios <= 0) { message.warning("当前模型不支持音频参考素材"); return; }
+            if (referenceAudios.length >= limits.audios) { message.warning(`当前模型最多支持 ${limits.audios} 个参考音频`); return; }
+            const source = await resolveMediaUrl(payload.storageKey, payload.url);
+            if (!source) { message.error("无法读取所选音频素材，请先确认文件完整"); return; }
+            const media = await uploadMediaFile(source, "audio", { expectedOwner: owner });
+            if (!isCurrentUser(owner, sessionEpoch) || accountEpochRef.current !== epoch) return;
+            setReferenceAudios((value) => [...value, { id: nanoid(), name: payload.title, type: media.mimeType || "audio/mpeg", url: media.url, storageKey: media.storageKey, durationMs: media.durationMs }].slice(0, limits.audios));
+            setAssetPickerOpen(false);
+        }
     };
 
     const openChat = async () => {
@@ -544,6 +614,7 @@ export default function VideoPage() {
     const createSession = () => {
         if (!isCurrentView()) return;
         if (isTransferring) { message.warning("参考素材正在处理，请等待完成后再新建创作"); return; }
+        userEditedBeforeHydrateRef.current = true;
         if (userId) newCreationThread(userId);
         setContinuation(undefined);
         setPrompt("");
@@ -613,7 +684,7 @@ export default function VideoPage() {
         }
     };
 
-    const pollGenerationLog = async (log: GenerationLog, configOverride?: AiConfig, agentTaskId?: string) => {
+    const pollGenerationLog = async (log: GenerationLog, configOverride?: AiConfig, agentTaskId?: string, snapshot?: VideoRequestSnapshot) => {
         const owner = userId;
         if (!owner || !isCurrentUser(owner, sessionEpoch)) return;
         const epoch = accountEpochRef.current;
@@ -623,13 +694,21 @@ export default function VideoPage() {
         activeLogIdsRef.current.add(activeKey);
         setRunning(true);
         setStartedAt((value) => value || performance.now());
-        setResults((value) => (value.length ? value : [{ id: log.id, status: "pending" }]));
-        const taskConfig = buildVideoConfig({ ...effectiveConfig, ...log.config }, log.task.model || log.model);
+        const taskConfig = configOverride || buildVideoConfig({ ...effectiveConfig, ...log.config }, log.task.model || log.model);
+        const taskSnapshot: VideoRequestSnapshot = snapshot ?? {
+            text: log.prompt,
+            model: log.model,
+            config: taskConfig,
+            references: log.references.map((item) => ({ ...item })),
+            videos: (log.referenceVideos || []).map((item) => ({ ...item })),
+            audios: (log.referenceAudios || []).map((item) => ({ ...item })),
+        };
+        setResults((value) => (value.length ? value : [{ id: log.id, status: "pending", snapshot: taskSnapshot }]));
         let confirmedFailure = false;
         let statusMessage = '已提交，正在查询状态';
         try {
             for (;;) {
-                const state = await pollVideoGenerationTask(configOverride || taskConfig, log.task, { expectedUserId: owner });
+                const state = await pollVideoGenerationTask(taskConfig, log.task, { expectedUserId: owner });
                 if (!active()) return;
                 if (state.status === "completed") {
                     const stored = await storeGeneratedVideo(state.result, { expectedOwner: owner });
@@ -652,14 +731,14 @@ export default function VideoPage() {
                 }
                 if (state.status === "failed") { confirmedFailure = true; throw new Error(state.error); }
                 if (state.status === "unavailable") {
-                    setResults([{ id: log.id, status: "unavailable", error: state.error }]);
+                    setResults([{ id: log.id, status: "unavailable", error: state.error, snapshot: taskSnapshot }]);
                     if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", successCount: 0, failCount: 1, error: state.error });
                     await saveLog({ ...log, status: "unavailable", durationMs: Date.now() - log.createdAt, error: state.error }, false);
                     message.warning(state.error);
                     return;
                 }
                 statusMessage = state.statusMessage || '已提交，等待处理';
-                setResults([{ id: log.id, status: 'pending', statusMessage }]);
+                setResults([{ id: log.id, status: 'pending', statusMessage, snapshot: taskSnapshot }]);
                 if (state.review) {
                     await saveLog({ ...log, status: 'pending', durationMs: Date.now() - log.createdAt }, false);
                     return;
@@ -671,12 +750,12 @@ export default function VideoPage() {
             if (!active()) return;
             const errorMessage = error instanceof Error ? error.message : t("workbench.generationFailed");
             if (confirmedFailure) {
-                setResults([{ id: log.id, status: "failed", error: errorMessage }]);
+                setResults([{ id: log.id, status: "failed", error: errorMessage, snapshot: taskSnapshot }]);
                 if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", successCount: 0, failCount: 1, error: errorMessage });
                 await saveLog({ ...log, status: "failed", durationMs: Date.now() - log.createdAt, error: errorMessage });
                 message.error(errorMessage);
             } else {
-                setResults([{ id: log.id, status: "pending", statusMessage }]);
+                setResults([{ id: log.id, status: "pending", statusMessage, snapshot: taskSnapshot }]);
                 await saveLog({ ...log, status: "pending", durationMs: Date.now() - log.createdAt, error: undefined }, false);
             }
         } finally {
@@ -742,7 +821,10 @@ export default function VideoPage() {
             <div className="flex min-h-0 flex-1">
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div className="creation-top-actions flex shrink-0 items-center justify-between gap-2 px-4 py-2">
-                    <ActionButton variant="ghost" size="sm" label="新建创作" icon={<Plus className="size-4" />} isDisabled={isTransferring} onClick={createSession} />
+                    <div className="flex items-center gap-2">
+                        <ActionButton variant="ghost" size="sm" label="新建创作" icon={<Plus className="size-4" />} isDisabled={isTransferring} onClick={createSession} />
+                        {draftStatus.state !== "idle" ? <span title={draftStatus.error} className={`text-xs ${draftStatus.state === "error" ? "text-amber-500" : "text-muted-foreground"}`}>{draftStatus.state === "saving" ? "草稿保存中…" : draftStatus.state === "error" ? "草稿本地保存失败" : "草稿已保存在本地"}</span> : null}
+                    </div>
                     {/* 宽屏入口在右侧停靠栏，顶栏不再放重复按钮；窄屏没有停靠栏，仍保留 */}
                     {narrowRecords ? <ActionButton variant="ghost" size="sm" label="生成记录" icon={<History className="size-4" />} onClick={() => setLogsOpen(true)} /> : null}
                 </div>
@@ -759,7 +841,7 @@ export default function VideoPage() {
                                     <CanvasPromptChipInput
                                         value={prompt}
                                         references={promptReferences}
-                                        onChange={setPrompt}
+                                        onChange={(value) => { userEditedBeforeHydrateRef.current = true; setPrompt(value); }}
                                         placeholder={continuation ? "例如：镜头推进慢一点，保留原来的场景…" : "描述你想生成的视频，或选择已有作品继续调整…"}
                                         placeholderClassName="left-3 top-2 leading-7"
                                         chipMode="label"
@@ -859,7 +941,7 @@ export default function VideoPage() {
                         </div>
                         {results.some((result) => result.status !== "pending") ? (
                             <div className="grid gap-4">
-                                {results.map((result) => (result.status === "success" && result.video ? <ResultVideoCard key={result.id} video={result.video} onDownload={downloadVideo} onSaveAsset={saveResultToAssets} /> : result.status === "failed" ? <FailedVideoCard key={result.id} error={friendlyErrorMessage(result.error || t("workbench.generationFailed"))} onRetry={retryResult} /> : result.status === "unavailable" ? <div key={result.id} className="rounded-lg border border-amber-300 p-5 text-sm dark:border-amber-700">{result.error}</div> : null))}
+                                {results.map((result) => (result.status === "success" && result.video ? <ResultVideoCard key={result.id} video={result.video} onDownload={downloadVideo} onSaveAsset={saveResultToAssets} /> : result.status === "failed" ? <FailedVideoCard key={result.id} error={friendlyErrorMessage(result.error || t("workbench.generationFailed"))} onRetry={() => retryResult(result.snapshot)} /> : result.status === "unavailable" ? <div key={result.id} className="rounded-lg border border-amber-300 p-5 text-sm dark:border-amber-700">{result.error}</div> : null))}
                             </div>
                         ) : (
                             <div className="flex min-h-32 flex-col items-center justify-center text-center">
@@ -899,10 +981,10 @@ export default function VideoPage() {
                     <p>生成模式：{detailsLog.config.videoMode === "reference" ? "多参考" : detailsLog.config.videoMode === "frames" ? "首尾帧" : "未记录"}</p>
                     <p>声音：{detailsLog.config.videoGenerateAudio === "true" ? "开启" : detailsLog.config.videoGenerateAudio === "false" ? "关闭" : "未记录"} · 水印：{detailsLog.config.videoWatermark === "true" ? "开启" : detailsLog.config.videoWatermark === "false" ? "关闭" : "未记录"}</p>
                 </div>}
-                {detailsLog && <dl className="space-y-4 text-sm"><div><dt className="text-muted-foreground">提示词</dt><dd className="mt-1 whitespace-pre-wrap break-words">{detailsLog.prompt}</dd></div><div><dt className="text-muted-foreground">模型与参数</dt><dd className="mt-1">{modelOptionLabel(effectiveConfig, detailsLog.model)} · {detailsLog.size || "比例未记录"} · {detailsLog.resolution || "清晰度未记录"} · {detailsLog.seconds ? `${detailsLog.seconds} 秒` : "时长未记录"}</dd></div><div><dt className="text-muted-foreground">参考素材</dt><dd className="mt-1 break-words">{[...detailsLog.references, ...(detailsLog.referenceVideos || []), ...(detailsLog.referenceAudios || [])].map((item) => item.name).join("、") || "暂无可展示的参考素材"}{missingReferenceCount(detailsLog) ? `（另有 ${missingReferenceCount(detailsLog)} 项未保存，请重新添加）` : ""}</dd></div><div><dt className="text-muted-foreground">时间与状态</dt><dd className="mt-1">{detailsLog.time} · {detailsLog.reconciliationRequired ? "待核对" : creationStatus(detailsLog.status)}</dd></div><div><dt className="text-muted-foreground">实际积分</dt><dd className="mt-1">{detailsLog.creditsCharged == null ? "尚未结算或暂不可用" : `${detailsLog.creditsCharged} 积分`}</dd></div></dl>}
+                {detailsLog && <dl className="space-y-4 text-sm"><div><dt className="text-muted-foreground">提示词</dt><dd className="mt-1 whitespace-pre-wrap break-words">{detailsLog.prompt}</dd></div><div><dt className="text-muted-foreground">模型与参数</dt><dd className="mt-1">{modelOptionLabel(effectiveConfig, detailsLog.model)} · {detailsLog.size || "比例未记录"} · {detailsLog.resolution || "清晰度未记录"} · {detailsLog.seconds ? `${detailsLog.seconds} 秒` : "时长未记录"}</dd></div><div><dt className="text-muted-foreground">参考素材</dt><dd className="mt-1 break-words">{[...detailsLog.references, ...(detailsLog.referenceVideos || []), ...(detailsLog.referenceAudios || [])].map((item) => item.name).join("、") || "暂无可展示的参考素材"}{missingReferenceCount(detailsLog) ? `（另有 ${missingReferenceCount(detailsLog)} 项未保存，请重新添加）` : ""}</dd></div><div><dt className="text-muted-foreground">时间与状态</dt><dd className="mt-1">{detailsLog.time} · {detailsLog.reconciliationRequired ? "待核对" : creationStatus(detailsLog.status)}</dd></div>{detailsLog.error ? <div><dt className="text-muted-foreground">失败原因</dt><dd className="mt-1 whitespace-pre-wrap break-words text-red-500 dark:text-red-400">{friendlyErrorMessage(detailsLog.error)}</dd></div> : null}{detailsLog.serverTaskIds?.length ? <div><dt className="text-muted-foreground">任务编号</dt><dd className="mt-1 break-all text-xs text-muted-foreground">{detailsLog.serverTaskIds.join("、")}</dd></div> : null}<div><dt className="text-muted-foreground">实际积分</dt><dd className="mt-1">{detailsLog.creditsCharged == null ? "尚未结算或暂不可用" : `${detailsLog.creditsCharged} 积分`}</dd></div></dl>}
             </Drawer>
             <PromptSelectDialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen} onSelect={setPrompt} />
-            <AssetPickerModal open={assetPickerOpen} defaultTab="my-assets" onInsert={(payload) => void transferReference(() => insertPickedAsset(payload)).catch(reportMediaError)} onClose={() => setAssetPickerOpen(false)} />
+            <AssetPickerModal open={assetPickerOpen} defaultTab="my-assets" acceptedKinds={["text", "image", "video", "audio"]} onInsert={(payload) => void transferReference(() => insertPickedAsset(payload)).catch(reportMediaError)} onClose={() => setAssetPickerOpen(false)} />
             <Modal title={t("workbench.deleteLogs")} open={deleteConfirmOpen} onCancel={() => setDeleteConfirmOpen(false)} onOk={deleteSelectedLogs} okText={t("common.delete")} okButtonProps={{ danger: true }} cancelText={t("common.cancel")}>
                 {t("workbench.deleteLogsConfirm", { count: selectedLogIds.length })}
             </Modal>

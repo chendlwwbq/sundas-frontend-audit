@@ -293,6 +293,7 @@ function InfiniteCanvasPage() {
     const [backgroundMode, setBackgroundMode] = useState<CanvasBackgroundMode>("dots");
     const [showImageInfo, setShowImageInfo] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+    const [deleteProjectConfirmOpen, setDeleteProjectConfirmOpen] = useState(false);
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
     const [projectLoaded, setProjectLoaded] = useState(false);
     const [directorScenes, setDirectorScenes] = useState<DirectorScene[]>([]);
@@ -309,30 +310,6 @@ function InfiniteCanvasPage() {
     const [superResolveNodeId, setSuperResolveNodeId] = useState<string | null>(null);
     const [creativePanel, setCreativePanel] = useState<"production" | "production-export" | "agent" | "character" | null>(null);
     const sidePanelOpen = useCanvasSidePanelStore((state) => state.panelOpen);
-    const currentSyncStatus = useCloudSyncStatus((state) => (state.owner === authUserId && state.session === authSessionEpoch ? state.projects[projectId || ""] || state.status : "reading"));
-
-    // < 1440px 笔记本屏幕下左右侧栏互斥展开，避免中间画布宽度过窄。
-    useEffect(() => {
-        if (typeof window === "undefined" || window.innerWidth >= 1440) return;
-        if (creativePanel && useCanvasSidePanelStore.getState().panelOpen) useCanvasSidePanelStore.getState().closePanel();
-    }, [creativePanel]);
-
-    useEffect(() => {
-        if (typeof window === "undefined" || window.innerWidth >= 1440) return;
-        if (sidePanelOpen && creativePanel) setCreativePanel(null);
-    }, [sidePanelOpen, creativePanel]);
-
-    // 存在尚未落云端或本地媒体未上传完的改动时提醒拦截，避免误关标签页丢失。
-    useEffect(() => {
-        if (!projectLoaded) return;
-        if (currentSyncStatus !== "pending" && currentSyncStatus !== "saving" && currentSyncStatus !== "failed" && currentSyncStatus !== "conflict" && currentSyncStatus !== "local-media") return;
-        const onBeforeUnload = (event: BeforeUnloadEvent) => {
-            event.preventDefault();
-            event.returnValue = "";
-        };
-        window.addEventListener("beforeunload", onBeforeUnload);
-        return () => window.removeEventListener("beforeunload", onBeforeUnload);
-    }, [currentSyncStatus, projectLoaded]);
     const [toolHandoff, setToolHandoff] = useState<CreativeToolHandoff>();
     const toolBaseRef = useRef<{ projectId: string; owner: string; epoch: number; updatedAt: string; nodes: CanvasNodeData[]; connections: CanvasConnection[]; production?: ProductionDocument; directorScenes: DirectorScene[] } | null>(null);
     const [angleNodeId, setAngleNodeId] = useState<string | null>(null);
@@ -368,11 +345,35 @@ function InfiniteCanvasPage() {
     const authUserId = useAuthStore((state) => state.user?.id ?? null);
     const authReady = useAuthStore((state) => state.ready);
     const authSessionEpoch = useAuthStore((state) => state.sessionEpoch);
+    const currentSyncStatus = useCloudSyncStatus((state) => (state.owner === authUserId && state.session === authSessionEpoch ? state.projects[projectId || ""] || state.status : "reading"));
     const previousAuthUserIdRef = useRef(authUserId);
     const previousAuthEpochRef = useRef(authSessionEpoch);
     const loadedAuthUserIdRef = useRef<string | null>(null);
     const loadedAuthEpochRef = useRef<number | null>(null);
     const videoPollIdsRef = useRef(new Set<string>());
+
+    // < 1440px 笔记本屏幕下左右侧栏互斥展开，避免中间画布宽度过窄。
+    useEffect(() => {
+        if (typeof window === "undefined" || window.innerWidth >= 1440) return;
+        if (creativePanel && useCanvasSidePanelStore.getState().panelOpen) useCanvasSidePanelStore.getState().closePanel();
+    }, [creativePanel]);
+
+    useEffect(() => {
+        if (typeof window === "undefined" || window.innerWidth >= 1440) return;
+        if (sidePanelOpen && creativePanel) setCreativePanel(null);
+    }, [sidePanelOpen, creativePanel]);
+
+    // 存在尚未落云端或本地媒体未上传完的改动时提醒拦截，避免误关标签页丢失。
+    useEffect(() => {
+        if (!projectLoaded) return;
+        if (currentSyncStatus !== "pending" && currentSyncStatus !== "saving" && currentSyncStatus !== "failed" && currentSyncStatus !== "conflict" && currentSyncStatus !== "local-media") return;
+        const onBeforeUnload = (event: BeforeUnloadEvent) => {
+            event.preventDefault();
+            event.returnValue = "";
+        };
+        window.addEventListener("beforeunload", onBeforeUnload);
+        return () => window.removeEventListener("beforeunload", onBeforeUnload);
+    }, [currentSyncStatus, projectLoaded]);
 
     useEffect(() => {
         if (previousAuthUserIdRef.current === authUserId && previousAuthEpochRef.current === authSessionEpoch) return;
@@ -1452,6 +1453,7 @@ function InfiniteCanvasPage() {
     }, [createProject, navigate, t]);
 
     const deleteCurrentProject = useCallback(() => {
+        setDeleteProjectConfirmOpen(false);
         deleteProjects([projectId]);
         cleanupAssetImages();
         navigate("/canvas");
@@ -3852,7 +3854,7 @@ function InfiniteCanvasPage() {
                     onBack={() => navigate("/canvas")}
                     onProjects={() => navigate("/canvas")}
                     onCreateProject={createAndOpenProject}
-                    onDeleteProject={deleteCurrentProject}
+                    onDeleteProject={() => setDeleteProjectConfirmOpen(true)}
                     onExportProject={exportCurrentProject}
                     onImportImage={() => handleUploadRequest()}
                     onUndo={undoCanvas}
@@ -4190,6 +4192,28 @@ function InfiniteCanvasPage() {
                     }
                 >
                     <p className="text-sm opacity-60">{t("canvas.projectPage.clearDescription")}</p>
+                </Modal>
+
+                <Modal
+                    title={t("canvas.project.deleteTitle")}
+                    open={deleteProjectConfirmOpen}
+                    centered
+                    onCancel={() => setDeleteProjectConfirmOpen(false)}
+                    footer={
+                        <>
+                            <Button onClick={() => setDeleteProjectConfirmOpen(false)}>{t("common.cancel")}</Button>
+                            <Button danger type="primary" onClick={deleteCurrentProject}>
+                                {t("common.delete")}
+                            </Button>
+                        </>
+                    }
+                >
+                    <p className="text-sm opacity-75">
+                        确认删除画布「{currentProject?.title || t("canvas.projectPage.untitledCanvas")}」？
+                    </p>
+                    <p className="mt-2 text-xs opacity-60">
+                        删除后将移除该画布项目及其仅内部引用的本地未保存素材，且当前不可撤销，请谨慎操作。
+                    </p>
                 </Modal>
 
                 {/* 导演台：整屏浮层，独立于画布交互；关闭后场景留在项目里。 */}

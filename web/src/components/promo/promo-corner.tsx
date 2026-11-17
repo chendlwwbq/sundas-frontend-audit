@@ -37,7 +37,13 @@ export function PromoCorner({ item, workbench = false }: { item: PromoItem | nul
     };
 
     return (
-        <div className={`promo-corner${workbench ? " promo-corner--workbench" : ""}${open ? " is-open" : ""}`} role="dialog" aria-label={item.title || "活动提醒"}>
+        <div
+            className={`promo-corner${workbench ? " promo-corner--workbench" : ""}${open ? " is-open" : ""}`}
+            role="dialog"
+            aria-label={item.title || "活动提醒"}
+            aria-hidden={!open}
+            inert={!open ? true : undefined}
+        >
             <button
                 type="button"
                 className="promo-corner-close"

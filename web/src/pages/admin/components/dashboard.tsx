@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import dayjs from "dayjs";
-import { Button } from "antd";
+import { Alert, Button } from "antd";
 import { ArrowUpRight, ReceiptText, RefreshCw, Settings2, UsersRound } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -64,6 +64,14 @@ export function DashboardTab() {
 
     return (
         <div className="space-y-5">
+            {error ? (
+                <Alert
+                    type="warning"
+                    showIcon
+                    title={`刷新失败，正在展示上次成功获取的数据：${error}`}
+                    action={<Button size="small" icon={<RefreshCw className="size-3.5" />} loading={loading} onClick={() => void load()}>重试</Button>}
+                />
+            ) : null}
             <AdminPanel title="待处理事项" description="异常仍然存在时会继续显示，不因填写核对记录而消失。"><div className="flex flex-wrap gap-3">{todos.map(item => <Link key={item.key} to={`/admin?tab=${item.tab}${item.key === "tasks" ? "&review=pending" : ["wallet", "lots", "unlinked"].includes(item.key) ? "&view=held" : ""}`} className="rounded border border-[var(--admin-line)] px-3 py-2">{item.label}：{item.count}</Link>)}</div></AdminPanel>
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-xs text-[var(--admin-muted)]">今天的实时运营快照，数据来自订单、积分账本与生成任务。</p>

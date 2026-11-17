@@ -55,7 +55,7 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
             className={cn("jm-canvas-card canvas-card group", selected && "is-selected")}
             onClick={() => !editing && open()}
             onKeyDown={(event) => {
-                if (editing) return;
+                if (editing || event.target !== event.currentTarget) return;
                 if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     open();

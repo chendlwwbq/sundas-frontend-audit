@@ -11,25 +11,27 @@ import { useAuthStore } from "@/stores/use-auth-store";
 
 export type InsertAssetPayload = { kind: "text"; content: string; title: string } | { kind: "image"; dataUrl: string; title: string; storageKey?: string } | ({ kind: "video" } | { kind: "audio" }) & { url: string; title: string; storageKey?: string; width?: number; height?: number };
 
+type AcceptedKind = "text" | "image" | "video" | "audio";
+const DEFAULT_ACCEPTED_KINDS: AcceptedKind[] = ["text", "image", "video", "audio"];
+
 type Props = {
     open: boolean;
     defaultTab?: string;
+    acceptedKinds?: AcceptedKind[];
     onInsert: (payload: InsertAssetPayload) => void;
     onClose: () => void;
 };
 
-export function AssetPickerModal({ open, onInsert, onClose }: Props) {
+export function AssetPickerModal({ open, acceptedKinds = DEFAULT_ACCEPTED_KINDS, onInsert, onClose }: Props) {
     const { t } = useTranslation();
     return (
         <Modal title={t("canvas.assetPicker.title")} open={open} onCancel={onClose} footer={null} width={860} destroyOnHidden styles={{ body: { padding: "0 24px 24px", minHeight: 480 } }}>
-            <MyAssetsTab onInsert={onInsert} />
+            <MyAssetsTab acceptedKinds={acceptedKinds} onInsert={onInsert} />
         </Modal>
     );
 }
 
 const PAGE_SIZE = 8;
-
-const kindOptions = ["all", "text", "image", "video", "audio"];
 
 function PickerCard({ title, kind, cover, video, onClick }: { title: string; kind: string; cover: string; video?:boolean; onClick: () => void }) {
     const { t } = useTranslation();
@@ -55,7 +57,7 @@ function PickerCard({ title, kind, cover, video, onClick }: { title: string; kin
     );
 }
 
-function MyAssetsTab({ onInsert }: { onInsert: (payload: InsertAssetPayload) => void }) {
+function MyAssetsTab({ acceptedKinds, onInsert }: { acceptedKinds: AcceptedKind[]; onInsert: (payload: InsertAssetPayload) => void }) {
     const { t } = useTranslation();
     useSyncExternalStore(subscribeImagePreviews, getImagePreviewRevision);
     const assets = useAssetStore((state) => state.assets);
@@ -65,14 +67,16 @@ function MyAssetsTab({ onInsert }: { onInsert: (payload: InsertAssetPayload) => 
     const [keyword, setKeyword] = useState("");
     const [kindFilter, setKindFilter] = useState("all");
     const [page, setPage] = useState(1);
+    const kindOptions = useMemo(() => (acceptedKinds.length > 1 ? ["all", ...acceptedKinds] : acceptedKinds), [acceptedKinds]);
 
     const filtered = useMemo(() => {
         const query = keyword.trim().toLowerCase();
+        const allowed = new Set<string>(acceptedKinds);
         return assets
-            .filter((a) => a.kind === "text" || a.kind === "image" || a.kind === "video" || a.kind === "audio")
+            .filter((a) => allowed.has(a.kind))
             .filter((a) => kindFilter === "all" || a.kind === kindFilter)
             .filter((a) => !query || [a.title, ...(a.tags || [])].join(" ").toLowerCase().includes(query));
-    }, [assets, keyword, kindFilter]);
+    }, [acceptedKinds, assets, keyword, kindFilter]);
 
     const visible = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page]);
 

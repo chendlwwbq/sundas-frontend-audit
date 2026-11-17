@@ -2,19 +2,26 @@ import { FolderPlus, Search } from "lucide-react";
 import { type ReactNode, type UIEvent, useEffect, useState } from "react";
 import { App, Button, Empty, Spin, Tag } from "antd";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
 import { PromptCard } from "@/components/prompts/prompt-card";
 import { usePromptList } from "@/components/prompts/use-prompt-list";
 import { PromptDetailDialog } from "@/components/prompts/prompt-detail-dialog";
 import { useCopyText } from "@/hooks/use-copy-text";
 import { cn } from "@/lib/utils";
+import { GUEST_DRAFT_KEY, storePendingPrompt } from "@/lib/pending-prompt";
 import { useAssetStore } from "@/stores/use-asset-store";
+import { useAuthDialogStore } from "@/stores/use-auth-dialog-store";
+import { useAuthStore } from "@/stores/use-auth-store";
 import { promptImageUrl } from "@/lib/prompt-image";
 import { ALL_PROMPTS_OPTION, type Prompt } from "@/services/api/prompts";
 
 export default function PromptsPage() {
     const { message } = App.useApp();
     const { t } = useTranslation();
+    const navigate = useNavigate();
+    const userId = useAuthStore((state) => state.user?.id ?? null);
+    const openAuthDialog = useAuthDialogStore((state) => state.open);
     const [titleKeyword, setTitleKeyword] = useState("");
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [selectedCategory, setSelectedCategory] = useState(ALL_PROMPTS_OPTION);
@@ -35,6 +42,24 @@ export default function PromptsPage() {
     const savePromptAsset = (item: Prompt) => {
         addAsset({ kind: "text", title: item.title, coverUrl: promptImageUrl(item.coverUrl), tags: item.tags, source: item.category, data: { content: item.prompt }, metadata: { source: "prompt-library", promptId: item.id, githubUrl: item.githubUrl } });
         message.success(t("common.addedToAssets"));
+    };
+
+    const usePrompt = (item: Prompt) => {
+        const value = item.prompt.trim();
+        if (!value) return;
+        const targetMode = item.previewVideoUrl ? "video" : "image";
+        setSelectedPrompt(null);
+        if (!userId) {
+            try {
+                sessionStorage.setItem(GUEST_DRAFT_KEY, JSON.stringify({ mode: targetMode, prompt: value }));
+            } catch {
+                /* 存储不可用时仍允许打开登录框 */
+            }
+            openAuthDialog("login", { redirect: `/create?mode=${targetMode}`, hint: "登录后立即带入该提示词继续创作" });
+            return;
+        }
+        storePendingPrompt(targetMode, value, [], userId);
+        navigate(`/create?mode=${targetMode}`);
     };
 
     const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
@@ -78,7 +103,7 @@ export default function PromptsPage() {
                 </div>
             </main>
 
-            <PromptDetailDialog prompt={selectedPrompt} onClose={() => setSelectedPrompt(null)} onCopy={(prompt) => copyText(prompt, t("common.promptCopied"))} onSaveAsset={savePromptAsset} />
+            <PromptDetailDialog prompt={selectedPrompt} onClose={() => setSelectedPrompt(null)} onCopy={(prompt) => copyText(prompt, t("common.promptCopied"))} onUsePrompt={usePrompt} onSaveAsset={savePromptAsset} />
         </div>
     );
 }

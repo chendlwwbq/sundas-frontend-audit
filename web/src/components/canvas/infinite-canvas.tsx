@@ -50,19 +50,23 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
     );
 
     useEffect(() => {
+        const isInteractiveSpaceTarget = (target: EventTarget | null) => {
+            if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
+            if (!(target instanceof Element)) return false;
+            return Boolean(target.closest("[contenteditable='true'], button, a[href], summary, [role='button'], [role='checkbox'], [role='menuitem'], [role='tab'], [role='switch'], [role='option'], .ant-modal, .ant-popover, .ant-dropdown"));
+        };
+
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === "Control") setIsControlPressed(true);
             if (event.code !== "Space") return;
-            const target = event.target instanceof Element ? event.target : null;
-            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || target?.closest("[contenteditable='true']")) return;
+            if (isInteractiveSpaceTarget(event.target)) return;
             event.preventDefault();
             setIsSpacePressed(true);
         };
 
         const handleKeyUp = (event: KeyboardEvent) => {
             if (event.code === "Space") {
-                const target = event.target instanceof Element ? event.target : null;
-                if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || target?.closest("[contenteditable='true']"))) event.preventDefault();
+                if (!isInteractiveSpaceTarget(event.target)) event.preventDefault();
                 setIsSpacePressed(false);
             }
             if (event.key === "Control") setIsControlPressed(false);

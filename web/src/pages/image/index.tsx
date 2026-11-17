@@ -3,7 +3,7 @@ import { RecordActions } from "@/components/creation/record-actions";
 import { CreationToolbar } from "@/components/creation/creation-toolbar";
 import { Button as ActionButton } from "@astryxdesign/core/Button";
 import { CreationRequest, ContinuationNotice, continuationPrompt } from "@/components/creation/creation-conversation";
-import type { Continuation } from "@/components/creation/creation-drafts";
+import { isCreationDraftEmpty, loadCreationDraft, readCreationDraft, saveCreationDraft, type Continuation, type DraftSaveStatus } from "@/components/creation/creation-drafts";
 import { PromptOptimizationEstimate } from "@/components/creation/prompt-optimization-estimate";
 import { OtherCreationRecord, useOtherCreationHistory } from "@/components/creation/mixed-creation-history";
 import { ChatComposer } from "@astryxdesign/core/Chat";
@@ -12,7 +12,6 @@ import { Lightbox } from "@astryxdesign/core/Lightbox";
 import { CreationStream } from "@/components/creation/creation-stream";
 import { CreationRecordsRail, useNarrowRecords } from "@/components/creation/creation-records-rail";
 import { CreditEstimate } from "@/components/creation/credit-estimate";
-import { readCreationDraft, saveCreationDraft } from "@/components/creation/creation-drafts";
 import { useCreationHistory } from "@/components/creation/creation-history";
 import { useVisibleRecords } from "@/components/creation/use-visible-records";
 import { useReferenceTransfer } from "@/components/creation/use-reference-transfer";
@@ -60,11 +59,19 @@ type GeneratedImage = {
     mimeType?: string;
 };
 
+type ImageRequestSnapshot = {
+    text: string;
+    model: string;
+    config: AiConfig;
+    references: ReferenceImage[];
+};
+
 type GenerationResult = {
     id: string;
     status: "pending" | "success" | "failed";
     image?: GeneratedImage;
     error?: string;
+    snapshot?: ImageRequestSnapshot;
 };
 
 type GenerationLog = {
@@ -85,6 +92,7 @@ type GenerationLog = {
     quality: string;
     status: "success" | "failed" | "pending" | "unavailable";
     images: GeneratedImage[];
+    error?: string;
     creditsCharged?: number;
     reconciliationRequired?: boolean;
     referenceHistoryUnknown?: boolean;
@@ -124,9 +132,19 @@ export default function ImagePage() {
     const [references, setReferences] = useState<ReferenceImage[]>([]);
     const [continuation, setContinuation] = useState<Continuation>();
     const [submittedPrompt, setSubmittedPrompt] = useState("");
+    const [draftStatus, setDraftStatus] = useState<DraftSaveStatus>({ state: "idle" });
+    const hydratedDraftKeyRef = useRef("");
+    const userEditedBeforeHydrateRef = useRef(false);
     useEffect(() => {
         if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch) return;
-        saveCreationDraft("image", userId, sessionEpoch, { continuation, prompt, references, videos: [], audios: [] });
+        const sessionKey = `${userId}:${sessionEpoch}`;
+        if (hydratedDraftKeyRef.current !== sessionKey) return;
+        const draft = { continuation, prompt, references, videos: [], audios: [] };
+        const epoch = accountEpochRef.current;
+        if (!isCreationDraftEmpty(draft)) setDraftStatus({ state: "saving" });
+        void saveCreationDraft("image", userId, sessionEpoch, draft).then((status) => {
+            if (isCurrentUser(userId, sessionEpoch) && accountEpochRef.current === epoch) setDraftStatus(status);
+        });
     }, [userId, viewOwner, viewEpoch, sessionEpoch, continuation, prompt, references]);
     const [results, setResults] = useState<GenerationResult[]>([]);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
@@ -219,16 +237,39 @@ export default function ImagePage() {
     }, [running, startedAt]);
 
     useEffect(() => {
-        accountEpochRef.current += 1;
+        const epoch = accountEpochRef.current + 1;
+        accountEpochRef.current = epoch;
         historyPagerRef.current = userId ? new GenerationHistoryPager(userId, "image") : null;
         setHistoryHasMore(false); setLoadingEarlier(false);
         agentTaskIdRef.current = undefined;
         setAutoRunToken(0);
         setLogs([]); setResults([]); setPreviewLog(null); setDetailsLog(null); setSelectedLogIds([]); setRunning(false); setStartedAt(0);
+        setDraftStatus({ state: "idle" });
+        hydratedDraftKeyRef.current = "";
+        userEditedBeforeHydrateRef.current = false;
+        const sessionKey = userId ? `${userId}:${sessionEpoch}` : "";
         const draft = userId ? readCreationDraft("image", userId, sessionEpoch) : undefined;
         setContinuation(draft?.continuation); setPrompt(draft?.prompt ?? ""); setReferences(draft?.references ?? []);
+        if (draft) {
+            hydratedDraftKeyRef.current = sessionKey;
+            setDraftStatus({ state: "saved", savedAt: draft.updatedAt });
+        }
         setViewOwner(userId); setViewEpoch(sessionEpoch);
-        if (userId) void refreshLogs();
+        if (userId) {
+            void refreshLogs();
+            if (!draft) {
+                void loadCreationDraft("image", userId, sessionEpoch).then((loaded) => {
+                    if (!isCurrentUser(userId, sessionEpoch) || accountEpochRef.current !== epoch) return;
+                    hydratedDraftKeyRef.current = sessionKey;
+                    if (!loaded || appliedInitialPrompt.current?.startsWith(`${sessionKey}:`) || userEditedBeforeHydrateRef.current) return;
+                    loaded.references.forEach((item) => { if (item.storageKey) void ensureImagePreview(item.storageKey); });
+                    setContinuation(loaded.continuation);
+                    setPrompt(loaded.prompt);
+                    setReferences(loaded.references);
+                    setDraftStatus({ state: "saved", savedAt: loaded.updatedAt });
+                });
+            }
+        }
     }, [userId, sessionEpoch]);
 
     const addReferences = async (files?: FileList | null) => {
@@ -336,7 +377,7 @@ export default function ImagePage() {
         setRunning(true);
         if (agentTaskId) updateAgentTask(agentTaskId, { status: "running", error: undefined });
         setPreviewLog(null);
-        setResults(Array.from({ length: generationCount }, () => ({ id: nanoid(), status: "pending" })));
+        setResults(Array.from({ length: generationCount }, () => ({ id: nanoid(), status: "pending", snapshot })));
         const batchStartedAt = performance.now();
         setStartedAt(batchStartedAt);
 
@@ -347,16 +388,16 @@ export default function ImagePage() {
         const successImages = result.filter((item): item is PromiseFulfilledResult<GeneratedImage> => item.status === "fulfilled").map((item) => item.value);
         const successCount = successImages.length;
         const failCount = generationCount - successCount;
-        const failed = result.find((item): item is PromiseRejectedResult => item.status === "rejected");
+        const failedReasons = [...new Set(result.filter((item): item is PromiseRejectedResult => item.status === "rejected").map((item) => item.reason instanceof Error ? item.reason.message : String(item.reason || t("workbench.generationFailed"))).filter(Boolean))];
         const failedTaskIds = result.flatMap((item) => item.status === "rejected" ? [imageTaskIdFromError(item.reason)].filter((id): id is string => Boolean(id)) : []);
-        const error = failed?.reason instanceof Error ? failed.reason.message : failCount ? t("workbench.generationFailed") : undefined;
+        const error = failedReasons.join("；") || (failCount ? t("workbench.generationFailed") : undefined);
         if (agentTaskId) updateAgentTask(agentTaskId, { status: successCount ? "succeeded" : "failed", successCount, failCount, error: successCount ? undefined : error });
 
         try {
             saveLog(
                 buildLog({
-                    prompt: text,
-                    model,
+                    prompt: snapshot.text,
+                    model: snapshot.model,
                     config: { ...snapshot.config, count: String(generationCount) },
                     references: snapshot.references,
                     durationMs: performance.now() - batchStartedAt,
@@ -365,9 +406,10 @@ export default function ImagePage() {
                     status: successCount ? "success" : "failed",
                     images: successImages,
                     taskIds: failedTaskIds,
+                    error,
                 }),
             );
-            successCount ? message.success(t("imageWorkbench.generated")) : message.error(failed?.reason instanceof Error ? failed.reason.message : t("workbench.generationFailed"));
+            successCount ? message.success(t("imageWorkbench.generated")) : message.error(error || t("workbench.generationFailed"));
         } finally {
             setRunning(false);
         }
@@ -476,6 +518,7 @@ export default function ImagePage() {
     const createSession = () => {
         if (!isCurrentView()) return;
         if (isTransferring) { message.warning("参考素材正在处理，请等待完成后再新建创作"); return; }
+        userEditedBeforeHydrateRef.current = true;
         if (userId) newCreationThread(userId);
         setContinuation(undefined);
         setPrompt("");
@@ -561,10 +604,10 @@ export default function ImagePage() {
             openConfigDialog(true);
             return null;
         }
-        return { text, config: { ...effectiveConfig, model, count: "1" }, references: [...references] };
+        return { text, model, config: { ...effectiveConfig, model, count: "1" }, references: references.map((item) => ({ ...item })) };
     };
 
-    const runGenerationSlot = async (index: number, snapshot: { text: string; config: AiConfig; references: ReferenceImage[] }, owner: string, active: () => boolean) => {
+    const runGenerationSlot = async (index: number, snapshot: ImageRequestSnapshot, owner: string, active: () => boolean) => {
         const itemStartedAt = performance.now();
         try {
             const result = snapshot.references.length ? await requestEdit(snapshot.config, snapshot.text, snapshot.references, { expectedUserId: owner }) : await requestGeneration(snapshot.config, snapshot.text, { expectedUserId: owner });
@@ -587,12 +630,12 @@ export default function ImagePage() {
         if (!owner) return;
         const epoch = accountEpochRef.current;
         const active = () => isCurrentUser(owner, sessionEpoch) && accountEpochRef.current === epoch;
-        const snapshot = buildRequestSnapshot();
+        const snapshot = results[index]?.snapshot ?? buildRequestSnapshot();
         if (!snapshot) return;
         generationThread.current = await ensureCreationThread(owner);
         if (!active()) return;
         setPreviewLog(null);
-        setResults((value) => updateResultAt(value, index, { status: "pending", error: undefined, image: undefined }));
+        setResults((value) => updateResultAt(value, index, { status: "pending", error: undefined, image: undefined, snapshot }));
         const retryStartedAt = performance.now();
         try {
             const image = await runGenerationSlot(index, snapshot, owner, active);
@@ -600,7 +643,7 @@ export default function ImagePage() {
             saveLog(
                 buildLog({
                     prompt: snapshot.text,
-                    model,
+                    model: snapshot.model,
                     config: { ...snapshot.config, count: "1" },
                     references: snapshot.references,
                     durationMs: performance.now() - retryStartedAt,
@@ -611,8 +654,25 @@ export default function ImagePage() {
                 }),
             );
             message.success(t("workbench.retrySuccess"));
-        } catch {
-            // runGenerationSlot has already marked the result as failed.
+        } catch (error) {
+            const retryError = error instanceof Error ? error.message : t("workbench.generationFailed");
+            if (active()) {
+                saveLog(
+                    buildLog({
+                        prompt: snapshot.text,
+                        model: snapshot.model,
+                        config: { ...snapshot.config, count: "1" },
+                        references: snapshot.references,
+                        durationMs: performance.now() - retryStartedAt,
+                        successCount: 0,
+                        failCount: 1,
+                        status: "failed",
+                        images: [],
+                        taskIds: [imageTaskIdFromError(error)].filter((id): id is string => Boolean(id)),
+                        error: retryError,
+                    }),
+                );
+            }
         }
     };
 
@@ -641,7 +701,10 @@ export default function ImagePage() {
             <div className="flex min-h-0 flex-1">
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div className="creation-top-actions flex shrink-0 items-center justify-between gap-2 px-4 py-2">
-                    <ActionButton variant="ghost" size="sm" label="新建创作" icon={<Plus className="size-4" />} isDisabled={isTransferring} onClick={createSession} />
+                    <div className="flex items-center gap-2">
+                        <ActionButton variant="ghost" size="sm" label="新建创作" icon={<Plus className="size-4" />} isDisabled={isTransferring} onClick={createSession} />
+                        {draftStatus.state !== "idle" ? <span title={draftStatus.error} className={`text-xs ${draftStatus.state === "error" ? "text-amber-500" : "text-muted-foreground"}`}>{draftStatus.state === "saving" ? "草稿保存中…" : draftStatus.state === "error" ? "草稿本地保存失败" : "草稿已保存在本地"}</span> : null}
+                    </div>
                     {/* 宽屏入口在右侧停靠栏，顶栏不再放重复按钮；窄屏没有停靠栏，仍保留 */}
                     {narrowRecords ? <ActionButton variant="ghost" size="sm" label="生成记录" icon={<History className="size-4" />} onClick={() => setLogsOpen(true)} /> : null}
                 </div>
@@ -655,7 +718,7 @@ export default function ImagePage() {
                             input={<div className="thin-scrollbar max-h-[30dvh] space-y-2 overflow-y-auto" onDragOver={(event) => { if (!referenceOpen && !references.length) event.preventDefault(); }} onDrop={(event) => { if (!referenceOpen && !references.length) { event.preventDefault(); void transferReference(() => addReferences(event.dataTransfer.files)).catch(reportMediaError); } }}>
                         <ContinuationNotice value={continuation} mode="image" onCancel={() => { setContinuation(undefined); }} />
                                 <div className="relative">
-                                    <Input.TextArea className="!pb-9 !pr-10" value={prompt} onChange={(event) => setPrompt(event.target.value)} autoSize={{ minRows: 2, maxRows: 5 }} placeholder={continuation ? "例如：衣服换成红色，其他保持不变…" : "描述你想生成的图片，或选择一张作品继续修改…"} />
+                                    <Input.TextArea className="!pb-9 !pr-10" value={prompt} onChange={(event) => { userEditedBeforeHydrateRef.current = true; setPrompt(event.target.value); }} autoSize={{ minRows: 2, maxRows: 5 }} placeholder={continuation ? "例如：衣服换成红色，其他保持不变…" : "描述你想生成的图片，或选择一张作品继续修改…"} />
                                     <PromptOptimizeButton prompt={prompt} model={model} capability="image" disabled={running} onOptimized={setPrompt} />
                                 </div>
                                 {(referenceOpen || references.length > 0) && (
@@ -743,7 +806,7 @@ export default function ImagePage() {
                             <CreationRequest prompt={log.prompt} />
                             <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">图片生成</span><span>{modelOptionLabel(effectiveConfig, log.model)}</span><span>{log.time}</span><span>{log.reconciliationRequired ? "待核对" : creationStatus(log.status)}</span></div>
                             {log.images.length > 0 && <div className={`grid gap-3 ${log.images.length > 1 ? "sm:grid-cols-2" : ""}`}>{log.images.map((image, index) => <ResultImageCard key={image.id} image={image} gallery={log.images} index={index} onEdit={(item, i) => void transferReference(() => addResultToReferences(item, i)).catch(reportMediaError)} onDownload={downloadImage} onSaveAsset={(item, i) => void saveResultToAssets(item, i).catch(reportMediaError)} onVideo={useImageForVideo} onContinue={(item, i) => void transferReference(() => continueImage(item, i)).catch(reportMediaError)} />)}</div>}
-                            {log.failCount > 0 && <div className="mt-2 text-sm text-muted-foreground">失败 {log.failCount} 张</div>}
+                            {log.failCount > 0 && <div className="mt-2 text-sm text-red-500 dark:text-red-400">失败 {log.failCount} 张{log.error ? `：${log.error}` : "（可在「生成详情」查看并按原参数重新生成）"}</div>}
                             <RecordActions secondary={{ key: "details", label: "生成详情", run: () => setDetailsLog(log) }} label="更多生成记录操作" more={[
                                 { key: "edit", label: "编辑原描述与参数", disabled: isTransferring, run: () => { void previewGenerationLog(log); } },
                                 { key: "again", label: "按原参数再次生成", disabled: isTransferring, run: () => { void previewGenerationLog(log).then(missing => { if (missing === false) message.info("已回填原参数，请核对当前积分后点击开始生成"); }); } },
@@ -821,10 +884,10 @@ export default function ImagePage() {
             </Drawer>
             <Drawer title="生成详情" open={Boolean(detailsLog)} onClose={() => setDetailsLog(null)}>
                 {detailsLog && <div className="mb-4 space-y-2 text-sm"><p>背景：{detailsLog.config.background || "未记录"}</p>{detailsLog.referenceHistoryUnknown && <p className="text-muted-foreground">云端历史未保存参考素材信息</p>}</div>}
-                {detailsLog && <dl className="space-y-4 text-sm"><div><dt className="text-muted-foreground">提示词</dt><dd className="mt-1 whitespace-pre-wrap break-words">{detailsLog.prompt}</dd></div><div><dt className="text-muted-foreground">模型与参数</dt><dd className="mt-1">{modelOptionLabel(effectiveConfig, detailsLog.model)} · {detailsLog.size} · {detailsLog.quality} · {detailsLog.imageCount} 张</dd></div><div><dt className="text-muted-foreground">参考素材</dt><dd className="mt-1 break-words">{detailsLog.references.length ? detailsLog.references.map((item) => item.name).join("、") : "暂无可展示的参考素材"}</dd></div><div><dt className="text-muted-foreground">时间与状态</dt><dd className="mt-1">{detailsLog.time} · {detailsLog.reconciliationRequired ? "待核对" : creationStatus(detailsLog.status)}</dd></div><div><dt className="text-muted-foreground">实际积分</dt><dd className="mt-1">{detailsLog.creditsCharged == null ? "尚未结算或暂不可用" : `${detailsLog.creditsCharged} 积分`}</dd></div></dl>}
+                {detailsLog && <dl className="space-y-4 text-sm"><div><dt className="text-muted-foreground">提示词</dt><dd className="mt-1 whitespace-pre-wrap break-words">{detailsLog.prompt}</dd></div><div><dt className="text-muted-foreground">模型与参数</dt><dd className="mt-1">{modelOptionLabel(effectiveConfig, detailsLog.model)} · {detailsLog.size} · {detailsLog.quality} · {detailsLog.imageCount} 张</dd></div><div><dt className="text-muted-foreground">参考素材</dt><dd className="mt-1 break-words">{detailsLog.references.length ? detailsLog.references.map((item) => item.name).join("、") : "暂无可展示的参考素材"}</dd></div><div><dt className="text-muted-foreground">时间与状态</dt><dd className="mt-1">{detailsLog.time} · {detailsLog.reconciliationRequired ? "待核对" : creationStatus(detailsLog.status)}</dd></div>{(detailsLog.error || detailsLog.failCount > 0) ? <div><dt className="text-muted-foreground">失败详情</dt><dd className="mt-1 whitespace-pre-wrap break-words text-red-500 dark:text-red-400">{detailsLog.error || `共失败 ${detailsLog.failCount} 张；历史记录未保留更细错误信息，可通过「按原参数再次生成」重试`}</dd></div> : null}{detailsLog.serverTaskIds?.length ? <div><dt className="text-muted-foreground">任务编号</dt><dd className="mt-1 break-all text-xs text-muted-foreground">{detailsLog.serverTaskIds.join("、")}</dd></div> : null}<div><dt className="text-muted-foreground">实际积分</dt><dd className="mt-1">{detailsLog.creditsCharged == null ? "尚未结算或暂不可用" : `${detailsLog.creditsCharged} 积分`}</dd></div></dl>}
             </Drawer>
             <PromptSelectDialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen} onSelect={setPrompt} />
-            <AssetPickerModal open={assetPickerOpen} defaultTab="my-assets" onInsert={(payload) => void transferReference(() => insertPickedAsset(payload)).catch(reportMediaError)} onClose={() => setAssetPickerOpen(false)} />
+            <AssetPickerModal open={assetPickerOpen} defaultTab="my-assets" acceptedKinds={["text", "image"]} onInsert={(payload) => void transferReference(() => insertPickedAsset(payload)).catch(reportMediaError)} onClose={() => setAssetPickerOpen(false)} />
             <Modal title={t("workbench.deleteLogs")} open={deleteConfirmOpen} onCancel={() => setDeleteConfirmOpen(false)} onOk={deleteSelectedLogs} okText={t("common.delete")} okButtonProps={{ danger: true }} cancelText={t("common.cancel")}>
                 {t("workbench.deleteLogsConfirm", { count: selectedLogIds.length })}
             </Modal>
@@ -1087,6 +1150,7 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
         quality: log.quality || config.quality || "",
         status: log.status || "success",
         images,
+        ...(log.error ? { error: log.error } : {}),
     };
 }
 
@@ -1145,6 +1209,7 @@ function buildLog({
     status,
     images,
     taskIds = [],
+    error,
 }: {
     prompt: string;
     model: string;
@@ -1156,6 +1221,7 @@ function buildLog({
     status: GenerationLog["status"];
     images: GeneratedImage[];
     taskIds?: string[];
+    error?: string;
 }): GenerationLog {
     const logConfig = {
         model: config.model,
@@ -1183,5 +1249,6 @@ function buildLog({
         quality: logConfig.quality,
         status,
         images,
+        ...(error ? { error } : {}),
     };
 }

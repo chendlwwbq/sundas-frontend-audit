@@ -49,7 +49,7 @@ export function CreationSidebar() {
         : [];
     const recentWorks = [
         ...threads.filter(t => t.messages.length || t.records.length || t.draft).map(t => ({ key: `chat:${t.id}`, title: t.title, time: t.updatedAt, to: `/create?mode=chat&thread=${t.id}`, icon: MessageSquare, type: "对话" })),
-        ...recentGenerations.map(item => ({ key: `${item.mode}:${item.id}`, title: item.title, time: item.createdAt, to: threads.some(t => t.records.some(r => r.id === item.id)) ? `/create?mode=chat&thread=${threads.find(t => t.records.some(r => r.id === item.id))!.id}` : `/create?mode=${item.mode}&record=${encodeURIComponent(item.id)}`, icon: item.mode === "image" ? ImagePlus : Video, type: item.mode === "image" ? "图片" : "视频" })),
+        ...recentGenerations.map(item => ({ key: `${item.mode}:${item.id}`, title: item.title, time: item.createdAt, to: `/create?mode=${item.mode}&record=${encodeURIComponent(item.id)}`, icon: item.mode === "image" ? ImagePlus : Video, type: item.mode === "image" ? "图片" : "视频" })),
         ...recent.map(project => ({ key: `canvas:${project.id}`, title: project.title, time: new Date(project.updatedAt).getTime(), to: `/canvas/${project.id}`, icon: LayoutGrid, type: "画布" })),
     ].sort((a, b) => b.time - a.time);
 

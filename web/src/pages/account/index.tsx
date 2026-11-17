@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { App as AntApp, Alert, Button, Input, InputNumber, Segmented, Spin, Table, Tabs, Tag } from "antd";
 import type { TableColumnsType } from "antd";
@@ -203,6 +203,8 @@ function Recharge({ membershipOnly = false }: { membershipOnly?: boolean }) {
     const wallet = useAuthStore((state) => state.wallet);
     const member = wallet?.member;
     const [site, setSite] = useState<SiteInfo | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState("");
     const [plans, setPlans] = useState<Plan[]>([]);
     const [packages, setPackages] = useState<RechargePackage[]>([]);
     const [packageId, setPackageId] = useState("");
@@ -211,25 +213,56 @@ function Recharge({ membershipOnly = false }: { membershipOnly?: boolean }) {
     const [provider, setProvider] = useState("");
     const [paying, setPaying] = useState(false);
 
-    useEffect(() => {
-        void Promise.all([
-            apiRequest<SiteInfo>("/api/site"),
-            membershipOnly ? apiRequest<{ plans: Plan[] }>("/api/plans") : Promise.resolve({ plans: [] }),
-            membershipOnly ? Promise.resolve({ packages: [] }) : apiRequest<{ packages: RechargePackage[] }>("/api/recharge-packages"),
-        ])
-            .then(([siteData, planData, packageData]) => {
-                if (!scope.current()) return;
-                setSite(siteData);
-                setPlans(planData.plans);
-                setPackages(packageData.packages);
-                const provider = availablePaymentProviders(siteData, paymentClient())[0] ?? '';
-                setProvider(provider);
-                setPayType(siteData.payTypes.find((value) => provider !== 'alipay' || value === 'alipay') ?? "");
-            })
-            .catch((error: unknown) => { if (scope.current()) message.error(error instanceof Error ? error.message : String(error)); });
+    const loadSiteAndPlans = useCallback(async () => {
+        setLoading(true);
+        setLoadError("");
+        try {
+            const [siteData, planData, packageData] = await Promise.all([
+                apiRequest<SiteInfo>("/api/site"),
+                membershipOnly ? apiRequest<{ plans: Plan[] }>("/api/plans") : Promise.resolve({ plans: [] }),
+                membershipOnly ? Promise.resolve({ packages: [] }) : apiRequest<{ packages: RechargePackage[] }>("/api/recharge-packages"),
+            ]);
+            if (!scope.current()) return;
+            setSite(siteData);
+            setPlans(planData.plans);
+            setPackages(packageData.packages);
+            const nextProvider = availablePaymentProviders(siteData, paymentClient())[0] ?? "";
+            setProvider(nextProvider);
+            setPayType(siteData.payTypes.find((value) => nextProvider !== "alipay" || value === "alipay") ?? "");
+        } catch (error: unknown) {
+            if (!scope.current()) return;
+            const reason = error instanceof Error ? error.message : String(error);
+            setLoadError(reason || "无法加载账户配置");
+            message.error(reason);
+        } finally {
+            if (scope.current()) setLoading(false);
+        }
     }, [message, membershipOnly]);
 
-    if (!site) return <Loading />;
+    useEffect(() => {
+        void loadSiteAndPlans();
+    }, [loadSiteAndPlans]);
+
+    if (!site) {
+        if (loadError) {
+            return (
+                <div className="mx-auto max-w-xl py-8">
+                    <Alert
+                        type="error"
+                        showIcon
+                        message="加载账户配置失败"
+                        description={loadError}
+                        action={
+                            <Button size="small" icon={<RefreshCw className="size-3.5" />} loading={loading} onClick={() => void loadSiteAndPlans()}>
+                                重试
+                            </Button>
+                        }
+                    />
+                </div>
+            );
+        }
+        return <Loading />;
+    }
 
     const selected = packages.find((item) => item.id === packageId) ?? null;
     const price = selected ? selected.priceCents / 100 : ((credits || 0) * site.creditPriceCents) / 100;

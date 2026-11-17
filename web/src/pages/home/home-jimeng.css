@@ -7,8 +7,8 @@
     --hj-chip: rgba(255, 255, 255, 0.06);
     --hj-chip-hover: rgba(255, 255, 255, 0.11);
     --hj-text: rgba(255, 255, 255, 0.88);
-    --hj-muted: rgba(255, 255, 255, 0.70);
-    --hj-faint: rgba(255, 255, 255, 0.40);
+    --hj-muted: rgba(255, 255, 255, 0.72);
+    --hj-faint: rgba(255, 255, 255, 0.56);
 }
 
 /* ---------- 欢迎区 ---------- */
@@ -25,7 +25,7 @@
     border: 1px solid var(--hj-border);
     border-radius: 999px;
     color: var(--hj-muted);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: 0.04em;
 }
 .home-landing .landing-welcome h1 {
@@ -368,27 +368,27 @@ main.home-landing .landing-tool:hover .landing-tool-art {
 
 /* ---------- 窄屏 ---------- */
 @media (max-width: 640px) {
-    .home-landing .landing-welcome { padding-top: 20px; }
-    .home-landing .home-composer { padding: 14px 12px 12px; border-radius: 20px; }
-    .home-landing .home-editor { gap: 12px; padding-inline: 0; }
-    .home-landing .home-editor .home-material-bar { max-width: 120px; }
-    .home-landing .home-editor .home-material-add.is-card,
-    .home-landing .home-editor .home-material-item { width: 46px; height: 60px; }
-    .home-landing .home-editor .home-prompt { height: 84px; min-height: 84px; font-size: 14px; }
-    .home-landing .home-composer .home-toolbar { flex-wrap: wrap; }
-    .home-landing .home-composer .home-toolbar-left {
+    main.home-landing .landing-welcome { padding: 20px 0 18px; }
+    main.home-landing .home-composer { padding: 14px 12px 12px; border-radius: 20px; }
+    main.home-landing .home-editor { gap: 12px; padding-inline: 0; }
+    main.home-landing .home-editor .home-material-bar { max-width: 120px; }
+    main.home-landing .home-editor .home-material-add.is-card,
+    main.home-landing .home-editor .home-material-item { width: 46px; height: 60px; }
+    main.home-landing .home-editor .home-prompt { height: 84px; min-height: 84px; font-size: 14px; }
+    main.home-landing .home-composer .home-toolbar { flex-wrap: wrap; }
+    main.home-landing .home-composer .home-toolbar-left {
         display: flex;
         flex-wrap: wrap;
         width: 100%;
         gap: 6px;
     }
-    .home-landing .home-toolbar-left > :first-child { grid-column: auto; }
-    .home-landing .home-composer .home-param { flex-direction: row; align-items: center; height: 34px; }
-    .home-landing .home-composer .home-control-wrap { position: static; width: auto; }
-    .home-landing .home-composer .home-value-trigger { width: auto; min-height: 34px; }
-    .home-landing .home-composer .home-control-panel { left: 12px; right: 12px; width: auto; }
-    .home-landing .home-composer .home-toolbar-right { flex-direction: row; align-items: center; justify-content: flex-end; width: 100%; }
-    .home-landing .landing-tool { gap: 10px; }
+    main.home-landing .home-toolbar-left > :first-child { grid-column: auto; }
+    main.home-landing .home-composer .home-param { flex-direction: row; align-items: center; height: 34px; }
+    main.home-landing .home-composer .home-control-wrap { position: static; width: auto; }
+    main.home-landing .home-composer .home-value-trigger { width: auto; min-height: 34px; }
+    main.home-landing .home-composer .home-control-panel { left: 12px; right: 12px; width: auto; }
+    main.home-landing .home-composer .home-toolbar-right { flex-direction: row; align-items: center; justify-content: flex-end; width: 100%; }
+    main.home-landing .landing-tool { gap: 10px; }
     main.home-landing .landing-tool .landing-tool-art {
         width: 44px;
         height: 44px;

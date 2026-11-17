@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ComponentType } from "react";
+import { Drawer } from "antd";
 import { Code2, Menu, X } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -104,6 +105,7 @@ export function AppTopNav({ mobileOpen, onMobileOpen, onMobileClose }: { mobileO
                             type="button"
                             className="grid size-9 place-items-center rounded-[8px] border border-border text-muted-foreground transition hover:text-foreground lg:hidden"
                             onClick={onMobileOpen}
+                            aria-expanded={mobileOpen}
                             aria-label={t("navigation.openMenu")}
                         >
                             <Menu className="size-5" />
@@ -111,19 +113,27 @@ export function AppTopNav({ mobileOpen, onMobileOpen, onMobileClose }: { mobileO
                     </div>
                 </div>
             </header>
-            {mobileOpen ? <MobileDrawer items={items} pathname={pathname} onNavigate={onMobileClose} /> : null}
+            <MobileDrawer open={mobileOpen} items={items} pathname={pathname} onNavigate={onMobileClose} />
             <AppConfigModalHost />
         </>
     );
 }
 
-function MobileDrawer({ items, pathname, onNavigate }: { items: NavItem[]; pathname: string; onNavigate: () => void }) {
+function MobileDrawer({ open, items, pathname, onNavigate }: { open: boolean; items: NavItem[]; pathname: string; onNavigate: () => void }) {
     const { t } = useTranslation();
     const apiUrl = useApiIntegrationUrl();
     return (
-        <div className="fixed inset-0 z-50 lg:hidden">
-            <button type="button" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" onClick={onNavigate} aria-label={t("navigation.closeMenu")} />
-            <aside className="absolute left-0 top-0 flex h-full w-[280px] flex-col border-r border-border bg-popover shadow-2xl">
+        <Drawer
+            placement="left"
+            open={open}
+            onClose={onNavigate}
+            closable={false}
+            size={280}
+            destroyOnHidden
+            rootClassName="lg:hidden"
+            styles={{ body: { padding: 0, display: "flex", flexDirection: "column", height: "100%" } }}
+        >
+            <aside className="flex h-full flex-col bg-popover text-popover-foreground">
                 <div className="relative flex h-[72px] shrink-0 items-center px-5">
                     <Link to="/" onClick={onNavigate} className="flex items-center gap-2.5 text-foreground">
                         <img src="/brand/sundas-symbol.svg" alt="" className="size-6" />
@@ -133,7 +143,7 @@ function MobileDrawer({ items, pathname, onNavigate }: { items: NavItem[]; pathn
                         <X className="size-4" />
                     </button>
                 </div>
-                <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-3">
+                <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-3" aria-label={t("navigation.openMenu")}>
                     {apiUrl && <a href={apiUrl} target="_blank" rel="noopener noreferrer" onClick={onNavigate} className="flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm !text-muted-foreground hover:!bg-accent hover:text-foreground"><Code2 className="size-4" />API 对接</a>}
                     {items.map((item) => {
                         const Icon = item.icon;
@@ -160,6 +170,6 @@ function MobileDrawer({ items, pathname, onNavigate }: { items: NavItem[]; pathn
                     <PromoContactButton />
                 </div>
             </aside>
-        </div>
+        </Drawer>
     );
 }
