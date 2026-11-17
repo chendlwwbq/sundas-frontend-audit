@@ -1,12 +1,194 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+========================================================================
+FILE: web/src/components/canvas/director/director-view-toolbar.tsx
+LINES: 1-52
+========================================================================
+import { useMemo, type MouseEvent } from "react";
+import { Tooltip } from "@/components/ui/base/tooltip";
+import { directorAxisHeads, directorOrientationForMode, type DirectorOrientation } from "@/lib/canvas/director/director-orientation-gizmo";
+import { releaseDirectorFocusAfterPointer } from "@/lib/canvas/director/director-shortcuts";
+import { DIRECTOR_VIEW_MODES, type DirectorViewMode } from "@/lib/canvas/director/director-view-modes";
+
+type DirectorViewToolbarProps = {
+    viewMode: DirectorViewMode;
+    orientation?: DirectorOrientation;
+    onViewModeChange: (mode: DirectorViewMode) => void;
+    onResetView?: () => void;
+};
+
+const primaryModes = new Set<DirectorViewMode>(["free", "camera"]);
+const primaryLabels: Record<"free" | "camera", string> = { free: "导演视角", camera: "机位视角" };
+const axisColors: Record<string, string> = { "x+": "bg-rose-400", "x-": "bg-rose-400", "y+": "bg-emerald-400", "y-": "bg-emerald-400", "z+": "bg-blue-500", "z-": "bg-blue-500" };
+
+/** View selection changes only the observer camera, never scene content or undo history. */
+export function DirectorViewToolbar({ viewMode, orientation = [0, 0, 0, 1], onViewModeChange, onResetView }: DirectorViewToolbarProps) {
+    const primary = DIRECTOR_VIEW_MODES.filter((item) => primaryModes.has(item.mode));
+    const heads = useMemo(() => directorAxisHeads(directorOrientationForMode(viewMode, orientation)), [viewMode, orientation]);
+    const chooseMode = (mode: DirectorViewMode, event: MouseEvent<HTMLButtonElement>) => {
+        onViewModeChange(mode);
+        releaseDirectorFocusAfterPointer(event);
+    };
+
+    return <div className="pointer-events-none absolute inset-0 z-[var(--z-toolbar)]">
+        {/* 顶栏（52px）中间没有内容、且背景透明，切换组若挂在其下方会显得上方空白过大；
+            这里直接与左侧「3D导演台」标题同一行居中（(52-42)/2 ≈ 5px，取 6px），读作顶栏的一部分。 */}
+        <div role="group" aria-label="导演台取景模式" className="pointer-events-auto absolute left-1/2 top-1.5 inline-flex -translate-x-1/2 items-center gap-1 rounded-[var(--r-lg)] border p-1 shadow-xl backdrop-blur" style={{ borderColor: "var(--director-sequencer-border)", background: "var(--director-dock-surface)", color: "var(--director-dock-fg)" }}>
+            {primary.map((item) => {
+                const active = viewMode === item.mode;
+                const label = primaryLabels[item.mode as "free" | "camera"];
+                return <Tooltip key={item.mode} title={item.hint} placement="bottom"><button type="button" aria-pressed={active} aria-label={label} title={item.hint} className="inline-flex h-8 min-w-20 items-center justify-center whitespace-nowrap rounded-[var(--r-md)] px-3 text-[var(--fs-tiny)] font-medium transition-colors hover:bg-[var(--director-control-hover)] hover:text-[var(--director-dock-fg-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--control-focus-ring)] motion-reduce:transition-none" style={active ? { background: "var(--director-dock-active-surface)", color: "var(--director-dock-fg-strong)" } : undefined} onClick={(event) => chooseMode(item.mode, event)}>{label}</button></Tooltip>;
+            })}
+        </div>
+        <div className="pointer-events-auto absolute bottom-3 right-3 flex w-[72px] flex-col items-center gap-1.5" role="group" aria-label="方向球">
+            <div className="relative size-[72px] rounded-full bg-neutral-900/90 shadow-lg" aria-label="点击轴向切换正交视角">
+                <svg aria-hidden="true" className="pointer-events-none absolute inset-0 size-full" viewBox="0 0 72 72">
+                    {heads.map((head) => <line key={head.id} x1="36" y1="36" x2={head.x} y2={head.y} className="stroke-white/20" strokeWidth="1" />)}
+                </svg>
+                {heads.map((head) => {
+                    const style = { left: head.x, top: head.y, zIndex: Math.round((head.depth + 1) * 10) };
+                    if (!head.mode) return <span key={head.id} aria-hidden="true" className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-neutral-600" style={style} />;
+                    const emphasized = head.depth > 0.15 || (head.id.endsWith("+") && head.depth >= -0.15);
+                    return <button key={head.id} type="button" aria-label={head.label} aria-pressed={viewMode === head.mode} title={head.label} onClick={(event) => chooseMode(head.mode!, event)} className={`absolute flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-[10px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--control-focus-ring)] ${emphasized ? axisColors[head.id] : "bg-neutral-600"}`} style={style}>{emphasized ? head.id[0].toUpperCase() : ""}</button>;
+                })}
+            </div>
+            <button type="button" aria-label="重置视角" onClick={(event) => { onResetView?.(); releaseDirectorFocusAfterPointer(event); }} className="w-full rounded-md bg-neutral-900/90 py-0.5 text-[11px] text-white/70 transition-colors hover:bg-neutral-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--control-focus-ring)] motion-reduce:transition-none">重置视角</button>
+        </div>
+    </div>;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/director/director-viewport-dock.tsx
+LINES: 1-123
+========================================================================
+import { Dropdown, type MenuProps } from "antd";
+// sundas 没有直接依赖 rc-menu；这里只用到 onClick 回调里的原生事件，本地声明即可。
+type MenuInfo = { domEvent: MouseEvent };
+
+import { Bone, Camera, Clapperboard, Compass, Layers, LoaderCircle, MousePointer2, Palette, Rotate3D, RotateCcw, Save, Scaling, Video } from "lucide-react";
+import { useState, type ReactNode } from "react";
+
+import { releaseDirectorFocusAfterPointer } from "@/lib/canvas/director/director-shortcuts";
+import { DIRECTOR_MODES, type DirectorMode } from "@/lib/canvas/director/director-modes";
+import type { DirectorRenderMode } from "@/types/director";
+
+type DirectorViewportDockProps = {
+    transformMode: "translate" | "rotate" | "scale";
+    renderMode: DirectorRenderMode;
+    /** 当前模式允许的渲染视图。dock 只展示这些，避免成为绕过模式门控的第二条路径。 */
+    renderModes: DirectorRenderMode[];
+    onTransformModeChange: (mode: DirectorViewportDockProps["transformMode"]) => void;
+    onRenderModeChange: (mode: DirectorRenderMode) => void;
+    timelineOpen: boolean;
+    onToggleTimeline: () => void;
+    captureBusy: boolean;
+    captureReady: boolean;
+    onCapture: () => void;
+    onExportClay: () => void;
+    exportBusy: boolean;
+    onApplyToCanvas: () => void;
+    applyBusy: boolean;
+    saveRetryable: boolean;
+    saveRetryBusy: boolean;
+    onRetrySave: () => void;
+    mode?: DirectorMode;
+    onModeChange?: (mode: DirectorMode) => void;
+    workspaceView?: "scene" | "preview";
+    onWorkspaceViewChange?: (view: "scene" | "preview") => void;
+    canUndo?: boolean;
+    canRedo?: boolean;
+    onUndo?: () => void;
+    onRedo?: () => void;
+};
+
+/** 渲染视图按钮的展示顺序与图标。实际可见项由 renderModes 过滤。 */
+const RENDER_VIEW_BUTTONS: Array<{ mode: DirectorRenderMode; label: string; icon: ReactNode }> = [
+    { mode: "beauty", label: "构图预览", icon: <Camera /> },
+    { mode: "clay", label: "彩色白膜", icon: <Palette /> },
+    { mode: "pose", label: "骨骼视图", icon: <Bone /> },
+    { mode: "depth", label: "深度视图", icon: <Layers /> },
+    { mode: "normal", label: "法线视图", icon: <Compass /> },
+];
+
+const TRANSFORM_BUTTONS = [
+    { mode: "translate", label: "移动", shortcut: "V", icon: <MousePointer2 /> },
+    { mode: "rotate", label: "旋转", shortcut: "R", icon: <Rotate3D /> },
+    { mode: "scale", label: "缩放", shortcut: "F", icon: <Scaling /> },
+] as const;
+
+export function DirectorViewportDock({ transformMode, renderMode, renderModes, onTransformModeChange, onRenderModeChange, timelineOpen, onToggleTimeline, captureBusy, captureReady, onCapture, onExportClay, exportBusy, onApplyToCanvas, applyBusy, saveRetryable, saveRetryBusy, onRetrySave, mode = "layout", onModeChange = () => {}, workspaceView = "scene", onWorkspaceViewChange = () => {}, canUndo = false, canRedo = false, onUndo = () => {}, onRedo = () => {} }: DirectorViewportDockProps) {
+    const [advancedMenu, setAdvancedMenu] = useState(false);
+    const activeTransform = TRANSFORM_BUTTONS.find((item) => item.mode === transformMode) ?? TRANSFORM_BUTTONS[0];
+    const releaseMenuFocus = (detail: number) => releaseDirectorFocusAfterPointer({ detail, currentTarget: document.activeElement as HTMLElement });
+    // antd 6 的 Menu.Item 不再支持逐项 onClick，这里把动作收敛成 key -> 处理函数，
+    // 由 menu.onClick 统一分发，行为与 BeefTV 的逐项点击一致。
+    const menuActions: Record<string, () => void> = {};
+    const toolMenuItems: NonNullable<MenuProps["items"]> = [
+        { type: "group" as const, key: "render", label: "视图模式", children: RENDER_VIEW_BUTTONS.filter((item) => renderModes.includes(item.mode)).map((item) => {
+            menuActions[`render-${item.mode}`] = () => onRenderModeChange(item.mode);
+            return { key: `render-${item.mode}`, icon: item.icon, label: item.label };
+        }) },
+        { type: "group" as const, key: "workbench", label: "工作台", children: [
+            (() => { menuActions["export-clay"] = onExportClay; return { key: "export-clay", icon: exportBusy ? <LoaderCircle className="animate-spin" /> : <Video />, label: exportBusy ? "正在导出白膜视频" : "导出白膜视频", disabled: exportBusy }; })(),
+            (() => { menuActions["apply-to-canvas"] = onApplyToCanvas; return { key: "apply-to-canvas", icon: applyBusy ? <LoaderCircle className="animate-spin" /> : <Save />, label: applyBusy ? "正在应用到镜头" : "应用到镜头", disabled: applyBusy }; })(),
+            ...(saveRetryable ? [(() => { menuActions["retry-save"] = onRetrySave; return { key: "retry-save", icon: saveRetryBusy ? <LoaderCircle className="animate-spin" /> : <RotateCcw />, label: saveRetryBusy ? "正在重试保存" : "重试保存", disabled: saveRetryBusy }; })()] : []),
+        ] },
+        { key: "director-navigation", label: "导演台导航", icon: <Layers />, children: [
+            { type: "group" as const, key: "director-mode", label: "导演台模式", children: DIRECTOR_MODES.map((item) => {
+                menuActions[`director-mode-${item.mode}`] = () => onModeChange(item.mode);
+                return { key: `director-mode-${item.mode}`, label: item.label, title: item.hint };
+            }) },
+            { type: "group" as const, key: "workspace-view", label: "工作区视图", children: [
+                (() => { menuActions["workspace-scene"] = () => onWorkspaceViewChange("scene"); return { key: "workspace-scene", label: "场景调度" }; })(),
+                (() => { menuActions["workspace-preview"] = () => onWorkspaceViewChange("preview"); return { key: "workspace-preview", label: "成片预演" }; })(),
+            ] },
+            { type: "group" as const, key: "history", label: "编辑历史", children: [
+                (() => { menuActions.undo = onUndo; return { key: "undo", icon: <RotateCcw />, label: "撤销", disabled: !canUndo }; })(),
+                (() => { menuActions.redo = onRedo; return { key: "redo", icon: <RotateCcw className="scale-x-[-1]" />, label: "重做", disabled: !canRedo }; })(),
+            ] },
+        ] },
+    ];
+    const transformMenuItems: NonNullable<MenuProps["items"]> = TRANSFORM_BUTTONS.map((item) => {
+        menuActions[item.mode] = () => onTransformModeChange(item.mode);
+        return {
+            key: item.mode,
+            icon: item.icon,
+            label: <span className="flex min-w-24 items-center justify-between gap-5"><span>{item.label}</span><span className="text-xs opacity-60">{item.shortcut}</span></span>,
+        };
+    });
+    const handleMenuClick: MenuProps["onClick"] = ({ key, domEvent }) => {
+        menuActions[key]?.();
+        // antd 的 domEvent 可能是键盘事件，只有鼠标事件才带 detail
+        releaseMenuFocus("detail" in domEvent ? domEvent.detail : 0);
+    };
+
+    return (
+        <nav className="director-viewport-dock" aria-label="导演台视口工具" data-director-mode={mode} data-workspace-view={workspaceView}>
+            <Dropdown
+                trigger={["click", "contextMenu"]}
+                placement="topLeft"
+                menu={{
+                    selectable: true,
+                    selectedKeys: [transformMode, `render-${renderMode}`, `director-mode-${mode}`, `workspace-${workspaceView}`],
+                    items: advancedMenu ? toolMenuItems : transformMenuItems,
+                    onClick: handleMenuClick,
+                }}
+            >
+                <button type="button" className="director-viewport-dock-button is-active" aria-label={activeTransform.label} aria-haspopup="menu" title={`${activeTransform.label} (${activeTransform.shortcut}) · 右键更多工具`} onClick={() => setAdvancedMenu(false)} onContextMenu={() => setAdvancedMenu(true)}>
+                    {activeTransform.icon}
+                </button>
+            </Dropdown>
+            <button type="button" className="director-viewport-dock-button disabled:opacity-40" aria-label="截图" disabled={captureBusy || !captureReady} title={captureBusy ? "正在保存截图" : captureReady ? "截图" : "视口加载中"} onClick={(event) => { onCapture(); releaseDirectorFocusAfterPointer(event); }}>{captureBusy ? <LoaderCircle className="animate-spin" /> : <Camera />}</button>
+            <button type="button" className="director-viewport-dock-button disabled:opacity-40" aria-label={applyBusy ? "正在应用到镜头" : "应用到镜头"} title={applyBusy ? "正在应用到镜头" : "应用到镜头（把当前机位画面回写成画布节点）"} disabled={applyBusy} onClick={(event) => { onApplyToCanvas(); releaseDirectorFocusAfterPointer(event); }}>{applyBusy ? <LoaderCircle className="animate-spin" /> : <Save />}</button>
+            <button type="button" className={`director-viewport-dock-button ${timelineOpen ? "is-active" : ""}`} aria-label="动画时间轴" aria-pressed={timelineOpen} onClick={(event) => { onToggleTimeline(); releaseDirectorFocusAfterPointer(event); }}><Clapperboard /></button>
+        </nav>
+    );
+}
 
 
 ========================================================================
 FILE: web/src/components/canvas/director/director-viewport.tsx
-LINES: 1-864
+LINES: 1-2178
 ========================================================================
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Grid, Html, Line, OrbitControls, TransformControls } from "@react-three/drei";
@@ -872,12 +1054,6 @@ function DirectorCameraAid({ item, scene, playhead, stage, floor, active, select
     const distance = directorCameraAidDistance(direction.length());
     const halfHeight = Math.tan((Math.min(120, Math.max(10, item.fov || 50)) * Math.PI) / 360) * distance;
     const halfWidth = halfHeight * 16 / 9;
-
-
-========================================================================
-FILE: web/src/components/canvas/director/director-viewport.tsx
-LINES: 865-1650
-========================================================================
     const corners: DirectorVec3[] = [[-halfWidth, halfHeight, -distance], [halfWidth, halfHeight, -distance], [halfWidth, -halfHeight, -distance], [-halfWidth, -halfHeight, -distance]];
     const segments = directorCameraFrameSegments(corners);
     const guides = directorCameraGuideSegments(corners);
@@ -1664,12 +1840,6 @@ function DirectorProceduralActor({ object, onPoseEvaluated, selected, selectedBo
         })}
         {selected && selectedBone ? DIRECTOR_PROCEDURAL_ACTOR_SKELETON_EDGES.filter(([from, to]) => from === selectedBone || to === selectedBone).map(([from, to]) => <Line key={`skeleton-${from}-${to}`} points={[joints[from], joints[to]]} color="#78a9ff" lineWidth={0.8} transparent opacity={0.24} depthTest={false} raycast={() => null} />) : null}
         {selected && showBoneControls ? interactiveBones.map((bone) => <mesh key={`joint-${bone}`} position={joints[bone]} onPointerOver={(event) => { event.stopPropagation(); setHoveredBone(bone); }} onPointerOut={(event) => { event.stopPropagation(); setHoveredBone((current) => current === bone ? null : current); }} onPointerDown={(event) => { event.stopPropagation(); onSelectBone(bone); }} frustumCulled={false}>
-
-
-========================================================================
-FILE: web/src/components/canvas/director/director-viewport.tsx
-LINES: 1651-2178
-========================================================================
             <sphereGeometry args={[selectedBone === bone ? 0.055 : hoveredBone === bone ? 0.045 : 0.022, 10, 8]} />
             <meshBasicMaterial color={selectedBone === bone ? "#f0b36a" : "#78a9ff"} depthTest={false} transparent opacity={selectedBone === bone ? 0.95 : hoveredBone === bone ? 0.8 : 0.08} />
         </mesh>) : null}
@@ -2452,331 +2622,5 @@ export function useDirectorSaveCoordinator(input: { sceneId: string | null; init
         prepareClose,
         handlePageHide,
     };
-}
-
-
-========================================================================
-FILE: web/src/components/canvas/infinite-canvas.tsx
-LINES: 1-320
-========================================================================
-import React, { useEffect, useRef, useState } from "react";
-
-import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
-import { useThemeStore } from "@/stores/use-theme-store";
-import type { ViewportTransform } from "@/types/canvas";
-
-type InfiniteCanvasProps = {
-    containerRef: React.RefObject<HTMLDivElement | null>;
-    viewport: ViewportTransform;
-    tool: "select" | "pan";
-    backgroundMode?: CanvasBackgroundMode;
-    onViewportChange: (viewport: ViewportTransform) => void;
-    onCanvasMouseDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
-    onCanvasDeselect?: () => void;
-    onCanvasDoubleClick?: (event: React.MouseEvent<HTMLDivElement>) => void;
-    onContextMenu?: (event: React.MouseEvent) => void;
-    onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
-    children: React.ReactNode;
-};
-
-export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = "lines", onViewportChange, onCanvasMouseDown, onCanvasDeselect, onCanvasDoubleClick, onContextMenu, onDrop, children }: InfiniteCanvasProps) {
-    const theme = canvasThemes[useThemeStore((state) => state.theme)];
-    const panState = useRef({
-        isPanning: false,
-        startX: 0,
-        startY: 0,
-        initialX: 0,
-        initialY: 0,
-        hasMoved: false,
-        startedOnBackground: false,
-    });
-    const scaleRef = useRef(viewport.k);
-    const frameRef = useRef<number | null>(null);
-    const nextViewportRef = useRef<ViewportTransform | null>(null);
-    const latestViewportRef = useRef(viewport);
-    const [isSpacePressed, setIsSpacePressed] = useState(false);
-    const [isControlPressed, setIsControlPressed] = useState(false);
-    const [isPanning, setIsPanning] = useState(false);
-
-    useEffect(() => {
-        scaleRef.current = viewport.k;
-        latestViewportRef.current = viewport;
-    }, [viewport]);
-
-    useEffect(
-        () => () => {
-            if (frameRef.current) cancelAnimationFrame(frameRef.current);
-        },
-        [],
-    );
-
-    useEffect(() => {
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Control") setIsControlPressed(true);
-            if (event.code !== "Space") return;
-            const target = event.target instanceof Element ? event.target : null;
-            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || target?.closest("[contenteditable='true']")) return;
-            event.preventDefault();
-            setIsSpacePressed(true);
-        };
-
-        const handleKeyUp = (event: KeyboardEvent) => {
-            if (event.code === "Space") {
-                const target = event.target instanceof Element ? event.target : null;
-                if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || target?.closest("[contenteditable='true']"))) event.preventDefault();
-                setIsSpacePressed(false);
-            }
-            if (event.key === "Control") setIsControlPressed(false);
-        };
-
-        const handleBlur = () => {
-            setIsSpacePressed(false);
-            setIsControlPressed(false);
-            panState.current.isPanning = false;
-            setIsPanning(false);
-            document.body.style.cursor = "";
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        window.addEventListener("keyup", handleKeyUp);
-        window.addEventListener("blur", handleBlur);
-        return () => {
-            window.removeEventListener("keydown", handleKeyDown);
-            window.removeEventListener("keyup", handleKeyUp);
-            window.removeEventListener("blur", handleBlur);
-        };
-    }, []);
-
-    const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-        const target = event.target instanceof Element ? event.target : null;
-        if (target?.closest("[data-canvas-no-zoom],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown")) return;
-
-        const delta = -event.deltaY;
-        const factor = Math.pow(1.1, delta / 100);
-        const newScale = Math.min(Math.max(viewport.k * factor, 0.05), 5);
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (!rect) return;
-
-        const mouseX = event.clientX - rect.left;
-        const mouseY = event.clientY - rect.top;
-        const worldX = (mouseX - viewport.x) / viewport.k;
-        const worldY = (mouseY - viewport.y) / viewport.k;
-
-        onViewportChange({
-            x: mouseX - worldX * newScale,
-            y: mouseY - worldY * newScale,
-            k: newScale,
-        });
-    };
-
-    const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-        const target = event.target instanceof Element ? event.target : null;
-        if (target?.closest("[data-canvas-no-zoom]")) return;
-        if (target?.closest("[data-connection-create-menu]")) return;
-        const isBackgroundClick = !target?.closest("[data-node-id],[data-connection-id]");
-        const temporaryTool = event.ctrlKey || isSpacePressed;
-        const activeTool = temporaryTool ? (tool === "select" ? "pan" : "select") : tool;
-        const shouldPan = event.button === 1 || (event.button === 0 && activeTool === "pan" && isBackgroundClick);
-
-        if (shouldPan) {
-            event.preventDefault();
-            event.currentTarget.setPointerCapture(event.pointerId);
-            panState.current = {
-                isPanning: true,
-                startX: event.clientX,
-                startY: event.clientY,
-                initialX: viewport.x,
-                initialY: viewport.y,
-                hasMoved: false,
-                startedOnBackground: isBackgroundClick,
-            };
-            setIsPanning(true);
-            document.body.style.cursor = "grabbing";
-            return;
-        }
-
-        if (event.button === 0 && isBackgroundClick) {
-            event.preventDefault();
-            event.currentTarget.setPointerCapture(event.pointerId);
-            onCanvasMouseDown?.(event);
-        }
-    };
-
-    const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
-        const target = event.target instanceof Element ? event.target : null;
-        if (target?.closest("[data-canvas-no-zoom],[data-node-id],[data-connection-id]")) return;
-        onCanvasDoubleClick?.(event);
-    };
-
-    useEffect(() => {
-        const handlePointerMove = (event: PointerEvent) => {
-            if (!panState.current.isPanning) return;
-
-            const dx = event.clientX - panState.current.startX;
-            const dy = event.clientY - panState.current.startY;
-            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-                panState.current.hasMoved = true;
-            }
-
-            nextViewportRef.current = {
-                x: panState.current.initialX + dx,
-                y: panState.current.initialY + dy,
-                k: scaleRef.current,
-            };
-            if (frameRef.current) return;
-            frameRef.current = requestAnimationFrame(() => {
-                frameRef.current = null;
-                if (nextViewportRef.current) onViewportChange(nextViewportRef.current);
-            });
-        };
-
-        const handlePointerUp = () => {
-            if (!panState.current.isPanning) return;
-
-            if (!panState.current.hasMoved && panState.current.startedOnBackground) {
-                onCanvasDeselect?.();
-            }
-            panState.current.isPanning = false;
-            setIsPanning(false);
-            document.body.style.cursor = "";
-        };
-
-        window.addEventListener("pointermove", handlePointerMove);
-        window.addEventListener("pointerup", handlePointerUp);
-        window.addEventListener("pointercancel", handlePointerUp);
-        return () => {
-            window.removeEventListener("pointermove", handlePointerMove);
-            window.removeEventListener("pointerup", handlePointerUp);
-            window.removeEventListener("pointercancel", handlePointerUp);
-            document.body.style.cursor = "";
-        };
-    }, [onCanvasDeselect, onViewportChange]);
-
-    useEffect(() => {
-        const container = containerRef.current;
-        if (!container) return;
-
-        // Prevent canvas scrolling from moving the page while preserving native scrolling inside overlays and dialogs.
-        const preventWheelScroll = (event: WheelEvent) => {
-            const target = event.target instanceof Element ? event.target : null;
-            if (target?.closest("[data-canvas-no-zoom],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown")) return;
-            event.preventDefault();
-        };
-        container.addEventListener("wheel", preventWheelScroll, { passive: false });
-        return () => container.removeEventListener("wheel", preventWheelScroll);
-    }, [containerRef]);
-
-    // 触屏双指手势：捏合缩放 + 双指平移；单指交互仍走原有 pointer 事件，不影响桌面行为。
-    useEffect(() => {
-        const container = containerRef.current;
-        if (!container) return;
-
-        let pinchStart: { dist: number; scale: number; worldX: number; worldY: number } | null = null;
-        const pinchCenter = (event: TouchEvent) => {
-            const [a, b] = [event.touches[0], event.touches[1]];
-            const rect = container.getBoundingClientRect();
-            const centerX = (a.clientX + b.clientX) / 2 - rect.left;
-            const centerY = (a.clientY + b.clientY) / 2 - rect.top;
-            return { centerX, centerY, dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) };
-        };
-        const inInteractiveOverlay = (event: TouchEvent) => {
-            const target = event.target instanceof Element ? event.target : null;
-            return Boolean(target?.closest("[data-canvas-no-zoom],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown,[data-node-panel]"));
-        };
-
-        const handleTouchStart = (event: TouchEvent) => {
-            if (event.touches.length !== 2 || inInteractiveOverlay(event)) return;
-            event.preventDefault();
-            // 第二指落下时终止可能已开始的单指平移，避免手势叠加。
-            panState.current.isPanning = false;
-            setIsPanning(false);
-            document.body.style.cursor = "";
-            const { centerX, centerY, dist } = pinchCenter(event);
-            const current = latestViewportRef.current;
-            pinchStart = { dist: Math.max(1, dist), scale: current.k, worldX: (centerX - current.x) / current.k, worldY: (centerY - current.y) / current.k };
-        };
-
-        const handleTouchMove = (event: TouchEvent) => {
-            if (!pinchStart || event.touches.length !== 2) return;
-            event.preventDefault();
-            const { centerX, centerY, dist } = pinchCenter(event);
-            const factor = dist / pinchStart.dist;
-            const newScale = Math.min(Math.max(pinchStart.scale * factor, 0.05), 5);
-            onViewportChange({
-                x: centerX - pinchStart.worldX * newScale,
-                y: centerY - pinchStart.worldY * newScale,
-                k: newScale,
-            });
-        };
-
-        const handleTouchEnd = (event: TouchEvent) => {
-            if (!pinchStart) return;
-            if (event.touches.length < 2) pinchStart = null;
-        };
-
-        container.addEventListener("touchstart", handleTouchStart, { passive: false });
-        container.addEventListener("touchmove", handleTouchMove, { passive: false });
-        container.addEventListener("touchend", handleTouchEnd);
-        container.addEventListener("touchcancel", handleTouchEnd);
-        return () => {
-            container.removeEventListener("touchstart", handleTouchStart);
-            container.removeEventListener("touchmove", handleTouchMove);
-            container.removeEventListener("touchend", handleTouchEnd);
-            container.removeEventListener("touchcancel", handleTouchEnd);
-        };
-    }, [containerRef, onViewportChange]);
-
-    const temporaryTool = isControlPressed || isSpacePressed;
-    const activeTool = temporaryTool ? (tool === "select" ? "pan" : "select") : tool;
-    const cursor = isPanning ? "grabbing" : activeTool === "pan" ? "grab" : undefined;
-
-    return (
-        <div
-            ref={containerRef}
-            className="relative h-full w-full select-none overflow-hidden"
-            style={{ background: theme.canvas.background, cursor }}
-            onPointerDown={handlePointerDown}
-            onDoubleClick={handleDoubleClick}
-            onWheel={handleWheel}
-            onContextMenu={onContextMenu}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={onDrop}
-        >
-            <CanvasGrid viewport={viewport} mode={backgroundMode} />
-            <div
-                className="absolute origin-top-left"
-                style={{
-                    transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.k})`,
-                }}
-            >
-                {children}
-            </div>
-        </div>
-    );
-}
-
-function CanvasGrid({ viewport, mode }: { viewport: ViewportTransform; mode: CanvasBackgroundMode }) {
-    const theme = canvasThemes[useThemeStore((state) => state.theme)];
-    if (mode === "blank") return null;
-
-    // 迁移自 BeefTV：装饰网格固定在屏幕坐标（48px 一档），缩放时密度不变，
-    // 避免滚轮缩放时点阵变密、出现亚像素抖动。
-    // 圆点留一点点柔边：纯硬边会被栅格成 2×2 的方块，看起来像脏点而不是点阵。
-    const dotCore = viewport.k < 0.12 ? 0.8 : 1;
-    const dotEdge = viewport.k < 0.12 ? 1.4 : 1.75;
-    const backgroundImage =
-        mode === "dots"
-            ? `radial-gradient(circle, ${theme.canvas.dot} ${dotCore}px, transparent ${dotEdge}px)`
-            : `linear-gradient(${theme.canvas.line} 1px, transparent 1px), linear-gradient(90deg, ${theme.canvas.line} 1px, transparent 1px)`;
-
-    return (
-        <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-                backgroundImage,
-                backgroundSize: "48px 48px",
-            }}
-        />
-    );
 }
 

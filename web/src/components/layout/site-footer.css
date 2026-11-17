@@ -76,6 +76,11 @@
     line-height: 1.5;
 }
 
+.site-footer-col li > span {
+    color: rgba(255, 255, 255, 0.36);
+    cursor: default;
+}
+
 .site-footer-col li a,
 .site-footer-col li .promo-contact-link {
     color: var(--muted-foreground);
@@ -228,6 +233,11 @@
     align-items: center;
     gap: 12px;
     line-height: 20px;
+}
+
+.site-footer-legal span {
+    color: rgba(255, 255, 255, 0.42);
+    cursor: default;
 }
 
 .site-footer-legal i {

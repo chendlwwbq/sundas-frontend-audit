@@ -1,7 +1,321 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+========================================================================
+FILE: web/src/components/text-settings-panel.tsx
+LINES: 1-57
+========================================================================
+import { type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+
+import i18n from "@/i18n";
+import { ImageSettingsTheme } from "@/components/image-settings-panel";
+import { type CanvasTheme } from "@/lib/canvas-theme";
+import type { AiConfig, ReasoningEffort } from "@/stores/use-config-store";
+
+const reasoningEffortOptions: ReasoningEffort[] = ["auto", "low", "medium", "high", "xhigh"];
+
+type TextSettingsPanelProps = {
+    config: AiConfig;
+    onConfigChange: (key: "reasoningEffort", value: ReasoningEffort) => void;
+    theme: CanvasTheme;
+    className?: string;
+};
+
+export function TextSettingsPanel({ config, onConfigChange, theme, className = "space-y-4" }: TextSettingsPanelProps) {
+    const { t } = useTranslation();
+    return (
+        <ImageSettingsTheme theme={theme}>
+            <div className={className} style={{ color: theme.node.text }} onMouseDown={(event) => event.stopPropagation()}>
+                <div className="text-lg font-semibold">{t("settingsPanels.text.title")}</div>
+                <div className="space-y-2.5">
+                    <div className="text-sm font-medium" style={{ color: theme.node.muted }}>
+                        {t("settingsPanels.text.reasoning")}
+                    </div>
+                    <div className="grid grid-cols-5 gap-2">
+                        {reasoningEffortOptions.map((value) => (
+                            <OptionPill key={value} selected={config.reasoningEffort === value} theme={theme} onClick={() => onConfigChange("reasoningEffort", value)}>
+                                {t(`settingsPanels.common.${value}`)}
+                            </OptionPill>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </ImageSettingsTheme>
+    );
+}
+
+export function reasoningEffortLabel(value: ReasoningEffort) {
+    return reasoningEffortOptions.includes(value) ? i18n.t(`settingsPanels.common.${value}`) : value;
+}
+
+function OptionPill({ selected, theme, onClick, children }: { selected: boolean; theme: CanvasTheme; onClick: () => void; children: ReactNode }) {
+    return (
+        <button
+            type="button"
+            className="h-9 cursor-pointer rounded-full border px-2 text-sm transition hover:opacity-80"
+            style={{ background: "transparent", borderColor: selected ? theme.node.text : theme.node.stroke, color: theme.node.text }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={onClick}
+        >
+            {children}
+        </button>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/ui/base/switch/index.ts
+LINES: 1-1
+========================================================================
+export { Switch, type SwitchProps } from "./switch";
+
+
+========================================================================
+FILE: web/src/components/ui/base/switch/switch.tsx
+LINES: 1-124
+========================================================================
+import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+
+import { cn } from "@/lib/utils";
+
+/**
+ * Switch — 开关（自研，button role=switch，无依赖）。
+ *
+ * 设计约束（对齐 ui/README 与 ADR-0008）：
+ * - <button type="button" role="switch" aria-checked> 承载语义与键盘（Space/Enter 原生），
+ *   :focus-visible outline 落自身；无裸色、只消费三层 token。
+ * - 开 = bg-foreground + 反色 thumb（bg-background 语义对齐 Checkbox 选中态），
+ *   关 = bg-surface-tertiary + 发丝内描边 + surface-strong 抬升 thumb（同 SegmentedControl 选中面）。
+ * - thumb 滑动用 translate-x 位移（尺寸档固定行程），motion-reduce 关闭过渡。
+ * - data-state="on|off" 暴露给上下文 CSS 覆盖（admin 语义绿等保留于页面层，不侵入组件）。
+ * - API 对齐 AntD Switch：checked/defaultChecked/onChange/disabled/size/checkedChildren/
+ *   unCheckedChildren/loading + aria-* 透传；受控与否由 checked 是否传入决定，
+ *   onChange(checked) 单参。顶层组件接收 checked/onChange → Form.Item valuePropName="checked" 注入兼容。
+ * 对标：AntD Switch；boardui base/switch。
+ */
+
+export interface SwitchProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "size" | "onChange"> {
+    /** 开关尺寸。默认 md；AntD small → sm 映射。 */
+    size?: "sm" | "md";
+    /** 受控：是否开启 */
+    checked?: boolean;
+    /** 非受控初始值 */
+    defaultChecked?: boolean;
+    /** loading：拇指位换转圈，忽略点击（视觉保留 checked 态） */
+    loading?: boolean;
+    /** 开启时轨道内左侧文案（2 字宽度档） */
+    checkedChildren?: ReactNode;
+    /** 关闭时轨道内右侧文案 */
+    unCheckedChildren?: ReactNode;
+    /** 变化回调（AntD 同签名：仅布尔参） */
+    onChange?: (checked: boolean) => void;
+}
+
+/** 几何档：轨道尺寸与 thumb 行程（thumb 用 left-0.5 起始 + translate-x 档位） */
+const SWITCH_SIZE: Record<"sm" | "md", { root: string; thumbPlain: string; thumbText: string; hasTextRoot: string }> = {
+    sm: {
+        root: "h-5 w-8 rounded-full",
+        thumbPlain: "size-3.5 data-[state=on]:translate-x-3.5",
+        thumbText: "size-3.5 data-[state=on]:translate-x-3.5",
+        hasTextRoot: "",
+    },
+    md: {
+        root: "h-6 w-11 rounded-full",
+        thumbPlain: "size-4 data-[state=on]:translate-x-6",
+        thumbText: "size-4 data-[state=on]:translate-x-9",
+        hasTextRoot: "w-14",
+    },
+};
+
+export function Switch({ size = "md", checked: checkedProp, defaultChecked = false, loading = false, checkedChildren, unCheckedChildren, onChange, disabled, className, "aria-label": ariaLabel, ...props }: SwitchProps) {
+    const [innerChecked, setInnerChecked] = useState(defaultChecked);
+    const controlled = checkedProp !== undefined;
+    const checked = controlled ? checkedProp : innerChecked;
+    const hasText = checkedChildren !== undefined || unCheckedChildren !== undefined;
+
+    const handleClick = () => {
+        if (disabled || loading) {
+            return;
+        }
+        const next = !checked;
+        if (!controlled) {
+            setInnerChecked(next);
+        }
+        onChange?.(next);
+    };
+
+    const geometry = SWITCH_SIZE[size];
+    const thumbClass = hasText ? geometry.thumbText : geometry.thumbPlain;
+
+    return (
+        <button
+            type="button"
+            role="switch"
+            data-slot="switch"
+            data-state={checked ? "on" : "off"}
+            aria-checked={checked}
+            aria-label={ariaLabel}
+            aria-busy={loading || undefined}
+            disabled={disabled}
+            onClick={handleClick}
+            className={cn(
+                "relative inline-flex shrink-0 select-none items-center align-middle transition-colors motion-reduce:transition-none",
+                "data-[state=on]:bg-foreground",
+                "data-[state=off]:bg-surface-tertiary data-[state=off]:ring-1 data-[state=off]:ring-inset data-[state=off]:ring-foreground/15",
+                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                "disabled:cursor-not-allowed disabled:opacity-45",
+                geometry.root,
+                hasText && size === "md" && geometry.hasTextRoot,
+                className,
+            )}
+            {...props}
+        >
+            {/* 关态文案（右侧） */}
+            {unCheckedChildren !== undefined ? (
+                <span
+                    aria-hidden="true"
+                    className={cn("absolute top-1/2 right-1.5 -translate-y-1/2 text-xs leading-none font-medium transition-opacity motion-reduce:transition-none", checked ? "text-foreground/55 opacity-0" : "text-foreground/55 opacity-100")}
+                >
+                    {unCheckedChildren}
+                </span>
+            ) : null}
+            {/* 开态文案（左侧，反色） */}
+            {checkedChildren !== undefined ? (
+                <span aria-hidden="true" className={cn("absolute top-1/2 left-1.5 -translate-y-1/2 text-xs leading-none font-medium transition-opacity motion-reduce:transition-none", checked ? "text-background opacity-100" : "text-background opacity-0")}>
+                    {checkedChildren}
+                </span>
+            ) : null}
+            {/* thumb / loading 转圈 */}
+            {loading ? (
+                <span aria-hidden="true" className={cn("absolute inset-0 m-auto size-3.5 animate-spin rounded-full border-[1.5px] border-current border-t-transparent", checked ? "text-background" : "text-foreground/60")} />
+            ) : (
+                <span
+                    aria-hidden="true"
+                    data-state={checked ? "on" : "off"}
+                    className={cn("sc-switch-thumb absolute left-0.5 top-1/2 -translate-y-1/2 rounded-full border border-border/80 bg-surface-strong transition-transform duration-200 ease-out motion-reduce:transition-none", thumbClass)}
+                />
+            )}
+        </button>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/ui/base/tooltip/index.ts
+LINES: 1-1
+========================================================================
+export { Tooltip, type TooltipPlacement, type TooltipProps } from "./tooltip";
+
+
+========================================================================
+FILE: web/src/components/ui/base/tooltip/tooltip.tsx
+LINES: 1-26
+========================================================================
+import type { ReactNode } from "react";
+import { Tooltip as AntTooltip } from "antd";
+
+export type TooltipPlacement = "top" | "bottom" | "left" | "right" | "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
+
+export type TooltipProps = {
+    title?: ReactNode;
+    placement?: TooltipPlacement;
+    children: ReactNode;
+};
+
+/**
+ * Tooltip — 气泡提示（sundas 版）。
+ *
+ * BeefTV 用的是 react-aria-components 自研浮层；sundas 没有这个依赖，
+ * 这里落到已有的 antd Tooltip 上，保持同名同 props（title / placement / children），
+ * 调用方零改动。title 为空时不渲染浮层，与 BeefTV 行为一致。
+ */
+export function Tooltip({ title, placement = "top", children }: TooltipProps) {
+    if (title === undefined || title === null || title === "") return <>{children}</>;
+    return (
+        <AntTooltip title={title} placement={placement} mouseEnterDelay={0.2}>
+            {children}
+        </AntTooltip>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/ui/optimized-image.tsx
+LINES: 1-74
+========================================================================
+/**
+ * 优化后的图片组件 - 带懒加载和骨架屏
+ */
+import { useState } from "react";
+import "../loading/skeleton.css";
+
+interface OptimizedImageProps {
+    src: string;
+    alt: string;
+    className?: string;
+    width?: number;
+    height?: number;
+    aspectRatio?: string;
+}
+
+export function OptimizedImage({
+    src,
+    alt,
+    className = "",
+    width,
+    height,
+    aspectRatio = "16/9"
+}: OptimizedImageProps) {
+    const [loaded, setLoaded] = useState(false);
+    const [error, setError] = useState(false);
+
+    return (
+        <div
+            className={`relative overflow-hidden ${className}`}
+            style={{ aspectRatio }}
+        >
+            {/* 骨架屏 - 图片加载时显示 */}
+            {!loaded && !error && (
+                <div className="skeleton skeleton-media absolute inset-0" />
+            )}
+
+            {/* 错误状态 */}
+            {error && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <span className="text-xs text-white/60">加载失败</span>
+                </div>
+            )}
+
+            {/* 实际图片 */}
+            <img
+                src={src}
+                alt={alt}
+                width={width}
+                height={height}
+                loading="lazy"
+                decoding="async"
+                className={`w-full h-full object-cover transition-opacity duration-300 ${
+                    loaded ? "opacity-100" : "opacity-0"
+                }`}
+                onLoad={() => setLoaded(true)}
+                onError={() => {
+                    setLoaded(false);
+                    setError(true);
+                }}
+            />
+        </div>
+    );
+}
+
+/**
+ * 使用示例：
+ *
+ * <OptimizedImage
+ *     src={item.coverUrl}
+ *     alt={item.title}
+ *     className="home-prompt-cover"
+ *     aspectRatio="16/9"
+ * />
+ */
 
 
 ========================================================================
@@ -2254,748 +2568,4 @@ export const accountZh = {
         inviteesTotal: "已邀请好友",
     },
 };
-
-
-========================================================================
-FILE: web/src/i18n/locales/en-US.ts
-LINES: 1-738
-========================================================================
-export default {
-    meta: {
-        title: "sundas",
-        description: "AI video creation workspace",
-    },
-    theme: { toggle: "Toggle theme" },
-    common: {
-        cancel: "Cancel",
-        save: "Save",
-        edit: "Edit",
-        done: "Done",
-        delete: "Delete",
-        copy: "Copy",
-        copied: "Copied",
-        details: "Details",
-        addToAssets: "Add to My Assets",
-        addedToAssets: "Added to My Assets",
-        copyPrompt: "Copy prompt",
-        promptCopied: "Prompt copied",
-        created: "Created: {{date}}",
-        updated: "Updated: {{date}}",
-        all: "All",
-        view: "View",
-        download: "Download",
-        upload: "Upload",
-        requestCanceled: "Request canceled",
-        durationMinutes: "{{minutes}}m {{seconds}}s",
-        durationSeconds: "{{seconds}}s",
-        imageReadFailed: "Failed to read image",
-        appleImageConvertFailed: "This browser could not convert the HEIC/HEIF image. Export it as JPG or PNG and upload again.",
-        unsupportedImageFormatTitle: "Unsupported image format",
-        unsupportedImageFormatDescription: "HEIC/HEIF/AVIF photos from mobile devices need to be exported as JPG or PNG before uploading; taking a screenshot as PNG also works.",
-        mediaLocalOnlyTitle: "Media not uploaded to the cloud",
-        mediaLocalOnlyDescription: "This media is stored only in this browser and may be lost when switching devices or clearing browser data. Check your connection or storage space and upload again.",
-        localOnly: "Local only",
-        localOnlyHint: "This file has not been uploaded to the cloud and may be unavailable on another device",
-        retryUpload: "Upload again",
-        uploadingStatus: "Uploading",
-        waitingStatus: "Waiting",
-        uploadFailedStatus: "Upload failed",
-        optimizePrompt: "Optimize prompt",
-        optimizePromptHint: "Optimize prompt (credits are charged by the configured optimizer model)",
-        optimizingPrompt: "Optimizing prompt",
-        optimizePromptApplied: "Prompt optimized, {{credits}} credits used",
-        optimizePromptFailed: "Failed to optimize prompt. Please try again.",
-        optimizePromptUnavailable: "Prompt optimization is not configured. Contact the administrator.",
-        optimizePromptInsufficientCredits: "Insufficient credits. Please top up and try again.",
-        optimizePromptRateLimited: "Too many optimization requests. Please try again later.",
-        optimizePromptUndo: "Undo",
-        optimizePromptChanged: "The prompt changed, so the optimization result was not applied.",
-        optimizePromptTooLong: "Prompt cannot exceed 4,000 characters",
-        optimizePromptNoModel: "Select a generation model first",
-    },
-    settingsPanels: {
-        common: { auto: "Auto", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Maximum" },
-        image: { title: "Image settings", quality: "Quality", size: "Size", align16: "Align to multiples of 16", align16Hint: "Round dimensions up to the next multiple of 16 after input", resolution: "Resolution", aspectRatio: "Aspect ratio", transparent: "Transparent background", transparentHint: "Generate an image without a background when supported by the model", count: "Image count", images: "{{count}} images" },
-        video: { title: "Video settings", quality: "Quality", size: "Size", seconds: "Seconds", mode: "Mode", modes: { frames: "First & last frame", reference: "General reference" }, resolution: "Resolution", ratio: "Aspect ratio", duration: "Duration", smart: "Smart", output: "Output", generateAudio: "Generate audio", watermark: "Add watermark", adaptive: "Adaptive", sizes: { landscape: "Landscape", portrait: "Portrait", square: "Square", widescreen: "Widescreen", tall: "Tall", auto: "Auto" }, ratios: { landscape: "Landscape", portrait: "Portrait", square: "Square", standardLandscape: "Standard landscape", standardPortrait: "Standard portrait", cinematic: "Cinematic", adaptive: "Adaptive" } },
-        audio: { title: "Audio settings", voice: "Voice", format: "Format", speed: "Speed", instructions: "Voice instructions", instructionsPlaceholder: "For example: natural, warm, and suitable for narration." },
-        text: { title: "Text settings", reasoning: "Reasoning effort", count: "Generation count" },
-        model: { select: "Select model", assign: "Assign a model for {{capability}} in the provider settings", noMatch: "No matching {{capability}} models", addFirst: "Add a provider and models in Settings first", capabilities: { image: "image generation", video: "video", text: "text", audio: "audio" } },
-    },
-    generation: { pending: ["Creating image", "Almost there", "Just a little longer", "Refining details"] },
-    imageReferences: { label: "Image {{index}}", separator: ", ", promptPrefix: "Reference image labels: {{labels}}. Use these labels to interpret image references in the prompt.\n\n{{prompt}}" },
-    modelPlugin: {
-        pollTimeout: "Plugin polling timed out. Check the request script or try again later.", executionFailed: "Model request script failed: {{message}}", noImages: "The model request script did not return any images",
-        variables: { prompt: "User prompt with the system prompt already included", images: "Reference images as a data URL array, available for image editing and image-to-video", videos: "Reference videos as a File array you can form.append; empty when none are attached from the canvas or workbench", audios: "Reference audio as a File array you can form.append; empty when none are attached from the canvas or workbench", messages: "Conversation message array including the system message", params: "Generation parameters: image {size,resolution,quality,count,background}, video {mode,seconds,size,resolution,ratio,generateAudio,watermark} (mode is frames for first/last frame or reference for general references; more than 2 images become reference), audio {voice,format,speed,instructions}", model: "Model name without the provider prefix", baseUrl: "Provider endpoint as entered, without appending /v1", apiKey: "Provider API key; add it to request headers yourself", systemPrompt: "Original system prompt", reasoningEffort: "Text reasoning effort; auto lets the script decide whether to send it", http: "Convenience client: http.post(path, body, {headers,params,responseType}), http.get(path, opts), and http.url(path). Authorization: Bearer apiKey is included by default and can be overridden. Relative paths append /v1 to baseUrl.", request: "Raw request({ method, url, headers, params, data, responseType }) with no default headers. Add authentication yourself. Relative URLs are joined to baseUrl without /v1.", poll: "poll(request, extract, {intervalMs,timeoutMs}) continues until extract returns a truthy value", sleep: "Delay with sleep(ms)", signal: "Cancellation signal that can be passed to http/request", onDelta: "Push streaming text with onDelta(text) for text models" },
-        returns: { image: "Text-to-image and image editing use different APIs; distinguish them by whether images is empty. Return an image URL or data URL, an array of them, or [{ dataUrl }] / [{ url }] / [{ b64_json }].", video: "Poll inside the script and return { url }, { blob }, or a video URL string.", audio: "Return a Blob, base64/data URL string, or { b64_json } / { data } / { url }.", text: "Push streaming output with onDelta(text), then return the complete text string." },
-        templates: { openai: "OpenAI format", gemini: "Gemini format" },
-        authoring: {
-            intro: "Write a model request script for Infinite Canvas. Capability: {{capability}}. Target model: {{model}}.",
-            shape: "Write an async function whose parameter list names the variables you use, and unpack params into fields such as size, quality, and count. Do not import modules or use Markdown fences. Send the request and return the result inside the function. The runtime injects matching locals, so finish with return await functionName({ the same arguments }).",
-            returnTitle: "Return requirements",
-            variablesTitle: "Available variables",
-            rulesTitle: "Rules",
-            rules: "- Write an async function whose parameter list names the variables you use, and unpack params into fields such as size, quality, count, and seconds. Document each field with a /** */ JSDoc comment above the function.\n- Send raw HTTP with request({ method, url, headers, params, data, responseType }). Use http.post / http.get when you want Authorization: Bearer apiKey by default.\n- Relative URLs: request joins them to baseUrl without /v1; http relative paths append /v1 to baseUrl.\n- Async video tasks usually create a job and then poll(request, extract, { intervalMs, timeoutMs }) until extract returns a truthy value.\n- images is a data URL string array. videos and audios are File arrays you can form.append(field, file); they are empty when no references are attached.\n- Do not set Content-Type on FormData; let the browser add the boundary.\n- Return the result from the function, then finish with return await functionName({ the same arguments }). Output only the complete script, with no explanation.",
-            examplesTitle: "Complete examples (adapt them to the real API; do not copy them unchanged)",
-            draftTitle: "Current user draft (revise this; if empty, write from scratch)",
-            anyModel: "(the currently selected model)",
-        },
-    },
-    apiErrors: { streamIncomplete: "The text response was incomplete. Please retry.", requestFailed: "Request failed", requestCanceled: "Request canceled", baseUrlRequired: "Configure the Base URL first", apiKeyRequired: "Configure the API key first", authenticationFailed: "Authentication failed. Check the API key, plan permissions, and model permissions.", rateLimited: "The request was rate-limited or the quota is insufficient. Try again later.", notFound: "The endpoint was not found (404). Check the Base URL and selected model.", badGateway: "Gateway error (502). The API service is temporarily unavailable.", serviceBusy: "Service unavailable (503). Try again later.", httpFailed: "Request failed (HTTP {{status}}). Check the Base URL and API key.", htmlError: "The service returned an HTML error page ({{preview}})", imageTimeout: "The image request timed out. The endpoint did not respond in time; retry later or switch channels.", audioModelRequired: "Configure an audio model first", audioGenerationFailed: "Audio generation failed", scriptNoAudio: "The model request script did not return audio", geminiAudioUnsupported: "The Gemini API format does not support audio generation. Use an OpenAI-format provider.", invalidImageSizeFormat: "Unsupported image size. Use auto, 9:16, or 1024x1024.", positiveImageRatio: "The image ratio must use positive numbers, such as 9:16.", imageRatioLimit: "The image aspect ratio cannot exceed 3:1. Adjust the dimensions.", positiveImageDimensions: "Image dimensions must be positive integers, such as 1024x1024.", imageDimensionStep: "Image width and height must be multiples of 16.", imageEdgeLimit: "The longest image edge cannot exceed 3840px.", imagePixelLimit: "The total image pixel count must be between 655360 and 8294400.", unknownImageResponse: "The API returned data in an unknown format (fields: {{fields}}). Check model or API compatibility.", upstreamHtmlError: "The service gateway returned an error. Try again later.", sensitiveImageRejected: "The reference image may contain sensitive information and was blocked by upstream review. Replace it and try again.", sensitiveTextRejected: "The prompt may contain sensitive information and was blocked by upstream review. Modify the prompt and try again.", sensitiveVideoRejected: "The generated video may contain sensitive information and was blocked by upstream review. Modify the prompt or reference images and try again.", sensitiveContentRejected: "The content may contain sensitive information and was blocked by upstream review. Modify the prompt or reference images and try again.", realPersonRejected: "The reference image may contain a real person and was blocked by upstream content review. Remove or replace real-person images and try again.", contentModerationRejected: "Content review failed. Adjust the prompt or reference images and try again.", audioCopyrightRejected: "The generated audio was blocked for a possible music copyright issue. Turn off audio generation or remove music, song, or lyric descriptions from the prompt and try again.", upstreamServiceUnavailable: "The upstream service is temporarily unavailable. Try again later.", requestId: " (Request ID: {{id}})", noImageReturned: "The API did not return an image. The prompt may have triggered safety review or the model may not support this operation.", geminiRejected: "Gemini rejected the request: {{reason}}", geminiNoImage: "The Gemini API did not return an image", maskModelUnsupported: "This model does not support mask editing. Use another provider.", noContent: "No content returned", modelReadFailed: "Failed to load models", videoTimeout: "{{provider}}video generation timed out. Try again later.", pluginVideoExpired: "The plugin video task has expired. Generate it again.", scriptNoVideo: "The model request script did not return a video", noPlayableVideo: "The video API did not return a playable video", noVideoTaskId: "The video API did not return a task ID", videoTaskCreateFailed: "Failed to create video task", videoGenerationFailed: "Video generation failed", videoTaskQueryFailed: "Failed to query video task", videoPromptRequired: "Enter a video prompt or connect a reference image, video, or audio asset", referenceImageReadFailed: "Failed to read the reference image. Choose another image or upload it again.", invalidReferenceVideo: "A reference video must be a public URL, asset ID, or locally saved video", invalidReferenceAudio: "Reference audio must be a public URL, asset ID, or locally saved audio file", videoModelRequired: "Configure a video model first", geminiVideoUnsupported: "The Gemini API format does not support video generation. Use an OpenAI-format provider.", noVideoTask: "The API did not return a video task", videoDownloadFailed: "Failed to download video", localAssetReadFailed: "Failed to read local asset" },
-    prompts: {
-        title: "Prompt Center",
-        library: "Prompt Library",
-        total: "{{count}} prompts",
-        category: "Category",
-        tags: "Tags",
-        search: "Search titles, content, or tags",
-        searchTitle: "Search by title",
-        loadFailed: "Failed to load prompts",
-        sourceMissing: "Prompt source not found",
-        use: "Use this prompt",
-        empty: "No matching prompts found",
-        loading: "Loading...",
-        loadMore: "Scroll down to load more",
-        end: "You've reached the end",
-    },
-    assets: {
-        title: "My Assets",
-        description: "Save frequently used text and images, then find them quickly by type, title, or tag.",
-        tabAssets: "Asset library",
-        tabHistory: "History files",
-        historyTitle: "History files",
-        historyDescription: "These uploads and unarchived files are not in the asset library, but still use personal storage. Clean up files you no longer need.",
-        historyLoadFailed: "Failed to load history files",
-        historyCleaned: "Cleaned up",
-        historyCleanupFailed: "Cleanup failed",
-        historyInUse: "In use",
-        historyCleanup: "Clean up",
-        historyCleanupConfirm: "Delete this file? This cannot be undone.",
-        historyCleanupAll: "Clean all",
-        historyCleanupAllConfirm: "Clean {{count}} removable files ({{size}})? This cannot be undone.",
-        historyCleanupAllDone: "Cleaned {{count}} files",
-        historyCleanupAllPartial: "Cleaned {{count}} files; {{failed}} failed",
-        historyEmpty: "No history files",
-        historyHint: "Files marked “In use” are still referenced by canvases or other content. Remove those references before cleaning up.",
-
-        search: "Search titles, content, tags, or sources",
-        type: "Type",
-        export: "Export assets",
-        import: "Import assets",
-        add: "Add asset",
-        edit: "Edit asset",
-        empty: "No assets found",
-        emptyTitle: "No assets yet",
-        emptyHint: "Save prompts, reference images, and finished renders here, then find them fast by type, title, or tag.",
-        noMatchHint: "Try another keyword, or switch the type filter back to All.",
-        total: "{{count}} assets",
-        manual: "Added manually",
-        selectImage: "Select an image file",
-        updated: "Asset updated",
-        saved: "Asset saved",
-        textCopied: "Text copied",
-        noneToExport: "No assets to export",
-        imported: "Imported {{count}} assets",
-        importFailed: "Import failed. Select a valid asset package.",
-        deleted: "Asset deleted",
-        packageName: "my-assets.zip",
-        kinds: { audio: "Audio", text: "Text", image: "Image", video: "Video" },
-        fields: {
-            title: "Title",
-            titleRequired: "Enter a title",
-            titlePlaceholder: "Give the asset an easy-to-find name",
-            coverUrl: "Cover URL",
-            coverPlaceholder: "Paste an image URL or upload a local cover",
-            tags: "Tags",
-            tagsPlaceholder: "Type a tag and press Enter",
-            source: "Source",
-            sourcePlaceholder: "Added manually / Canvas / Prompt Library",
-            note: "Note",
-            optional: "Optional",
-            textContent: "Text content",
-            videoContent: "Video content",
-            textRequired: "Enter text content",
-            textPlaceholder: "Save prompts, copy, reference descriptions, and other text assets",
-            imageContent: "Image content",
-        },
-        selectImageFile: "Select image file",
-        noImageSelected: "No image selected",
-        preview: "Preview",
-        noCover: "No cover",
-        untitled: "Untitled asset",
-        noTags: "No tags",
-        untagged: "Untagged",
-        unknownSource: "Source not specified",
-        details: "Asset details",
-        deleteTitle: "Delete asset",
-        deleteConfirm: "Delete “{{name}}”? It will be removed from My Assets.",
-        copyText: "Copy text",
-        downloadImage: "Download image",
-        downloadVideo: "Download video",
-        downloadFailed: "Download failed. Please try again.",
-    },
-    notFound: {
-        title: "Page not found",
-        description: "There is no page at this address. It may have moved or been merged into another section.",
-        home: "Back to home",
-    },
-    workbench: {
-        logs: "Generation history",
-        settings: "Settings",
-        prompt: "Prompt",
-        viewPrompts: "Browse prompts",
-        viewAssets: "Browse My Assets",
-        clipboard: "Clipboard",
-        upload: "Upload",
-        adjust: "Adjust",
-        generate: "Generate",
-        results: "Results",
-        waiting: "Waiting {{time}}",
-        model: "Model",
-        generating: "Generating",
-        success: "Succeeded",
-        failed: "Generation failed",
-        retry: "Retry",
-        new: "New",
-        selectAll: "Select all",
-        noLogs: "No generation history",
-        deleteLogs: "Delete generation history",
-        deleteLogsConfirm: "Delete the selected {{count}} generation records?",
-        successCount: "{{count}} succeeded",
-        failCount: "{{count}} failed",
-        itemCount: "{{count}} images",
-        untitled: "Untitled",
-        configFirst: "Complete the configuration first",
-        generationFailed: "Generation failed",
-        retrySuccess: "Retry succeeded",
-    },
-    imageWorkbench: {
-        title: "Image Studio",
-        promptPlaceholder: "Describe the subject, style, composition, lighting, and intended use",
-        references: "Reference images",
-        removeReference: "Remove reference image",
-        dropReferences: "Drop to add reference images",
-        noReferences: "No reference images. Drag images here to add them.",
-        clipboardEmpty: "No readable images found on the clipboard",
-        clipboardAdded: "Added {{count}} reference images",
-        promptRequired: "Enter an image prompt",
-        configIncomplete: "Image generation configuration is incomplete",
-        invalidParams: "Invalid image generation parameters",
-        busy: "The Image Studio is already running a task",
-        generated: "Images generated",
-        addedReference: "Added to reference images",
-        resultTitle: "Generated image {{count}}",
-        source: "Image Studio",
-        unsupportedAsset: "Image Studio only supports text and image assets",
-        missingResult: "The API returned no image",
-        empty: "No images generated yet",
-        resultAlt: "Generated image {{count}}",
-        addReference: "Add as reference",
-        unsupportedFiles: "Unsupported reference files were ignored. Use JPG, PNG, WebP, or HEIC images.",
-        referenceAdded: "{{count}} reference image(s) added",
-    },
-    videoWorkbench: {
-        title: "Video Studio",
-        promptPlaceholder: "Describe camera movement, subject action, atmosphere, and visual style",
-        references: "Reference images",
-        videoReferences: "Reference videos",
-        audioReferences: "Reference audio",
-        removeImage: "Remove reference image",
-        removeVideo: "Remove reference video",
-        removeAudio: "Remove reference audio",
-        dropReferences: "Drop to upload reference assets",
-        noImages: "No reference material. Drag in images, video, or audio; up to 7 images.",
-        noVideos: "No reference videos. Drag in up to 3 files.",
-        noAudio: "No reference audio. Drag in up to 3 MP3/WAV files, each under 15 MB.",
-        unsupportedFiles: "Unsupported reference assets were ignored. Use images, MP4/MOV video, or MP3/WAV audio.",
-        imageTooLarge: "Reference images over 30 MB were ignored",
-        videoTooLarge: "Reference videos over 200 MB were ignored",
-        audioTooLarge: "Reference audio over 15 MB was ignored",
-        audioDurationInvalid: "Reference audio outside the duration limits was ignored: 2–15 seconds each, 15 seconds total.",
-        clipboardEmpty: "No readable images found on the clipboard",
-        clipboardAdded: "Added {{count}} reference images",
-        promptRequired: "Enter a video prompt",
-        referenceError: "{{error}}. {{hint}}",
-        invalidParams: "Invalid video generation parameters",
-        busy: "The Video Studio is already running a task",
-        generated: "Video generated",
-        timeout: "Video generation timed out. Try again later.",
-        submitUnconfirmed: "Submission failed and no task was created. Check your network and try again.",
-        resultTitle: "Generated video",
-        source: "Video Studio",
-        empty: "No video generated yet",
-    },
-    canvas: {
-        defaultTitle: "Custom Canvas {{count}}",
-        library: "Canvas library",
-        title: "Infinite Canvas",
-        imported: "Imported {{count}} canvases",
-        importFailed: "Import failed. Select a valid canvas package.",
-        opening: "Opening canvas...",
-        loading: "Loading canvases...",
-        exportSelected: "Export selected",
-        deleteSelected: "Delete selected",
-        deleteAll: "Delete all",
-        import: "Import canvas",
-        create: "New canvas",
-        empty: "No canvases yet",
-        emptyDescription: "Create a canvas to save its nodes, connections, and appearance independently.",
-        collapsePanel: "Collapse panel",
-        back: "Back to projects",
-        expandPanel: "Expand panel",
-        home: "Home",
-        docs: "Documentation",
-        projects: "My Canvases",
-        deleteCurrent: "Delete current canvas",
-        importAsset: "Import asset",
-        exportCurrent: "Export current canvas",
-        undo: "Undo",
-        redo: "Redo",
-        openMenu: "Open canvas menu",
-        renameHint: "Double-click to rename the canvas",
-        shortcuts: "Keyboard shortcuts",
-        miniMapOpen: "Open minimap",
-        miniMapClose: "Close minimap",
-        resetView: "Reset view",
-        zoom: "Zoom canvas",
-        agentConnected: "Codex connected",
-        agentConnecting: "Codex {{activity}}",
-        agentDisconnected: "Codex disconnected",
-        connecting: "Connecting",
-        dock: { add: "Add node", selectTool: "Select tool", handTool: "Hand tool", assets: "Assets", shortcuts: "Canvas shortcuts", director: "Director desk", storyboard: "One-line storyboard" },
-        createPanel: {
-            title: "Add node", search: "Search nodes", empty: "No matching nodes", close: "Close", assets: "Asset library",
-            hint: "Enter creates the first match, Esc closes",
-            textHint: "Script, copy, storyboard", imageHint: "Text to image / image to image", videoHint: "Text to video / image to video", audioHint: "Voice and sound effects", configHint: "Model, size, count", groupHint: "Group selected nodes",
-        },
-        blankMenu: { paste: "Paste", selectAll: "Select all nodes", fitAll: "Fit all nodes", actualSize: "Actual size 100%", background: "Canvas background", clear: "Clear canvas" },
-        director: { defaultScene: "Shot 1", loading: "Loading the 3D director desk…", applied: "Director output added to the canvas" },
-        storyboard: {
-            title: "One-line storyboard",
-            briefPlaceholder: "Describe the video in one sentence, e.g. an orange cat napping on a sunny windowsill, healing style, 15s",
-            needBrief: "Describe the video first",
-            needModel: "Select a storyboard model first",
-            generated: "Generated {{count}} shots, {{credits}} credits charged",
-            failed: "Storyboard generation failed, please retry",
-            generating: "Breaking down shots…",
-            generatingHint: "Online models usually take 10-40s, keep this window open",
-            generate: "Generate storyboard",
-            regenerate: "Regenerate",
-            model: "Storyboard model",
-            modelPlaceholder: "Select a model",
-            noModel: "No text model is available yet. Ask the admin to add and enable one.",
-            duration: "Duration",
-            shotCount: "Shots",
-            aspect: "Aspect",
-            style: "Style",
-            stylePlaceholder: "Optional, e.g. warm Japanese film",
-            selectedSummary: "{{count}} shots / {{duration}}s selected",
-            shotLabel: "Shot {{index}}",
-            promptPlaceholder: "Image prompt",
-            videoPromptPlaceholder: "Image-to-video motion description",
-            withVideoNodes: "Also create a video node per shot",
-            apply: "Lay out on canvas ({{count}})",
-            applied: "Laid out {{count}} storyboard nodes",
-            scriptTitle: "Storyboard script · {{title}}",
-            shotTitle: "Shot {{index}} · {{duration}}s",
-            videoSuffix: " · video",
-            examples: {
-                cat: "An orange cat napping on a sunny windowsill, healing short film, 15s",
-                coffee: "Pour-over coffee from grinding to first sip, slow premium ad, 20s",
-                city: "Rainy neon street at night, one person with an umbrella, cinematic, 30s",
-            },
-        },
-        emptyHint: { title: "Double-click the canvas to add a node", description: "Or use the + button / right-click on empty space" },
-        nodeTypes: { image: "Image", text: "Text", config: "Generation config", video: "Video", audio: "Audio", group: "Group" },
-        toolbar: {
-            select: "Select", pan: "Move", focus: "Center focus", text: "Text", image: "Image", video: "Video", audio: "Audio", config: "Generation config", group: "Group", extensions: "Extension nodes", upload: "Upload assets", appearance: "Canvas appearance", clear: "Clear canvas",
-            themeMode: "Theme", light: "Light", dark: "Dark", gridStyle: "Grid style", dots: "Dots", lines: "Lines", blank: "Blank", imageInfo: "Image info",
-        },
-        project: {
-            untitled: "Untitled canvas", imported: "Imported canvas",
-            select: "Select {{name}}", stats: "{{nodes}} nodes · {{connections}} connections", updated: "Updated {{date}}", saveName: "Save name", cancelRename: "Cancel rename", export: "Export", rename: "Rename", delete: "Delete", open: "Open canvas {{name}}",
-            deleteTitle: "Delete canvases?", deleteDescription: "This will delete {{count}} canvases along with their nodes and connections.",
-        },
-        export: { defaultProjectName: "Infinite Canvas", defaultNodesName: "Canvas elements", item: "Element" },
-        createMenu: {
-            fromNode: "Generate from this node", close: "Close", text: "Generate text", textDescription: "Scripts, ad copy, and brand content", image: "Generate image", video: "Generate video", audio: "Audio reference", config: "Configuration node", configDescription: "Model, size, count, and input order", select: "Select a node",
-        },
-        node: {
-            node: "Node",
-            untitled: "Untitled node", renameHint: "Double-click to rename the node", group: "Group", nodeCount: "{{count}} nodes", generating: "Generating", failed: "Generation failed", retry: "Retry", missingPlugin: "Plugin missing", missingPluginDescription: "The plugin for node type “{{type}}” is not installed or enabled", generateImage: "Generate image from text", generate: "Generate", editText: "Double-click to edit text", emptyImage: "Empty image node", emptyVideo: "Empty video node", emptyAudio: "Empty audio node", audio: "Audio", batchExpanded: "Image group expanded", batchCollapsed: "Image group collapsed", textBatchExpanded: "Text alternatives expanded", textBatchCollapsed: "Text alternatives collapsed", createCopy: "Create copy", setPrimary: "Set as primary", setPrimaryText: "Set as primary",
-        },
-        videoFrames: { first: "Capture first frame", last: "Capture last frame", current: "Capture current frame", firstTitle: "{{name}} first frame", lastTitle: "{{name}} last frame", currentTitle: "{{name}} current frame", captured: "Image node created", failed: "Could not capture this frame. Try again." },
-        sidePanel: {
-            canvas: "Canvas", assets: "Assets", prompts: "Prompt Library", resize: "Resize left panel", elements: "Canvas elements", select: "Select", searchNodes: "Search nodes", focusNode: "Focus node", preview: "Large preview", viewList: "Switch to list", viewGrid: "Switch to thumbnails", noNodes: "No nodes on this canvas", clearAll: "Clear all", selected: "{{count}} selected", exporting: "Exporting selected elements…", exportName: "canvas-elements-{{count}}", exported: "Exported {{count}} elements", exportFailed: "Export failed. Try again.",
-            addingAssets: "Adding assets…", addedAssets: "Added {{count}} assets", mediaOnly: "Only image and video files are supported", addFailed: "Failed to add assets. Try again.", searchAssets: "Search assets", add: "Add", noAssets: "No assets", inserted: "Insert into canvas", removeAssetTitle: "Remove this asset?", remove: "Remove", removeAsset: "Remove asset", assetRemoved: "Asset removed",
-            searchPrompts: "Search prompts", noPrompts: "No prompts", promptCopied: "Prompt copied", copyFailed: "Copy failed", loadFailedRetry: "Load failed. Click to retry.", noMatchingPrompts: "No matching prompts", sourceEmpty: "No prompts from this source", viewDetails: "View details",
-            filter: { image: "Image", video: "Video", text: "Text", audio: "Audio", config: "Configuration", group: "Group" },
-        },
-        assetPicker: { title: "Select assets", insert: "Insert", search: "Search assets", empty: "No assets" },
-        imageTools: { copyPrompt: "Copy prompt", copyPromptTitle: "Copy the prompt used to generate this image", reversePrompt: "Reverse prompt", reversePromptTitle: "Create text and configuration nodes to infer the prompt", replace: "Replace image", locked: "Lock ratio", free: "Free ratio", lockTitle: "Switch to proportional scaling", freeTitle: "Switch to free resizing", mask: "Local edit", maskTitle: "Paint a mask and edit the selected area", crop: "Crop", cropTitle: "Crop into a new node", split: "Split", splitTitle: "Split the image by rows and columns", upscale: "Upscale", upscaleTitle: "Increase image resolution", superResolve: "Super resolution", superResolveTitle: "AI super resolution", angle: "Multi-angle", angleTitle: "Generate another angle", view: "View image", viewTitle: "View image details", more: "More", configure: "Configure quick tools", customize: "Customize toolbar", showLabels: "Show button labels", description: "Choose the quick tools shown in the image-node toolbar.", preview: "Node preview", imageNode: "Image node", quickTools: "Quick tools" },
-        nodeToolbar: { noPrompt: "No prompt to copy", infoTitle: "View node information", info: "Info", removeTitle: "Remove node", retryTitle: "Generate again", queryVideoTask: "Get task status", queryVideoTaskTitle: "Query video generation status by task ID", videoTaskId: "Task ID", saveAsset: "Save asset", downloadAudio: "Download audio", downloadVideo: "Download video", downloadImage: "Download image", editTextTitle: "Edit text", editText: "Edit text", decreaseFont: "Decrease font size", increaseFont: "Increase font size", zoomOut: "Smaller", zoomIn: "Larger", uploadImage: "Upload image", replaceVideo: "Replace video", uploadVideo: "Upload video", replaceAudio: "Replace audio", uploadAudio: "Upload audio", nodeInfo: "Node information", name: "Name", type: "Type", size: "Size", position: "Position", status: "Status", imageGroup: "Image group", imageSize: "Image size", group: "Group", groupTitle: "Wrap selected nodes in a group", ungroup: "Ungroup", ungroupTitle: "Remove grouping from selected nodes" },
-        configNode: { title: "Generation config", image: "Image", text: "Text", video: "Video", audio: "Audio", prompt: "Prompt", references: "Reference images", videoReferences: "Reference videos", audioReferences: "Reference audio", items: "{{count}} items", images: "{{count}} images", compose: "Compose prompt", stop: "Stop", generate: "Generate" },
-        projectPage: {
-            stopTitle: "Stop generation?", stopDescription: "The current request will be interrupted. Completed results will be kept.", stop: "Stop", continue: "Continue generating", configConnection: "Configuration nodes cannot be connected to each other", notFound: "Current canvas not found", exporting: "Exporting current canvas…", exported: "Current canvas exported", clipboardText: "Clipboard text", clipboardImageAdded: "Added image from clipboard", clipboardTextAdded: "Added text from clipboard", noTextToSave: "No text to save", canvasText: "Canvas text", noVideoToSave: "No video to save", canvasVideo: "Canvas video", noImageToSave: "No image to save", canvasImage: "Canvas image", emptyReverse: "The image node is empty, so its prompt cannot be inferred", reverseTitle: "Reverse prompt", reverseConfigTitle: "Reverse prompt configuration", splitTitle: "{{name}} {{row}}-{{column}}", splitSuccess: "Split into {{count}} child nodes", maskResult: "Local edit result", maskFailed: "Local edit failed", generationFailed: "Generation failed", partialFailed: "Some images failed to generate", partialTextFailed: "Some text alternatives failed to generate", allFailed: "All images failed to generate", retryPromptMissing: "No prompt found for retry", referenceMissing: "The reference image is missing, so retry cannot continue", emptyTextImage: "The text node is empty, so an image cannot be generated", untitledCanvas: "Untitled canvas", superResolve: "AI super resolution", notImplemented: "Not implemented yet", imageDetails: "Image details", clearTitle: "Clear canvas?", clear: "Clear", clearDescription: "This will delete every node and connection on the current canvas.", reversePreset: "Infer a prompt suitable for AI image generation from the reference image.\n\nRequirements:\n1. Output only the prompt, with no explanation.\n2. Cover the subject, composition, style, lighting, color, materials, lens, and atmosphere.\n3. Write a complete prompt that can be used directly with an image model.", maskPrompt: "{{source}} is the original image. {{mask}} marks the area to edit with a translucent blue overlay on the original image. Only modify the area covered by the blue overlay, keep everything else identical to the original, output a full image with the same size as the original, and do not keep any blue overlay in the result. Edit request: {{prompt}}", maskNodeTitle: "Mask annotation", editTextPrompt: "Revise the text according to the instructions.\n\nOriginal:\n{{source}}\n\nInstructions:\n{{prompt}}"
-        },
-        reverseComposer: "Reference image: @[node:{{imageId}}]\nTask: @[node:{{textId}}]",
-        editors: {
-            reset: "Reset", zoomOut: "Zoom out", zoomIn: "Zoom in", loading: "Loading", unknown: "Unknown", cancel: "Cancel",
-            angleTitle: "AI Multi-angle", angleDescription: "The left side previews direction only; the result is regenerated from the original image", horizontal: "Horizontal angle", pitch: "Pitch angle", distance: "Camera distance", lens: "Wide-angle lens", standard: "Standard", wide: "Wide", aiGenerate: "Generate with AI",
-            upscaleTitle: "Upscale image", source: "Source", targetPixels: "Target pixels", maxReached: "The image is already 4K and does not need upscaling", targetReached: "The image already meets the target pixel count", algorithm: "Upscaling algorithm", outputSize: "Output size", upscale: "Generate upscaled image", high: "High-quality interpolation", highDescription: "Best for photos and detailed images", bilinear: "Bilinear", bilinearDescription: "Smooth and fast", nearest: "Nearest neighbor", nearestDescription: "Best for pixel art",
-            cropTitle: "Crop image", adjustCrop: "Adjust crop box", cropHint: "Mouse wheel to zoom · middle button or Space + left drag to pan", cropSize: "Crop size {{size}}", ratio: "Ratio {{ratio}}", original: "Original {{width}} x {{height}}", confirmCrop: "Crop", free: "Free", fixed: "Fixed", originalMode: "Original",
-            maskTitle: "Local mask edit", maskHint: "Mouse wheel to zoom · middle button or Space + left drag to pan · Alt + left/right drag to resize brush · Ctrl/Cmd+Z to undo · Ctrl/Cmd+Shift+Z to redo", brush: "Brush", erase: "Erase", undoMaskTitle: "Undo mask stroke (Ctrl/Cmd+Z)", undoMask: "Undo mask stroke", redoMaskTitle: "Redo mask stroke (Ctrl/Cmd+Shift+Z)", redoMask: "Redo mask stroke", brushSize: "Brush size", editInstructions: "Edit instructions", maskPlaceholder: "For example: change the selected area to metal while preserving the original lighting", maskPromptRequired: "Enter edit instructions", maskRequired: "Paint the area to edit first", maskExport: "Export to canvas", maskGenerate: "Generate now",
-            splitTitle: "Split image", splitDescription: "Create {{count}} image nodes and arrange them in the original grid to the right of the canvas", splitHint: "Mouse wheel to zoom · middle button or Space + left drag to pan · Delete removes the selected line · Ctrl/Cmd+Z to undo · Ctrl/Cmd+Shift+Z to redo", undoSplitTitle: "Undo split adjustment (Ctrl/Cmd+Z)", undoSplit: "Undo split adjustment", redoSplitTitle: "Redo split adjustment (Ctrl/Cmd+Shift+Z)", redoSplit: "Redo split adjustment", rows: "Rows", columns: "Columns", horizontalLine: "Horizontal line", verticalLine: "Vertical line", deleteLine: "Delete line", resetLines: "Reset lines", pieceCount: "Pieces", pieces: "{{count}}", averageSize: "Average size", generateChildren: "Create child nodes",
-        },
-        promptPanel: { modes: { image: "Image", video: "Video", audio: "Audio", text: "Text", editImage: "Edit image", editText: "Edit text" }, addReference: "Ref", video: "Describe the video you want to generate", audio: "Describe the audio you want to generate", image: "Describe the image you want to generate", text: "Describe the text you want to generate", editImage: "Describe how you want to change this image", editText: "Describe how you want to revise this text", expandEditor: "Expand editor", editorTitle: "Edit prompt", stopGeneration: "Stop generation", generate: "Generate", stop: "Stop", sendHint: "Ctrl / ⌘ + Enter to generate, Enter for a new line" },
-        references: { title: "References", select: "Select references from canvas", disconnect: "Disconnect reference", empty: "No content", selecting: "Adding references", choose: "Select", selectingHint: "Select references from canvas · ESC to return" },
-        composer: { title: "Compose prompt", description: "Use @ to reference connected assets; references are renumbered before sending", placeholder: "Enter a prompt and use @ to reference connected images, text, or groups", imagePreview: "Referenced image preview", resources: { image: "Image {{index}}", video: "Video {{index}}", audio: "Audio {{index}}", text: "Text {{index}}", group: "Group {{index}}" } },
-        controls: { ratio: "Ratio", duplicate: "Duplicate", delete: "Delete", images: "{{count}} images", texts: "{{count}} options", generations: "{{count}} runs", reasoning: "Reasoning" },
-        generation: { interrupted: "Generation was interrupted by a page refresh. Generate again.", front: "front view", rotateRight: "rotated {{angle}} degrees right", rotateLeft: "rotated {{angle}} degrees left", level: "eye-level view", topDown: "{{angle}}-degree top-down view", lowAngle: "{{angle}}-degree low-angle view", angleLabel: "AI multi-angle: {{horizontal}}, {{pitch}}, camera distance {{distance}}, {{lens}} lens", anglePrompt: "Regenerate a new view of the same subject from the reference image. Preserve the subject, colors, materials, and visual style; do not merely apply perspective distortion. {{angle}}." },
-        agentOps: { add_node: "Add node", update_node: "Update node", delete_node: "Delete node", delete_connections: "Delete connections", connect_nodes: "Connect", set_viewport: "Adjust view", select_nodes: "Select nodes", run_generation: "Run generation" },
-        shortcut: {
-            dragCanvas: "Drag canvas",
-            pan: "Pan view",
-            toggleTool: "Temporarily switch Select / Move",
-            wheel: "Mouse wheel",
-            zoom: "Zoom canvas",
-            zoomSlider: "Zoom slider",
-            preciseZoom: "Adjust zoom precisely",
-            boxSelect: "Select multiple nodes",
-            addSelection: "Add nodes to selection",
-            selectAll: "Select all nodes",
-            copyPaste: "Copy/paste nodes or paste clipboard text/images",
-            copyPasteNodes: "Copy/paste nodes",
-            delete: "Delete selection",
-            group: "Group selected nodes",
-            ungroup: "Ungroup selected nodes",
-            escape: "Clear selection and close overlays",
-            dropMedia: "Drop images/videos/audio",
-            upload: "Upload to canvas",
-            drag: "Drag",
-            click: "Click",
-        },
-    },
-    navigation: {
-        create: "Create",
-        explore: "Explore",
-        home: "Home",
-        canvas: "Canvas",
-        image: "Image",
-        video: "Video",
-        prompts: "Prompts",
-        models: "Models",
-        assets: "Assets",
-        config: "Settings",
-        creation: "Create",
-        resources: "Resources",
-        account: "Account",
-        accountCenter: "Account",
-        admin: "Admin console",
-        workspace: "Workspace",
-        workspaceName: "AI video creation workspace",
-        contact: "Contact us",
-        communityTitle: "Join our community",
-        communitySubtitle: "Scan to join the official group",
-        communityFooter: "Scan to join · click a QR code to enlarge",
-        viewQr: "Click to enlarge",
-        contactAction: "Contact",
-        contactFetchError: "Could not load contact details",
-        noContacts: "No contact details yet",
-        contactDialogHint: "Scan a QR code to join our community for updates and support",
-        closeMenu: "Close menu",
-        openMenu: "Open menu",
-        close: "Close",
-        contactChannels: {
-            wechat: "WeChat",
-            wechat_group: "WeChat Group",
-            wecom: "WeCom",
-            qq: "QQ",
-            qq_group: "QQ Group",
-            email: "Email",
-            phone: "Phone",
-            telegram: "Telegram",
-            whatsapp: "WhatsApp",
-            link: "Custom link",
-        },
-    },
-    topNav: {
-        openMenu: "Open navigation menu",
-        menu: "Navigation menu",
-        navigation: "Navigation",
-        docs: "Documentation",
-        switchLanguage: "Switch to {{language}}",
-        shortcuts: "Keyboard shortcuts",
-        lightTheme: "Switch to light theme",
-        darkTheme: "Switch to dark theme",
-    },
-    home: {
-        promptError: "Failed to load prompts",
-        description: "Generate, connect, and reshape <content>images, text, and graphics</content> in <canvas>Infinite Canvas</canvas>, turning one-off generations into a continuous creative process.",
-        start: "Get started",
-        openCanvas: "Open canvas",
-        showcaseTitle: "Keep every great result",
-        showcaseDescription: "Save reliable prompts, visual references, and generated images so your next creation starts from proven ideas.",
-        viewPrompts: "View prompt library",
-        composerTitle: "Start with a frame",
-        composerDescription: "Describe a shot, a character, or a story, then continue in the right studio.",
-        heroKicker: "AI video creation workspace",
-        heroTitleLead: "Start with ",
-        heroTitleAccent: "a frame",
-        heroTitleTail: ".",
-        heroDescription: "Describe a shot, a character, or a story. Image and video share one starting point.",
-        heroVideoCta: "Generate video",
-        heroCanvasCta: "Open canvas",
-        promptPlaceholder: "Describe the image, camera movement, or story you want to create…",
-        estimateSelectModel: "Select a model for pricing",
-        estimateLoading: "Calculating credits…",
-        estimateUnavailable: "Estimate unavailable",
-        estimateCredits: "Est. {{credits}} credits / run",
-        estimateNote: "Confirm in the workbench to generate. Final credits depend on settings and route.",
-        startCreating: "Start creating",
-        recentCanvases: "Recent canvases",
-        newCanvas: "New canvas",
-        viewAll: "View all",
-        inspirationTitle: "Inspiration hall",
-        inspirationDescription: "Pick a direction from the prompt library and keep creating.",
-        openPromptLibrary: "Open prompt library",
-        emptyPrompts: "No prompts yet",
-        usePrompt: "Create with this prompt",
-        loginToCreate: "Sign in to start creating",
-        imageMode: "Image",
-        videoMode: "Video",
-        shortcutHint: "⌘ / Ctrl + Enter to start",
-        referenceImages: "References",
-        addMaterial: "Add material",
-        materialHintVideo: "Drop or add images for first / last frames, or add video and MP3 references",
-        materialHintImage: "Drop or add reference images",
-        materialUnsupported: "Unsupported material type",
-        materialTooLarge: "Material file is too large",
-        materialUploadFailed: "Failed to upload material",
-        appleImageConvertFailed: "Could not convert this Apple photo. Please export it as JPG and try again.",
-        imageMaterialsOnly: "Image mode only supports images",
-        removeReference: "Remove reference",
-        referenceLogin: "Sign in to add references",
-        referenceImageOnly: "References must be JPG / PNG / WebP",
-        referenceImageTooLarge: "Each reference must be under 10MB",
-        referenceUploadFailed: "Failed to upload reference",
-        recentCanvasesNote: "Pick up where you left off",
-        resolutionPanel: "Resolution",
-        resolutionPanelHint: "768P is billed at the 720P tier. Switching quality can change the pricing model and quote.",
-        ratioPanel: "Aspect ratio",
-        ratioPanelHint: "Options come from the current model. Switch freely between landscape, portrait, and square.",
-        secondsPanel: "Duration",
-        secondsPanelHint: "Changing duration updates the quote before you generate.",
-        secondsRange: "{{min}}–{{max}} seconds",
-        secondsChoose: "Choose a duration supported by the current model",
-        decreaseSeconds: "Decrease duration",
-        increaseSeconds: "Increase duration",
-        imageQualityPanel: "Image quality",
-        imageQualityPanelHint: "Higher quality preserves more detail and may cost more time and credits.",
-        statsTitle: "Platform stats",
-        statsWorksValue: "32M",
-        statsWorksUnit: "+",
-        statsWorksLabel: "Works generated",
-        statsCreatorsValue: "1.8M",
-        statsCreatorsUnit: "",
-        statsCreatorsLabel: "Active creators",
-        statsDurationValue: "12",
-        statsDurationUnit: "s",
-        statsDurationLabel: "Average render time",
-        statsSuccessValue: "98",
-        statsSuccessUnit: "%",
-        statsSuccessLabel: "Task success rate",
-    },
-    version: {
-        viewUpdates: "View release updates",
-        title: "Release updates",
-        currentVersion: "Current version",
-        latestVersion: "Latest version",
-        checking: "Checking...",
-        checkUpdates: "Check for updates",
-        unreleased: "Unreleased",
-        latest: "Latest",
-        current: "Current",
-        readFailed: "Failed to read version",
-        changelogFailed: "Failed to read changelog",
-        updated: "Latest version information loaded",
-        updateFailed: "Failed to load the latest version information",
-        types: { added: "Added", fixed: "Fixed", changed: "Changed", optimized: "Optimized", docs: "Docs" },
-    },
-    config: {
-        title: "Settings & Preferences",
-        description: "Default models and generation preferences",
-        modalDescription: "Default models and generation preferences",
-        promptSources: {
-            add: "Add source",
-            deleteTitle: "Delete “{{name}}”?",
-            deleteDescription: "The source configuration will be removed. Items already saved to My Assets are unaffected.",
-            refreshed: "Updated {{count}} prompts from “{{name}}”",
-            refreshFailedCached: "Update failed; the previous cache was kept",
-            refreshPartial: "Update complete: {{success}} succeeded and {{failed}} failed. Failed sources kept their previous cache.",
-            refreshAllSuccess: "Updated {{sources}} sources with {{total}} prompts",
-            refreshFailed: "Update failed",
-            builtIn: "Built-in",
-            itemCount: "{{count}} prompts",
-            failed: "Failed",
-            healthy: "Healthy",
-            unsynced: "Not synced",
-            lastSuccess: "Last successful {{time}}",
-            neverFetched: "Not fetched yet",
-            view: "View content",
-            refresh: "Fetch now",
-            edit: "Edit source",
-            schedule: "Scheduled fetch",
-            interval: "Fetch interval",
-            refreshAll: "Fetch all now",
-            lastFetched: "Last fetched {{time}}",
-            neverScheduled: "No scheduled fetch yet",
-            scheduleDescription: "When enabled, all active sources are fetched on this interval while the page is open.",
-            intervals: {
-                disabled: "Disabled",
-                minutes30: "Every 30 minutes",
-                hour1: "Every hour",
-                hours6: "Every 6 hours",
-                hours24: "Every 24 hours",
-            },
-            editor: {
-                addTitle: "Add prompt source",
-                editTitle: "Edit prompt source",
-                nameRequired: "Enter a source name",
-                invalidUrl: "Enter a valid JSON URL",
-                invalidHomepage: "Enter a valid homepage URL",
-                name: "Source name",
-                namePlaceholder: "Used for categories and labels",
-                homepage: "Source homepage (optional)",
-                enabled: "Enable source",
-                jsonFormat: "JSON format",
-            },
-            content: {
-                loadFailed: "Failed to fetch prompts",
-                title: "{{name}} · Prompt content",
-                count: "{{count}} prompts",
-                refresh: "Update now",
-                empty: "No prompts",
-                cover: "Cover",
-                titleColumn: "Title",
-                tags: "Tags",
-                actions: "Actions",
-            },
-            runtime: { requestFailed: "Request failed ({{status}})", urlRequired: "JSON URL is required", fetchFailed: "Failed to fetch “{{name}}”: {{error}}", noPrompts: "No valid prompts were parsed from “{{name}}”", invalidRoot: "Invalid “{{name}}” format: the root value must be an array" },
-        },
-        importedDirectConfig: "Local direct connection settings imported",
-        importedChannelCreated: "Added provider “{{name}}” without changing existing providers",
-        importedChannelUpdated: "Updated connection settings for provider “{{name}}”",
-        importedChannelBaseUrlRequired: "The import link has no Base URL. No providers were changed.",
-        importedChannelBaseUrlInvalid: "The import link has an invalid Base URL. No providers were changed.",
-        saved: "Settings saved",
-        savedContinue: "Settings saved. Continue with your previous request.",
-        channels: {
-            description: "Choose a protocol for each provider, fetch its models, assign capabilities, and optionally customize request scripts.",
-            add: "Add provider",
-            unnamed: "Unnamed provider",
-            numberedName: "Provider {{count}}",
-            modelCount: "{{count}} models",
-            missingUrl: "API endpoint not set",
-            keepOne: "Keep at least one provider",
-            defaultName: "Default provider",
-            newName: "New provider",
-            indexedName: "Provider {{index}}",
-        },
-        preferences: {
-            interface: "Interface",
-            language: "Display language",
-            languageDescription: "Change the language used by the interface and components.",
-            defaultModels: "Default models",
-            defaultImageModel: "Default image model",
-            defaultVideoModel: "Default video model",
-            defaultTextModel: "Default text model",
-            defaultAudioModel: "Default audio model",
-            generation: "Generation preferences",
-            imageResolution: "Default image resolution",
-            videoResolution: "Default video resolution",
-            canvasImageCount: "Default canvas image count",
-            canvasImageCountDescription: "Used by new canvas image and configuration nodes. Individual nodes can override it.",
-            regenerateBehavior: "When generating on a node that already has content",
-            regenerateBehaviorOverwrite: "Regenerate in place (overwrite the node)",
-            regenerateBehaviorOverwriteDescription: "Replace the node's content and settings in place without creating a new node. Copy the node first to keep the old result.",
-            regenerateBehaviorNewNode: "Create a new node (original behavior)",
-            regenerateBehaviorNewNodeDescription: "Keep the current node and create a new one for the result. Good for variants or branches.",
-            autoFocusOnSelect: "Auto-center on select",
-            audioVoice: "Default audio voice",
-            audioFormat: "Default audio format",
-            audioSpeed: "Default audio speed",
-            audioInstructions: "Default audio instructions",
-            audioInstructionsPlaceholder: "For example: natural, warm, and suitable for narration.",
-            systemPrompt: "System prompt",
-            systemPromptPlaceholder: "For example: You are a visual director specializing in cinematic, photorealistic imagery.",
-        },
-        channelEditor: {
-            title: "Edit provider",
-            name: "Provider name",
-            protocol: "Protocol",
-            baseUrl: "API endpoint",
-            models: "Provider models",
-            modelDescription: "{{count}} selected; assign a capability to each model and optionally customize its request script.",
-            selectModels: "Select models",
-            scriptReady: "Script set",
-            script: "Request script",
-            empty: "Select models to fetch or manually add models.",
-            capabilities: {
-                image: "Image",
-                video: "Video",
-                text: "Text",
-                audio: "Audio",
-            },
-        },
-        modelSelect: {
-            missingConfig: "Enter an API endpoint and API key first",
-            fetched: "Fetched {{count}} models",
-            fetchFailed: "Failed to fetch models",
-            title: "Select provider models",
-            selected: "{{selected}} / {{total}} selected",
-            confirm: "Confirm",
-            search: "Search models",
-            modelName: "Enter a model name",
-            add: "Add model",
-            fetch: "Fetch model list",
-            description: "If the provider does not expose an OpenAI /models endpoint, add model names manually here.",
-            fetchedTab: "Fetched models ({{count}})",
-            existingTab: "Selected models ({{count}})",
-            visibleSelected: "{{selected}} / {{total}} selected in this list",
-            selectVisible: "Select this list",
-            clearVisible: "Clear this list",
-            fetchedEmpty: "Fetch models from the provider or add a model name manually.",
-            existingEmpty: "No models selected.",
-        },
-        scriptEditor: {
-            title: "{{capability}} request script",
-            description: "Follow the three steps on the left: read the rules, copy the brief for another AI, then paste the script on the right. Leave it empty to use the default request.",
-            stepRule: "Read the rules",
-            stepRuleHint: "Write an async function. Put prompt, images, params, and other locals in the parameter list, and unpack params into size, quality, count, and similar fields. Send the request and return the result, then call the function once.",
-            stepAi: "Let another AI write it",
-            stepAiCopy: "Copy the variables, return requirements, and writing rules from this page.",
-            stepAiAsk: "Paste the brief into ChatGPT, Claude, or any other AI, then attach the API docs you want to call.",
-            stepAiPaste: "Paste the returned script into the editor on the right and save it.",
-            stepAiIncludes: "The copied brief includes the current model, return requirements, all available variables, and writing rules. It does not include the API key.",
-            stepEdit: "Paste and save",
-            editorTitle: "Script editor",
-            editorHint: "Paste the script from another AI here, or start from a template below.",
-            editorEmpty: "Using the default request",
-            editorFilled: "Custom script entered",
-            startFromTemplate: "Start from a template",
-            insertTemplate: "Insert {{name}} template",
-            restoreDefault: "Restore default request",
-            returnRequirements: "Return requirements",
-            variables: "Available variables",
-            variablesHint: "Click a variable to insert it into the editor.",
-            variablesHintVideo: "Video models can use videos and audios as reference video and audio files.",
-            insert: "Click to insert",
-            placeholder: "// Paste a script written by another AI. Leave empty to use the default request.",
-            copyBrief: "Copy script brief",
-            briefCopied: "Script brief copied. Paste it into your AI.",
-        },
-        protocols: {
-        },
-    },
-    agent: {
 

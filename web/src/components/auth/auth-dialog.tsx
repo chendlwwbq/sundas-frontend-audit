@@ -78,8 +78,33 @@ export function AuthDialog() {
 
     useEffect(() => {
         if (!open) return;
+        const previousFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const focusables = () =>
+            Array.from(
+                cardRef.current?.querySelectorAll<HTMLElement>(
+                    'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
+                ) ?? [],
+            ).filter((element) => element.offsetParent !== null);
         const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") closeDialog();
+            if (event.key === "Escape") {
+                closeDialog();
+                return;
+            }
+            if (event.key !== "Tab") return;
+            const list = focusables();
+            if (!list.length) return;
+            const first = list[0];
+            const last = list[list.length - 1];
+            const active = document.activeElement;
+            if (event.shiftKey) {
+                if (active === first || !cardRef.current?.contains(active)) {
+                    event.preventDefault();
+                    last.focus();
+                }
+            } else if (active === last || !cardRef.current?.contains(active)) {
+                event.preventDefault();
+                first.focus();
+            }
         };
         const previousOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
@@ -92,6 +117,7 @@ export function AuthDialog() {
             document.body.style.overflow = previousOverflow;
             document.removeEventListener("keydown", onKeyDown);
             window.clearTimeout(timer);
+            if (previousFocused?.isConnected) previousFocused.focus();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);

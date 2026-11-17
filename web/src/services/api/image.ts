@@ -135,6 +135,7 @@ export function imageTaskIdFromError(error: unknown) {
 }
 
 async function resolvePendingImage(payload: ImageApiResponse, config: AiConfig, options?: RequestOptions): Promise<ImageApiResponse> {
+    if (payload.status === 'review') throw Object.assign(new Error(readApiErrorMessage(payload.error) || '原图片任务待核对，请勿重复生成'), { taskId: payload.taskId });
     if (payload.status !== 'pending' || !payload.taskId) return payload;
     const url = aiApiUrl(config, `/images/${encodeURIComponent(payload.taskId)}`);
     for (;;) {
@@ -147,7 +148,7 @@ async function resolvePendingImage(payload: ImageApiResponse, config: AiConfig, 
             if (axios.isAxiosError(error) && [401, 403, 404].includes(error.response?.status ?? 0)) throw error;
         }
         if (state?.status === 'completed') return state;
-        if (state?.status === 'failed') throw Object.assign(new Error(readApiErrorMessage(state.error) || '图片生成失败'), { taskId: payload.taskId });
+        if (state?.status === 'failed' || state?.status === 'review') throw Object.assign(new Error(readApiErrorMessage(state.error) || '图片生成失败'), { taskId: payload.taskId });
         await new Promise<void>((resolve, reject) => {
             if (options?.signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'));
             const abort = () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
@@ -806,6 +807,7 @@ async function requestGenerationInner(config: AiConfig, prompt: string, options?
         const images = parseImagePayload(await resolvePendingImage(response.data, requestConfig, options));
         return images;
     } catch (error) {
+        if (imageTaskIdFromError(error)) throw error;
         throw new Error(readAxiosError(error, apiText("requestFailed")));
     }
 }
@@ -874,6 +876,7 @@ async function requestEditInner(config: AiConfig, prompt: string, references: Re
         const images = parseImagePayload(await resolvePendingImage(response.data, requestConfig, options));
         return images;
     } catch (error) {
+        if (imageTaskIdFromError(error)) throw error;
         throw new Error(readAxiosError(error, apiText("requestFailed")));
     }
 }

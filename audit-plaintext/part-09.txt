@@ -1,7 +1,328 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+========================================================================
+FILE: web/src/components/canvas/infinite-canvas.tsx
+LINES: 1-320
+========================================================================
+import React, { useEffect, useRef, useState } from "react";
+
+import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
+import { useThemeStore } from "@/stores/use-theme-store";
+import type { ViewportTransform } from "@/types/canvas";
+
+type InfiniteCanvasProps = {
+    containerRef: React.RefObject<HTMLDivElement | null>;
+    viewport: ViewportTransform;
+    tool: "select" | "pan";
+    backgroundMode?: CanvasBackgroundMode;
+    onViewportChange: (viewport: ViewportTransform) => void;
+    onCanvasMouseDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
+    onCanvasDeselect?: () => void;
+    onCanvasDoubleClick?: (event: React.MouseEvent<HTMLDivElement>) => void;
+    onContextMenu?: (event: React.MouseEvent) => void;
+    onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
+    children: React.ReactNode;
+};
+
+export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = "lines", onViewportChange, onCanvasMouseDown, onCanvasDeselect, onCanvasDoubleClick, onContextMenu, onDrop, children }: InfiniteCanvasProps) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const panState = useRef({
+        isPanning: false,
+        startX: 0,
+        startY: 0,
+        initialX: 0,
+        initialY: 0,
+        hasMoved: false,
+        startedOnBackground: false,
+    });
+    const scaleRef = useRef(viewport.k);
+    const frameRef = useRef<number | null>(null);
+    const nextViewportRef = useRef<ViewportTransform | null>(null);
+    const latestViewportRef = useRef(viewport);
+    const [isSpacePressed, setIsSpacePressed] = useState(false);
+    const [isControlPressed, setIsControlPressed] = useState(false);
+    const [isPanning, setIsPanning] = useState(false);
+
+    useEffect(() => {
+        scaleRef.current = viewport.k;
+        latestViewportRef.current = viewport;
+    }, [viewport]);
+
+    useEffect(
+        () => () => {
+            if (frameRef.current) cancelAnimationFrame(frameRef.current);
+        },
+        [],
+    );
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Control") setIsControlPressed(true);
+            if (event.code !== "Space") return;
+            const target = event.target instanceof Element ? event.target : null;
+            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || target?.closest("[contenteditable='true']")) return;
+            event.preventDefault();
+            setIsSpacePressed(true);
+        };
+
+        const handleKeyUp = (event: KeyboardEvent) => {
+            if (event.code === "Space") {
+                const target = event.target instanceof Element ? event.target : null;
+                if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || target?.closest("[contenteditable='true']"))) event.preventDefault();
+                setIsSpacePressed(false);
+            }
+            if (event.key === "Control") setIsControlPressed(false);
+        };
+
+        const handleBlur = () => {
+            setIsSpacePressed(false);
+            setIsControlPressed(false);
+            panState.current.isPanning = false;
+            setIsPanning(false);
+            document.body.style.cursor = "";
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
+        window.addEventListener("blur", handleBlur);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+            window.removeEventListener("blur", handleBlur);
+        };
+    }, []);
+
+    const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest("[data-canvas-no-zoom],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown")) return;
+
+        const delta = -event.deltaY;
+        const factor = Math.pow(1.1, delta / 100);
+        const newScale = Math.min(Math.max(viewport.k * factor, 0.05), 5);
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+        const worldX = (mouseX - viewport.x) / viewport.k;
+        const worldY = (mouseY - viewport.y) / viewport.k;
+
+        onViewportChange({
+            x: mouseX - worldX * newScale,
+            y: mouseY - worldY * newScale,
+            k: newScale,
+        });
+    };
+
+    const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest("[data-canvas-no-zoom]")) return;
+        if (target?.closest("[data-connection-create-menu]")) return;
+        const isBackgroundClick = !target?.closest("[data-node-id],[data-connection-id]");
+        const temporaryTool = event.ctrlKey || isSpacePressed;
+        const activeTool = temporaryTool ? (tool === "select" ? "pan" : "select") : tool;
+        const shouldPan = event.button === 1 || (event.button === 0 && activeTool === "pan" && isBackgroundClick);
+
+        if (shouldPan) {
+            event.preventDefault();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            panState.current = {
+                isPanning: true,
+                startX: event.clientX,
+                startY: event.clientY,
+                initialX: viewport.x,
+                initialY: viewport.y,
+                hasMoved: false,
+                startedOnBackground: isBackgroundClick,
+            };
+            setIsPanning(true);
+            document.body.style.cursor = "grabbing";
+            return;
+        }
+
+        if (event.button === 0 && isBackgroundClick) {
+            event.preventDefault();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            onCanvasMouseDown?.(event);
+        }
+    };
+
+    const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest("[data-canvas-no-zoom],[data-node-id],[data-connection-id]")) return;
+        onCanvasDoubleClick?.(event);
+    };
+
+    useEffect(() => {
+        const handlePointerMove = (event: PointerEvent) => {
+            if (!panState.current.isPanning) return;
+
+            const dx = event.clientX - panState.current.startX;
+            const dy = event.clientY - panState.current.startY;
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                panState.current.hasMoved = true;
+            }
+
+            nextViewportRef.current = {
+                x: panState.current.initialX + dx,
+                y: panState.current.initialY + dy,
+                k: scaleRef.current,
+            };
+            if (frameRef.current) return;
+            frameRef.current = requestAnimationFrame(() => {
+                frameRef.current = null;
+                if (nextViewportRef.current) onViewportChange(nextViewportRef.current);
+            });
+        };
+
+        const handlePointerUp = () => {
+            if (!panState.current.isPanning) return;
+
+            if (!panState.current.hasMoved && panState.current.startedOnBackground) {
+                onCanvasDeselect?.();
+            }
+            panState.current.isPanning = false;
+            setIsPanning(false);
+            document.body.style.cursor = "";
+        };
+
+        window.addEventListener("pointermove", handlePointerMove);
+        window.addEventListener("pointerup", handlePointerUp);
+        window.addEventListener("pointercancel", handlePointerUp);
+        return () => {
+            window.removeEventListener("pointermove", handlePointerMove);
+            window.removeEventListener("pointerup", handlePointerUp);
+            window.removeEventListener("pointercancel", handlePointerUp);
+            document.body.style.cursor = "";
+        };
+    }, [onCanvasDeselect, onViewportChange]);
+
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        // Prevent canvas scrolling from moving the page while preserving native scrolling inside overlays and dialogs.
+        const preventWheelScroll = (event: WheelEvent) => {
+            const target = event.target instanceof Element ? event.target : null;
+            if (target?.closest("[data-canvas-no-zoom],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown")) return;
+            event.preventDefault();
+        };
+        container.addEventListener("wheel", preventWheelScroll, { passive: false });
+        return () => container.removeEventListener("wheel", preventWheelScroll);
+    }, [containerRef]);
+
+    // 触屏双指手势：捏合缩放 + 双指平移；单指交互仍走原有 pointer 事件，不影响桌面行为。
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        let pinchStart: { dist: number; scale: number; worldX: number; worldY: number } | null = null;
+        const pinchCenter = (event: TouchEvent) => {
+            const [a, b] = [event.touches[0], event.touches[1]];
+            const rect = container.getBoundingClientRect();
+            const centerX = (a.clientX + b.clientX) / 2 - rect.left;
+            const centerY = (a.clientY + b.clientY) / 2 - rect.top;
+            return { centerX, centerY, dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) };
+        };
+        const inInteractiveOverlay = (event: TouchEvent) => {
+            const target = event.target instanceof Element ? event.target : null;
+            return Boolean(target?.closest("[data-canvas-no-zoom],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown,[data-node-panel]"));
+        };
+
+        const handleTouchStart = (event: TouchEvent) => {
+            if (event.touches.length !== 2 || inInteractiveOverlay(event)) return;
+            event.preventDefault();
+            // 第二指落下时终止可能已开始的单指平移，避免手势叠加。
+            panState.current.isPanning = false;
+            setIsPanning(false);
+            document.body.style.cursor = "";
+            const { centerX, centerY, dist } = pinchCenter(event);
+            const current = latestViewportRef.current;
+            pinchStart = { dist: Math.max(1, dist), scale: current.k, worldX: (centerX - current.x) / current.k, worldY: (centerY - current.y) / current.k };
+        };
+
+        const handleTouchMove = (event: TouchEvent) => {
+            if (!pinchStart || event.touches.length !== 2) return;
+            event.preventDefault();
+            const { centerX, centerY, dist } = pinchCenter(event);
+            const factor = dist / pinchStart.dist;
+            const newScale = Math.min(Math.max(pinchStart.scale * factor, 0.05), 5);
+            onViewportChange({
+                x: centerX - pinchStart.worldX * newScale,
+                y: centerY - pinchStart.worldY * newScale,
+                k: newScale,
+            });
+        };
+
+        const handleTouchEnd = (event: TouchEvent) => {
+            if (!pinchStart) return;
+            if (event.touches.length < 2) pinchStart = null;
+        };
+
+        container.addEventListener("touchstart", handleTouchStart, { passive: false });
+        container.addEventListener("touchmove", handleTouchMove, { passive: false });
+        container.addEventListener("touchend", handleTouchEnd);
+        container.addEventListener("touchcancel", handleTouchEnd);
+        return () => {
+            container.removeEventListener("touchstart", handleTouchStart);
+            container.removeEventListener("touchmove", handleTouchMove);
+            container.removeEventListener("touchend", handleTouchEnd);
+            container.removeEventListener("touchcancel", handleTouchEnd);
+        };
+    }, [containerRef, onViewportChange]);
+
+    const temporaryTool = isControlPressed || isSpacePressed;
+    const activeTool = temporaryTool ? (tool === "select" ? "pan" : "select") : tool;
+    const cursor = isPanning ? "grabbing" : activeTool === "pan" ? "grab" : undefined;
+
+    return (
+        <div
+            ref={containerRef}
+            className="relative h-full w-full select-none overflow-hidden"
+            style={{ background: theme.canvas.background, cursor }}
+            onPointerDown={handlePointerDown}
+            onDoubleClick={handleDoubleClick}
+            onWheel={handleWheel}
+            onContextMenu={onContextMenu}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={onDrop}
+        >
+            <CanvasGrid viewport={viewport} mode={backgroundMode} />
+            <div
+                className="absolute origin-top-left"
+                style={{
+                    transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.k})`,
+                }}
+            >
+                {children}
+            </div>
+        </div>
+    );
+}
+
+function CanvasGrid({ viewport, mode }: { viewport: ViewportTransform; mode: CanvasBackgroundMode }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    if (mode === "blank") return null;
+
+    // 迁移自 BeefTV：装饰网格固定在屏幕坐标（48px 一档），缩放时密度不变，
+    // 避免滚轮缩放时点阵变密、出现亚像素抖动。
+    // 圆点留一点点柔边：纯硬边会被栅格成 2×2 的方块，看起来像脏点而不是点阵。
+    const dotCore = viewport.k < 0.12 ? 0.8 : 1;
+    const dotEdge = viewport.k < 0.12 ? 1.4 : 1.75;
+    const backgroundImage =
+        mode === "dots"
+            ? `radial-gradient(circle, ${theme.canvas.dot} ${dotCore}px, transparent ${dotEdge}px)`
+            : `linear-gradient(${theme.canvas.line} 1px, transparent 1px), linear-gradient(90deg, ${theme.canvas.line} 1px, transparent 1px)`;
+
+    return (
+        <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+                backgroundImage,
+                backgroundSize: "48px 48px",
+            }}
+        />
+    );
+}
 
 
 ========================================================================
@@ -882,26 +1203,15 @@ export function creationStatus(status: "success" | "pending" | "failed" | "unava
 
 ========================================================================
 FILE: web/src/components/creation/creation-stream.tsx
-LINES: 1-68
+LINES: 1-51
 ========================================================================
 import { ChatLayout, ChatMessageList } from "@astryxdesign/core/Chat";
 import { InternationalizationProvider } from "@astryxdesign/core/i18n";
 import zhCN from "@astryxdesign/core/locales/zh-CN.generated.js";
-import coreCss from "@astryxdesign/core/astryx.css?inline";
-import themeCss from "@astryxdesign/theme-neutral/theme.css?inline";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useThemeStore } from "@/stores/use-theme-store";
-
-// Keep Astryx's base tokens and atomic styles inside the workbench. Its normal
-// Theme provider also changes <html>; this scope keeps the canvas independent.
-const scopedCss = `@scope (.creation-stream) {\n${`${coreCss}\n${themeCss}`.replaceAll(":root", ":scope")}\n}
-    .creation-stream .astryx-chat-composer div:has(> .creation-actions) { min-width: 0; flex: 1; }
-    @media (max-width: 640px) {
-        .creation-stream .astryx-chat-composer div:has(> div > .creation-actions) { flex-wrap: wrap; }
-        .creation-stream .astryx-chat-composer div:has(> .creation-actions) { flex-basis: 100%; }
-    }`;
 
 export function CreationStream({ children, composer, onScrollTop, tasks = [] }: { children: ReactNode; composer: ReactNode; onScrollTop?: () => void; tasks?: { id: string; status: string }[] }) {
     const theme = useThemeStore((state) => state.theme);
@@ -918,12 +1228,6 @@ export function CreationStream({ children, composer, onScrollTop, tasks = [] }: 
     const upwardIntent = useRef(false);
     const touchY = useRef<number | null>(null);
     const { i18n } = useTranslation();
-    useEffect(() => {
-        const style = document.createElement("style");
-        style.textContent = scopedCss;
-        document.head.appendChild(style);
-        return () => { style.remove(); };
-    }, []);
     return (
         <InternationalizationProvider locale={i18n.resolvedLanguage === "en" ? "en" : "zh-CN"} messages={{ "zh-CN": zhCN }}>
             <div className="creation-stream flex min-h-0 flex-1 flex-col" data-astryx-theme="neutral" style={{ colorScheme: theme }}>
@@ -1974,7 +2278,7 @@ export function UserAccountMenu() {
                                 <span className="tabular-nums text-muted-foreground">{formatStorage(usedBytes)} / {formatStorage(limitBytes)}</span>
                             </div>
                             <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
-                                <span className="block h-full rounded-full bg-[#009EFA] transition-[width]" style={{ width: `${storagePercent}%` }} />
+                                <span className="block h-full rounded-full bg-brand transition-[width]" style={{ width: `${storagePercent}%` }} />
                             </div>
                             {storagePercent >= 90 ? <p className="mt-2 text-xs text-amber-500">{t("account.storageNearlyFull")}</p> : null}
                             <div className="mt-2 flex items-center justify-between gap-2">
@@ -2317,358 +2621,5 @@ LINES: 1-48
     .app-top-nav .nav-item .nav-label::after {
         transition: none;
     }
-}
-
-
-========================================================================
-FILE: web/src/components/layout/app-top-nav.tsx
-LINES: 1-165
-========================================================================
-import { useEffect, useState } from "react";
-import type { ComponentType } from "react";
-import { Code2, Menu, X } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-
-import { BrandWordmark } from "@/components/brand/brand-wordmark";
-import { PromoContactButton } from "@/components/promo/promo-contact-button";
-import { UserAccountMenu } from "@/components/layout/account-menu";
-import { NavAdminIcon, NavAssetsIcon, NavCanvasIcon, NavCreateIcon, NavExploreIcon, NavHomeIcon, NavPromptsIcon } from "@/components/layout/nav-icons";
-import { useAuthStore } from "@/stores/use-auth-store";
-import { AppConfigModalHost } from "@/components/layout/lazy-overlays";
-import { cn } from "@/lib/utils";
-import { prefetchRoute } from "@/lib/route-prefetch";
-import { loadSiteInfo } from "@/services/api/site";
-import "./app-top-nav.css";
-
-export function useApiIntegrationUrl() {
-    const [url, setUrl] = useState("");
-    useEffect(() => {
-        let active = true;
-        void loadSiteInfo().then(({ site }) => {
-            const value = site.apiIntegrationUrl?.trim();
-            if (active && value && /^https?:\/\//i.test(value)) setUrl(value);
-        }).catch(() => undefined);
-        return () => { active = false; };
-    }, []);
-    return url;
-}
-
-type NavIcon = ComponentType<{ className?: string }>;
-type NavItem = { to: string; labelKey: string; icon: NavIcon; match: (pathname: string) => boolean };
-
-const creationNav: NavItem[] = [
-    { to: "/", labelKey: "navigation.home", icon: NavHomeIcon, match: path => path === "/" },
-    { to: "/canvas", labelKey: "navigation.canvas", icon: NavCanvasIcon, match: path => path === "/canvas" },
-    { to: "/create", labelKey: "navigation.create", icon: NavCreateIcon, match: path => ["/create", "/image", "/video"].includes(path) },
-    { to: "/explore", labelKey: "navigation.explore", icon: NavExploreIcon, match: path => path === "/explore" },
-];
-const resourceNav: NavItem[] = [
-    { to: "/assets", labelKey: "navigation.assets", icon: NavAssetsIcon, match: path => path === "/assets" },
-    { to: "/prompts", labelKey: "navigation.prompts", icon: NavPromptsIcon, match: path => path === "/prompts" },
-];
-
-function useNavItems(): NavItem[] {
-    const user = useAuthStore((state) => state.user);
-    return user?.role === "admin"
-        ? [...creationNav, ...resourceNav, { to: "/admin", labelKey: "navigation.admin", icon: NavAdminIcon, match: (path: string) => path === "/admin" }]
-        : [...creationNav, ...resourceNav];
-}
-
-export function AppTopNav({ mobileOpen, onMobileOpen, onMobileClose }: { mobileOpen: boolean; onMobileOpen: () => void; onMobileClose: () => void }) {
-    const { t } = useTranslation();
-    const { pathname } = useLocation();
-    const items = useNavItems();
-    const apiUrl = useApiIntegrationUrl();
-
-    return (
-        <>
-            <header className="app-top-nav sticky top-0 z-40 shrink-0 border-b border-[rgba(255,255,255,0.08)] bg-rail/85 backdrop-blur-[20px]">
-                {/* 头部通栏：布局保留（logo 贴左、导航居中、账户区贴右），视觉按即梦规范 */}
-                <div className="flex h-[64px] w-full items-center gap-5 px-5 md:px-6 xl:px-8">
-                    <Link to="/" className="flex shrink-0 items-center gap-2.5 !text-foreground transition hover:opacity-80">
-                        <img src="/brand/sundas-symbol.svg" alt="" className="size-[26px]" />
-                        <BrandWordmark height={17} decorative />
-                    </Link>
-
-                    <nav className="hidden min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] lg:flex [&::-webkit-scrollbar]:hidden" aria-label="primary">
-                        <div className="mx-auto flex w-max items-center gap-1">
-                            {apiUrl && <a href={apiUrl} target="_blank" rel="noopener noreferrer" className="flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-[8px] px-2.5 text-[13px] font-medium !text-muted-foreground transition-colors hover:text-foreground"><Code2 className="size-4" />API 对接</a>}
-                            {items.map((item) => {
-                                const Icon = item.icon;
-                                const active = item.match(pathname);
-                                return (
-                                    <Link
-                                        key={item.to}
-                                        to={item.to}
-                                        aria-current={active ? "page" : undefined}
-                                        onMouseEnter={() => prefetchRoute(item.to)}
-                                        onFocus={() => prefetchRoute(item.to)}
-                                        className={cn(
-                                            "nav-item relative flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-[8px] px-2.5 text-[13px] font-medium transition-colors duration-150 min-[1360px]:px-3",
-                                            active ? "is-active !text-white" : "!text-muted-foreground hover:!text-foreground",
-                                        )}
-                                    >
-                                        <Icon className="size-4 shrink-0" />
-                                        <span className="nav-label">{t(item.labelKey)}</span>
-                                    </Link>
-                                );
-                            })}
-                        </div>
-                    </nav>
-
-                    <div className="ml-auto flex shrink-0 items-center gap-2 lg:ml-0">
-                        {/* 右侧动作区：不套背景容器，会员/积分/头像三枚胶囊直接贴在顶栏上 */}
-                        <div className="hidden items-center gap-2 md:flex">
-                            <PromoContactButton variant="topbar" />
-                            <UserAccountMenu />
-                        </div>
-                        <div className="flex items-center md:hidden">
-                            <UserAccountMenu />
-                        </div>
-                        <button
-                            type="button"
-                            className="grid size-9 place-items-center rounded-[8px] border border-border text-muted-foreground transition hover:text-foreground lg:hidden"
-                            onClick={onMobileOpen}
-                            aria-label={t("navigation.openMenu")}
-                        >
-                            <Menu className="size-5" />
-                        </button>
-                    </div>
-                </div>
-            </header>
-            {mobileOpen ? <MobileDrawer items={items} pathname={pathname} onNavigate={onMobileClose} /> : null}
-            <AppConfigModalHost />
-        </>
-    );
-}
-
-function MobileDrawer({ items, pathname, onNavigate }: { items: NavItem[]; pathname: string; onNavigate: () => void }) {
-    const { t } = useTranslation();
-    const apiUrl = useApiIntegrationUrl();
-    return (
-        <div className="fixed inset-0 z-50 lg:hidden">
-            <button type="button" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" onClick={onNavigate} aria-label={t("navigation.closeMenu")} />
-            <aside className="absolute left-0 top-0 flex h-full w-[280px] flex-col border-r border-border bg-popover shadow-2xl">
-                <div className="relative flex h-[72px] shrink-0 items-center px-5">
-                    <Link to="/" onClick={onNavigate} className="flex items-center gap-2.5 text-foreground">
-                        <img src="/brand/sundas-symbol.svg" alt="" className="size-6" />
-                        <BrandWordmark height={16} decorative />
-                    </Link>
-                    <button type="button" className="absolute right-3 grid size-8 place-items-center text-muted-foreground hover:text-foreground" onClick={onNavigate} aria-label={t("navigation.closeMenu")}>
-                        <X className="size-4" />
-                    </button>
-                </div>
-                <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-3">
-                    {apiUrl && <a href={apiUrl} target="_blank" rel="noopener noreferrer" onClick={onNavigate} className="flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm !text-muted-foreground hover:!bg-accent hover:text-foreground"><Code2 className="size-4" />API 对接</a>}
-                    {items.map((item) => {
-                        const Icon = item.icon;
-                        const active = item.match(pathname);
-                        return (
-                            <Link
-                                key={item.to}
-                                to={item.to}
-                                aria-current={active ? "page" : undefined}
-                                onClick={onNavigate}
-                                onPointerDown={() => prefetchRoute(item.to)}
-                                className={cn(
-                                    "relative flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm transition-colors",
-                                    active ? "bg-[rgba(255,255,255,0.08)] font-medium !text-foreground" : "!text-muted-foreground hover:!bg-accent hover:!text-foreground",
-                                )}
-                            >
-                                <Icon className={cn("size-4 shrink-0", active ? "text-white" : "text-muted-foreground")} />
-                                <span>{t(item.labelKey)}</span>
-                            </Link>
-                        );
-                    })}
-                </nav>
-                <div className="shrink-0 border-t border-border p-3">
-                    <PromoContactButton />
-                </div>
-            </aside>
-        </div>
-    );
-}
-
-
-========================================================================
-FILE: web/src/components/layout/client-root-init.tsx
-LINES: 1-42
-========================================================================
-import { useEffect } from "react";
-import type { ReactNode } from "react";
-import { App } from "antd";
-
-import { useCloudSync } from "@/hooks/use-cloud-sync";
-import { applyServerModels, type ServerModel } from "@/lib/server-models";
-import { apiRequest } from "@/services/api/client";
-import { useAuthStore } from "@/stores/use-auth-store";
-import { subscribeSessionChanges } from "@/lib/session-broadcast";
-
-export function ClientRootInit({ children }: { children: ReactNode }) {
-    const { message } = App.useApp();
-    useCloudSync();
-
-    useEffect(() => {
-        void useAuthStore.getState().hydrate().catch((error) => message.error(error instanceof Error ? error.message : "无法确认登录状态"));
-        return subscribeSessionChanges(() => { void useAuthStore.getState().externalSessionChanged().catch((error) => message.error(error instanceof Error ? error.message : "无法确认登录状态")); });
-    }, []);
-
-    useEffect(() => {
-        const refresh = () => { if (document.visibilityState === "visible") void useAuthStore.getState().refreshWallet().catch(() => undefined); };
-        document.addEventListener("visibilitychange", refresh);
-        window.addEventListener("online", refresh);
-        return () => { document.removeEventListener("visibilitychange", refresh); window.removeEventListener("online", refresh); };
-    }, []);
-
-    useEffect(() => {
-        let cancelled = false;
-        apiRequest<{ models: ServerModel[] }>("/api/models")
-            .then((data) => {
-                if (!cancelled && data.models.length) applyServerModels(data.models);
-            })
-            .catch(() => {
-                // 模型列表拉取失败时保留本地缓存，登录后还会再拉一次。
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, []);
-
-    return <>{children}</>;
-}
-
-
-========================================================================
-FILE: web/src/components/layout/creation-sidebar.tsx
-LINES: 1-79
-========================================================================
-import { loadCreationChats, useCreationChat } from "@/pages/chat/chat-store";
-import { Drawer } from "antd";
-import { ImagePlus, LayoutGrid, Menu, Video, X, MessageSquare } from "lucide-react";
-import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-
-import { useAuthStore } from "@/stores/use-auth-store";
-import { isCanvasAccountActive, useCanvasStore } from "@/stores/canvas/use-canvas-store";
-import { useCreationHistory } from "@/components/creation/creation-history";
-import { fetchRecentGenerationHistory } from "@/services/api/generation-history";
-
-export function CreationSidebar() {
-    const [open, setOpen] = useState(false);
-    const { pathname, search } = useLocation();
-    const user = useAuthStore((state) => state.user);
-    const ready = useAuthStore((state) => state.ready);
-    const epoch = useAuthStore((state) => state.sessionEpoch);
-    const history = useCreationHistory();
-    const chats = useCreationChat();
-    useEffect(() => { if (ready && user) void loadCreationChats(user.id); }, [ready, user?.id]);
-    const threads = chats.owner === user?.id ? chats.threads : [];
-    useEffect(() => { setOpen(false); }, [pathname, search]);
-    useEffect(() => {
-        if (!ready || !user) return;
-        const owner = user.id;
-        const session = `${owner}:${epoch}`;
-        const videoMode = pathname === "/video" || (pathname === "/create" && new URLSearchParams(search).get("mode") === "video");
-        const modes: ("image" | "video")[] = videoMode ? ["image"] : pathname === "/image" || pathname === "/create" ? ["video"] : ["image", "video"];
-        let active = true;
-        for (const mode of modes) {
-            const current = useCreationHistory.getState();
-            if (current.session === session && current[mode].length) continue;
-            void fetchRecentGenerationHistory(owner, mode).then((items) => {
-                const auth = useAuthStore.getState();
-                const currentState = useCreationHistory.getState();
-                if (active && auth.ready && auth.user?.id === owner && auth.sessionEpoch === epoch && (currentState.session !== session || !currentState[mode].length)) currentState.update(session, mode, items);
-            }).catch(() => undefined);
-        }
-        return () => { active = false; };
-    }, [ready, user?.id, epoch, pathname, search]);
-    const projects = useCanvasStore((state) => state.projects);
-    const hydrated = useCanvasStore((state) => state.hydrated);
-    const recent = ready && hydrated && user && isCanvasAccountActive(user.id)
-        ? [...projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4)
-        : [];
-
-    const recentGenerations = ready && user && history.session === `${user.id}:${epoch}`
-        ? [...history.image, ...history.video].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5)
-        : [];
-    const recentWorks = [
-        ...threads.filter(t => t.messages.length || t.records.length || t.draft).map(t => ({ key: `chat:${t.id}`, title: t.title, time: t.updatedAt, to: `/create?mode=chat&thread=${t.id}`, icon: MessageSquare, type: "对话" })),
-        ...recentGenerations.map(item => ({ key: `${item.mode}:${item.id}`, title: item.title, time: item.createdAt, to: threads.some(t => t.records.some(r => r.id === item.id)) ? `/create?mode=chat&thread=${threads.find(t => t.records.some(r => r.id === item.id))!.id}` : `/create?mode=${item.mode}&record=${encodeURIComponent(item.id)}`, icon: item.mode === "image" ? ImagePlus : Video, type: item.mode === "image" ? "图片" : "视频" })),
-        ...recent.map(project => ({ key: `canvas:${project.id}`, title: project.title, time: new Date(project.updatedAt).getTime(), to: `/canvas/${project.id}`, icon: LayoutGrid, type: "画布" })),
-    ].sort((a, b) => b.time - a.time);
-
-    const sidebar = (
-        <aside className="creation-sidebar flex h-full w-[220px] lg:w-[240px] shrink-0 flex-col border-r border-border text-foreground">
-            <div className="flex h-16 items-center justify-between px-5">
-                <h2 className="text-sm font-semibold">最近作品</h2>
-                <button type="button" onClick={() => setOpen(false)} className="text-muted-foreground lg:hidden" aria-label="关闭最近作品"><X className="size-5" /></button>
-            </div>
-            <nav className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-4" aria-label="最近作品">
-                {user && <div>
-                    {recentWorks.map(({ key, title, to, icon: Icon, type }) => <Link key={key} to={to} aria-current={`${pathname}${search}` === to ? "page" : undefined} title={`${type} · ${title}`} onClick={() => setOpen(false)} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm !text-muted-foreground hover:bg-muted hover:!text-foreground"><Icon className="size-3.5 shrink-0" /><span className="min-w-0 flex-1 truncate">{title}</span><span className="shrink-0 text-xs">{type}</span></Link>)}
-                    {recentWorks.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">暂无最近作品</p>}
-                    <div className="mt-2 flex gap-3 px-3 text-xs"><Link to="/create" onClick={() => setOpen(false)} className="!text-muted-foreground hover:!text-foreground">生成历史</Link><Link to="/canvas" onClick={() => setOpen(false)} className="!text-muted-foreground hover:!text-foreground">全部画布</Link></div>
-                </div>}
-            </nav>
-
-        </aside>
-    );
-    // 未登录访客没有「最近作品」，不占侧栏宽度
-    if (!user) return null;
-    return <>
-        <div className="hidden h-full lg:block">{sidebar}</div>
-        <button type="button" onClick={() => setOpen(true)} className="m-2 flex shrink-0 items-center gap-2 self-start rounded-lg px-3 py-2 text-xs text-muted-foreground hover:bg-muted lg:hidden" aria-label="打开最近作品" aria-expanded={open} aria-controls="creation-mobile-navigation"><Menu className="size-4" />最近作品</button>
-        <Drawer open={open} onClose={() => setOpen(false)} placement="left" size={220} closable={false} styles={{ body: { padding: 0 } }} rootClassName="creation-mobile-drawer" destroyOnHidden><div id="creation-mobile-navigation" className="creation-shell h-full">{sidebar}</div></Drawer>
-    </>;
-}
-
-
-========================================================================
-FILE: web/src/components/layout/lazy-overlays.tsx
-LINES: 1-43
-========================================================================
-import { Suspense, lazy, useEffect, useState } from "react";
-
-import { useAuthDialogStore } from "@/stores/use-auth-dialog-store";
-import { useConfigStore } from "@/stores/use-config-store";
-
-/**
- * 全局浮层（登录弹窗 / 偏好设置弹窗）按需加载：
- * 这两块只在用户主动触发时才出现，但会静态带进 antd 的 Form / Modal / Select / Radio / Switch，
- * 是首屏包最大的一块业务开销。默认不挂载 → chunk 不下载；
- * 首次打开后保持挂载，关闭动画与内部状态与原来一致。
- */
-const AuthDialog = lazy(() => import("@/components/auth/auth-dialog").then((module) => ({ default: module.AuthDialog })));
-const AppConfigModal = lazy(() => import("@/components/layout/app-config-modal").then((module) => ({ default: module.AppConfigModal })));
-
-function useKeepMountedWhen(open: boolean) {
-    const [mounted, setMounted] = useState(open);
-    useEffect(() => {
-        if (open) setMounted(true);
-    }, [open]);
-    return mounted;
-}
-
-export function AuthDialogHost() {
-    const open = useAuthDialogStore((state) => state.mode !== null);
-    const mounted = useKeepMountedWhen(open);
-    if (!mounted) return null;
-    return (
-        <Suspense fallback={null}>
-            <AuthDialog />
-        </Suspense>
-    );
-}
-
-export function AppConfigModalHost() {
-    const open = useConfigStore((state) => state.isConfigOpen);
-    const mounted = useKeepMountedWhen(open);
-    if (!mounted) return null;
-    return (
-        <Suspense fallback={null}>
-            <AppConfigModal />
-        </Suspense>
-    );
 }
 

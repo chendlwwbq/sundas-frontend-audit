@@ -1,7 +1,981 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-scene.ts
+LINES: 1-483
+========================================================================
+import { nanoid } from "nanoid";
+import { Color, Euler, Quaternion } from "three";
+
+import type { DirectorBoneKeyframe, DirectorBoneTrack, DirectorCamera, DirectorGroup, DirectorHumanoidBone, DirectorKeyframe, DirectorKeyframeDeleteTarget, DirectorKeyframeEasing, DirectorLight, DirectorObject, DirectorPose, DirectorQuat, DirectorScene, DirectorTransform, DirectorVec3 } from "@/types/director";
+import { DIRECTOR_DEFAULT_GROUND } from "@/lib/canvas/director/director-ground";
+import { DIRECTOR_QUATERNIUS_MALE_URL } from "@/lib/canvas/director/director-actor-assets";
+import { DIRECTOR_DEFAULT_STAGE_TRANSFORM } from "@/lib/canvas/director/director-stage-transform";
+
+export { directorPoseChainBones, resolveDirectorPoseTargets, resolveDirectorTwoBoneJoint } from "@/lib/canvas/director/director-pose-solving";
+
+export const DIRECTOR_DEFAULT_ACTOR_URL = DIRECTOR_QUATERNIUS_MALE_URL;
+export const DIRECTOR_ACTOR_COLORS = ["#4f8ef7", "#202329", "#2f7de1", "#d84949", "#dfae3f", "#34a276"] as const;
+
+export const directorIdentityTransform = (position: DirectorVec3 = [0, 0, 0]): DirectorTransform => ({ position, rotation: [0, 0, 0], scale: [1, 1, 1] });
+
+export function createDirectorScene(title = "未命名场景"): DirectorScene {
+    const now = new Date().toISOString();
+    const camera = createDirectorCamera();
+    const shotId = nanoid();
+    return {
+        id: nanoid(),
+        version: 1,
+        title,
+        background: "#060608",
+        environmentIntensity: 0.7,
+        gridVisible: true,
+        gridSnap: false,
+        panoramaRotation: 0,
+        panoramaRadius: 60,
+        ground: { ...DIRECTOR_DEFAULT_GROUND },
+        stageTransform: { ...DIRECTOR_DEFAULT_STAGE_TRANSFORM, position: [...DIRECTOR_DEFAULT_STAGE_TRANSFORM.position], rotation: [...DIRECTOR_DEFAULT_STAGE_TRANSFORM.rotation] },
+        labelsVisible: true,
+        aspectRatio: "adaptive",
+        objects: [createDirectorActor("演员 1", [0, 0, 0])],
+        cameras: [camera],
+        lights: [createDirectorLight("directional", "主光", [4, 6, 4], 2.4), createDirectorLight("directional", "轮廓光", [-4, 3, -2], 1.1), createDirectorLight("ambient", "环境光", [0, 0, 0], 0.65)],
+        shots: [{ id: shotId, name: "镜头 1", cameraId: camera.id, duration: 5, fps: 24, shotSize: "medium", cameraMove: "static", prompt: "" }],
+        activeShotId: shotId,
+        createdAt: now,
+        updatedAt: now,
+    };
+}
+
+export function toggleDirectorObjectVisibility(scene: DirectorScene, id: string): DirectorScene {
+    if (!scene.objects.some((object) => object.id === id)) return scene;
+    return { ...scene, objects: scene.objects.map((object) => object.id === id ? { ...object, visible: !object.visible } : object) };
+}
+
+export function toggleDirectorObjectLock(scene: DirectorScene, id: string): DirectorScene {
+    if (!scene.objects.some((object) => object.id === id)) return scene;
+    return { ...scene, objects: scene.objects.map((object) => object.id === id ? { ...object, locked: !object.locked } : object) };
+}
+
+export function visibleDirectorCameras(scene: DirectorScene): DirectorCamera[] {
+    return scene.cameras.filter((camera) => camera.visible !== false);
+}
+
+export function toggleDirectorCameraVisibility(scene: DirectorScene, id: string): DirectorScene {
+    if (!scene.cameras.some((camera) => camera.id === id)) return scene;
+    return { ...scene, cameras: scene.cameras.map((camera) => camera.id === id ? { ...camera, visible: camera.visible === false } : camera) };
+}
+
+export function toggleDirectorCameraLock(scene: DirectorScene, id: string): DirectorScene {
+    if (!scene.cameras.some((camera) => camera.id === id)) return scene;
+    return { ...scene, cameras: scene.cameras.map((camera) => camera.id === id ? { ...camera, locked: !camera.locked } : camera) };
+}
+
+/** 副本保留媒体与动画内容，但所有可编辑记录均有独立标识与引用。 */
+export function duplicateDirectorObject(source: DirectorObject): DirectorObject {
+    const copy = structuredClone(source);
+    const ids = new Map(copy.keyframes.map((frame) => [frame.id, nanoid()]));
+    return {
+        ...copy,
+        id: nanoid(),
+        name: `${source.name}副本`,
+        keyframes: copy.keyframes.map((frame) => ({ ...frame, id: ids.get(frame.id)! })),
+        motionPath: copy.motionPath && { ...copy.motionPath, controlKeyframeIds: copy.motionPath.controlKeyframeIds?.flatMap((id) => ids.has(id) ? [ids.get(id)!] : []), originalKeyframes: copy.motionPath.originalKeyframes.map((frame) => ({ ...frame, id: nanoid() })) },
+        boneTracks: copy.boneTracks?.map((track) => ({ ...track, keyframes: track.keyframes.map((frame) => ({ ...frame, id: nanoid() })) })),
+    };
+}
+
+export function duplicateDirectorCamera(source: DirectorCamera): DirectorCamera {
+    const copy = structuredClone(source);
+    const ids = new Map(copy.keyframes.map((frame) => [frame.id, nanoid()]));
+    return { ...copy, id: nanoid(), name: `${source.name}副本`, keyframes: copy.keyframes.map((frame) => ({ ...frame, id: ids.get(frame.id)! })), drawnPath: copy.drawnPath && { ...copy.drawnPath, sampleKeyframeIds: copy.drawnPath.sampleKeyframeIds.flatMap((id) => ids.has(id) ? [ids.get(id)!] : []), originalKeyframes: copy.drawnPath.originalKeyframes?.map((frame) => ({ ...frame, id: nanoid() })) } };
+}
+
+export function groupDirectorObjects(scene: DirectorScene, ids: string[]): DirectorScene {
+    const selected = new Set(ids);
+    const members = scene.objects.filter((object) => selected.has(object.id));
+    if (members.length < 2) return scene;
+    const groups = scene.groups || [];
+    let index = 1;
+    while (groups.some((group) => group.name === `分组${index}`)) index += 1;
+    const group: DirectorGroup = { id: nanoid(), name: `分组${index}`, collapsed: false };
+    const objects = scene.objects.map((object) => selected.has(object.id) ? { ...object, groupId: group.id } : object);
+    const remainingGroups = groups.filter((entry) => objects.some((object) => object.groupId === entry.id));
+    return { ...scene, groups: [...remainingGroups, group], objects };
+}
+
+export function toggleDirectorGroupVisibility(scene: DirectorScene, id: string): DirectorScene {
+    const members = scene.objects.filter((object) => object.groupId === id);
+    if (!members.length) return scene;
+    const visible = members.some((object) => !object.visible);
+    return { ...scene, objects: scene.objects.map((object) => object.groupId === id ? { ...object, visible } : object) };
+}
+
+export function toggleDirectorGroupLock(scene: DirectorScene, id: string): DirectorScene {
+    const members = scene.objects.filter((object) => object.groupId === id);
+    if (!members.length) return scene;
+    const locked = members.some((object) => !object.locked);
+    return { ...scene, objects: scene.objects.map((object) => object.groupId === id ? { ...object, locked } : object) };
+}
+
+export function duplicateDirectorGroup(scene: DirectorScene, id: string): DirectorScene {
+    const group = scene.groups?.find((entry) => entry.id === id);
+    const members = scene.objects.filter((object) => object.groupId === id);
+    if (!group || members.length === 0) return scene;
+    const copyId = nanoid();
+    const duplicate: DirectorGroup = { id: copyId, name: `${group.name}副本`, collapsed: false };
+    const objects = members.map((object) => ({ ...duplicateDirectorObject(object), groupId: copyId }));
+    return { ...scene, groups: [...(scene.groups || []), duplicate], objects: [...scene.objects, ...objects] };
+}
+
+export function toggleDirectorGroupCollapsed(scene: DirectorScene, id: string): DirectorScene {
+    if (!scene.groups?.some((group) => group.id === id)) return scene;
+    return { ...scene, groups: scene.groups.map((group) => group.id === id ? { ...group, collapsed: !group.collapsed } : group) };
+}
+
+export function ungroupDirectorObjects(scene: DirectorScene, id: string): DirectorScene {
+    if (!scene.groups?.some((group) => group.id === id)) return scene;
+    const groups = scene.groups.filter((group) => group.id !== id);
+    return { ...scene, groups: groups.length ? groups : undefined, objects: scene.objects.map((object) => object.groupId === id ? { ...object, groupId: undefined } : object) };
+}
+
+export function createDirectorObject(primitive: DirectorObject["primitive"] = "box", name = "新对象", position: DirectorVec3 = [0, 0.5, 0], color = "#8795a5"): DirectorObject {
+    return {
+        id: nanoid(),
+        name,
+        kind: "primitive",
+        primitive,
+        transform: directorIdentityTransform(position),
+        color,
+        visible: true,
+        castShadow: true,
+        receiveShadow: true,
+        pose: primitive === "character" ? "stand" : undefined,
+        keyframes: [],
+    };
+}
+
+/** 统一倍率按比例作用于基础值和所有关键帧；轴向不等比缩放仍保留。 */
+export function applyDirectorUniformScale(object: DirectorObject, input: number): DirectorObject {
+    if (!Number.isFinite(input)) return object;
+    const next = Math.max(0.1, Math.min(10, input));
+    const previous = object.uniformScale && Number.isFinite(object.uniformScale) && object.uniformScale > 0 ? object.uniformScale : 1;
+    if (next === previous) return object;
+    const ratio = next / previous;
+    const scale = (values: DirectorVec3): DirectorVec3 => values.map((value) => value * ratio) as DirectorVec3;
+    return {
+        ...object,
+        uniformScale: next,
+        transform: { ...object.transform, scale: scale(object.transform.scale) },
+        keyframes: object.keyframes.map((frame) => ({ ...frame, transform: { ...frame.transform, scale: scale(frame.transform.scale) } })),
+    };
+}
+
+export function createDirectorActor(name = "演员", position: DirectorVec3 = [0, 0, 0], color: string = DIRECTOR_ACTOR_COLORS[0]): DirectorObject {
+    return {
+        ...createDirectorObject("box", name, position, color),
+        kind: "actor",
+        primitive: undefined,
+        actorPreset: "standard_male",
+        url: DIRECTOR_QUATERNIUS_MALE_URL,
+        mimeType: "model/gltf-binary",
+        pose: "stand",
+        rig: { status: "unmapped", boneMap: {}, animationNames: [] },
+        motionClips: [],
+        boneOverrides: {},
+        boneTracks: [],
+    };
+}
+
+export function createDirectorModel(input: Pick<DirectorObject, "name" | "storageKey" | "url" | "mimeType" | "assetId">): DirectorObject {
+    return { ...createDirectorObject("box", input.name, [0, 0, 0]), ...input, kind: "model", primitive: undefined };
+}
+
+export function createDirectorBillboard(name: string, url: string, storageKey?: string, sourceNodeId?: string): DirectorObject {
+    return { ...createDirectorObject("plane", name, [0, 1.1, 0], "#ffffff"), kind: "billboard", url, storageKey, sourceNodeId, transform: { position: [0, 1.1, 0], rotation: [0, 0, 0], scale: [1.6, 0.9, 1] } };
+}
+
+export function createDirectorCamera(name = "机位1"): DirectorCamera {
+    return { id: nanoid(), name, transform: directorIdentityTransform([0, 2.2, 10]), target: [0, 1.2, 0], focalLength: 35, fov: 50, aperture: 2.8, focusDistance: 5, near: 0.05, far: 500, keyframes: [] };
+}
+
+/** 35mm 全画幅水平视角换算。摄影机检查器与场景模板共用，避免两处各写一份光学。 */
+export function directorFocalLengthToFov(focalLength: number) {
+    return (2 * Math.atan(36 / (2 * Math.max(1, focalLength))) * 180) / Math.PI;
+}
+
+/** 与焦距编辑使用同一 35mm 全画幅模型，FOV 调整后两项保持同步。 */
+export function directorFovToFocalLength(fov: number) {
+    return 18 / Math.tan((Math.max(1, Math.min(179, fov)) * Math.PI) / 360);
+}
+
+export function createDirectorLight(type: DirectorLight["type"], name: string, position: DirectorVec3, intensity = 1): DirectorLight {
+    return { id: nanoid(), name, type, transform: directorIdentityTransform(position), color: "#ffffff", intensity, angle: Math.PI / 4, penumbra: 0.35, castShadow: type !== "ambient" };
+}
+
+export function touchDirectorScene(scene: DirectorScene): DirectorScene {
+    return { ...scene, updatedAt: new Date().toISOString() };
+}
+
+/** 关键帧命中容差：upsert 与 remove 必须同判据，否则会出现「记录能覆盖但删不掉」。 */
+export const DIRECTOR_KEYFRAME_EPSILON = 0.001;
+
+export function upsertDirectorKeyframe(keyframes: DirectorKeyframe[], time: number, transform: DirectorTransform) {
+    const current = keyframes.find((item) => Math.abs(item.time - time) < DIRECTOR_KEYFRAME_EPSILON);
+    const next = current ? keyframes.map((item) => (item.id === current.id ? { ...item, transform } : item)) : [...keyframes, { id: nanoid(), time, transform }];
+    return next.sort((a, b) => a.time - b.time);
+}
+
+export function upsertDirectorBoneKeyframe(tracks: DirectorBoneTrack[], bone: DirectorHumanoidBone, time: number, rotation: DirectorQuat) {
+    const track = tracks.find((item) => item.bone === bone);
+    const nextKeyframes = upsertBoneKeyframe(track?.keyframes || [], time, rotation);
+    return track ? tracks.map((item) => item.bone === bone ? { ...item, keyframes: nextKeyframes } : item) : [...tracks, { bone, keyframes: nextKeyframes }];
+}
+
+function upsertBoneKeyframe(keyframes: DirectorBoneKeyframe[], time: number, rotation: DirectorQuat) {
+    const current = keyframes.find((item) => Math.abs(item.time - time) < DIRECTOR_KEYFRAME_EPSILON);
+    const next = current ? keyframes.map((item) => item.id === current.id ? { ...item, rotation } : item) : [...keyframes, { id: nanoid(), time, rotation }];
+    return next.sort((a, b) => a.time - b.time);
+}
+
+/** 按 id 删除对象 transform 关键帧；id 不存在时返回原数组引用。 */
+export function removeDirectorKeyframe(keyframes: DirectorKeyframe[], keyframeId: string): DirectorKeyframe[] {
+    if (!keyframes.some((item) => item.id === keyframeId)) return keyframes;
+    return keyframes.filter((item) => item.id !== keyframeId);
+}
+
+/**
+ * 按 id 删除某骨骼轨道上的关键帧。
+ * 轨道被删空后整条移除，否则时间轴会留下永远为空的子轨道。
+ */
+export function removeDirectorBoneKeyframe(tracks: DirectorBoneTrack[], bone: DirectorHumanoidBone, keyframeId: string): DirectorBoneTrack[] {
+    const track = tracks.find((item) => item.bone === bone);
+    if (!track?.keyframes.some((item) => item.id === keyframeId)) return tracks;
+
+    const nextKeyframes = track.keyframes.filter((item) => item.id !== keyframeId);
+    if (!nextKeyframes.length) return tracks.filter((item) => item.bone !== bone);
+    return tracks.map((item) => (item.bone === bone ? { ...item, keyframes: nextKeyframes } : item));
+}
+
+/**
+ * 时间轴删除关键帧的唯一入口：按轨道类型分派到对应领域函数。
+ *
+ * 未命中（对象/摄影机/骨骼/关键帧任一不存在）时返回同一个 scene 引用，
+ * 调用方据此跳过历史与保存，避免「点了没删掉却多一次修订」。
+ */
+export function removeDirectorSceneKeyframe(scene: DirectorScene, target: DirectorKeyframeDeleteTarget): DirectorScene {
+    if (target.track === "camera") {
+        const camera = scene.cameras.find((item) => item.id === target.cameraId);
+        if (!camera) return scene;
+        const frame = camera.keyframes.find((item) => item.id === target.keyframeId);
+        if (!frame) return scene;
+        if (target.channel === "position" && (!frame || frame.positionKeyed === false)) return scene;
+        if (target.channel === "rotation" && frame.rotationKeyed === false) return scene;
+        if (target.channel === "focus" && frame?.target === undefined) return scene;
+        if (target.channel === "fov" && frame?.fov === undefined) return scene;
+        if (!target.channel) return { ...scene, cameras: scene.cameras.map((item) => item.id === camera.id ? {
+            ...item,
+            keyframes: removeDirectorKeyframe(item.keyframes, target.keyframeId),
+            ...(item.drawnPath ? { drawnPath: { ...item.drawnPath, sampleKeyframeIds: item.drawnPath.sampleKeyframeIds.filter((id) => id !== target.keyframeId) } } : {}),
+        } : item) };
+        const nextFrame = target.channel === "position" ? { ...frame, positionKeyed: false }
+            : target.channel === "rotation" ? { ...frame, rotationKeyed: false }
+                : target.channel === "focus" ? { ...frame, target: undefined }
+                    : { ...frame, fov: undefined };
+        const hasOtherTrack = nextFrame.positionKeyed !== false || nextFrame.rotationKeyed !== false || nextFrame.target !== undefined || nextFrame.fov !== undefined;
+        const keyframes = hasOtherTrack
+            ? camera.keyframes.map((item) => item.id === target.keyframeId ? nextFrame : item)
+            : removeDirectorKeyframe(camera.keyframes, target.keyframeId);
+        if (keyframes === camera.keyframes) return scene;
+        return { ...scene, cameras: scene.cameras.map((item) => (item.id === camera.id ? { ...item, keyframes } : item)) };
+    }
+
+    const object = scene.objects.find((item) => item.id === target.objectId);
+    if (!object) return scene;
+
+    if (target.track === "object-transform") {
+        const frame = object.keyframes.find((item) => item.id === target.keyframeId);
+        if (!frame || (target.channel && frame[`${target.channel}Keyed`] === false)) return scene;
+        const nextFrame = target.channel ? { ...frame, [`${target.channel}Keyed`]: false } : null;
+        const keyframes = nextFrame && (nextFrame.positionKeyed !== false || nextFrame.rotationKeyed !== false || nextFrame.scaleKeyed !== false)
+            ? object.keyframes.map((item) => item.id === frame.id ? nextFrame : item)
+            : removeDirectorKeyframe(object.keyframes, target.keyframeId);
+        if (keyframes === object.keyframes) return scene;
+        return { ...scene, objects: scene.objects.map((item) => (item.id === object.id ? {
+            ...item,
+            keyframes,
+            ...(item.motionPath?.controlKeyframeIds ? { motionPath: { ...item.motionPath, controlKeyframeIds: item.motionPath.controlKeyframeIds.filter((id) => id !== target.keyframeId) } } : {}),
+        } : item)) };
+    }
+
+    const tracks = object.boneTracks || [];
+    const boneTracks = removeDirectorBoneKeyframe(tracks, target.bone, target.keyframeId);
+    if (boneTracks === tracks) return scene;
+    return { ...scene, objects: scene.objects.map((item) => (item.id === object.id ? { ...item, boneTracks } : item)) };
+}
+
+/**
+ * 更新一枚关键帧后续区间的缓动。未命中时返回原 scene 引用，调用方据此跳过历史与保存。
+ */
+export function setDirectorSceneKeyframeEasing(scene: DirectorScene, target: DirectorKeyframeDeleteTarget, easing: DirectorKeyframeEasing): DirectorScene {
+    const update = <T extends { id: string; easing?: DirectorKeyframeEasing }>(keyframes: T[]) => {
+        if (!keyframes.some((item) => item.id === target.keyframeId)) return keyframes;
+        return keyframes.map((item) => item.id === target.keyframeId ? { ...item, easing } : item);
+    };
+
+    if (target.track === "camera") {
+        const camera = scene.cameras.find((item) => item.id === target.cameraId);
+        if (!camera) return scene;
+        const keyframes = update(camera.keyframes);
+        if (keyframes === camera.keyframes) return scene;
+        return { ...scene, cameras: scene.cameras.map((item) => item.id === camera.id ? { ...item, keyframes } : item) };
+    }
+
+    const object = scene.objects.find((item) => item.id === target.objectId);
+    if (!object) return scene;
+    if (target.track === "object-transform") {
+        const keyframes = update(object.keyframes);
+        if (keyframes === object.keyframes) return scene;
+        return { ...scene, objects: scene.objects.map((item) => item.id === object.id ? { ...item, keyframes } : item) };
+    }
+
+    const tracks = object.boneTracks || [];
+    const track = tracks.find((item) => item.bone === target.bone);
+    if (!track) return scene;
+    const keyframes = update(track.keyframes);
+    if (keyframes === track.keyframes) return scene;
+    const boneTracks = tracks.map((item) => item.bone === target.bone ? { ...item, keyframes } : item);
+    return { ...scene, objects: scene.objects.map((item) => item.id === object.id ? { ...item, boneTracks } : item) };
+}
+
+/** 缓动属于前一枚关键帧到下一枚关键帧的区间。旧数据未声明时保持线性。 */
+export function resolveDirectorKeyframeProgress(progress: number, easing: DirectorKeyframeEasing = "linear") {
+    const clamped = Math.max(0, Math.min(1, progress));
+    if (easing === "step") return 0;
+    if (easing === "smooth") return clamped * clamped * (3 - 2 * clamped);
+    return clamped;
+}
+
+/** 轨迹渲染只接受有限时间与位置；坏数据不得进入 Three 几何体。 */
+export function finiteDirectorTransformKeyframes(keyframes: DirectorKeyframe[]) {
+    return keyframes.filter((keyframe) => keyframe.positionKeyed !== false && [keyframe.time, ...keyframe.transform.position].every(Number.isFinite));
+}
+
+/** 按时间顺序累计 Transform 关键帧路径长度；非法时间或坐标段忽略，不污染界面统计。 */
+export function directorTransformPathLength(keyframes: DirectorKeyframe[]) {
+    const sorted = keyframes.filter((keyframe) => keyframe.positionKeyed !== false).sort((left, right) => left.time - right.time);
+    let length = 0;
+    for (let index = 1; index < sorted.length; index += 1) {
+        const previousTime = sorted[index - 1].time;
+        const currentTime = sorted[index].time;
+        const previous = sorted[index - 1].transform.position;
+        const current = sorted[index].transform.position;
+        if (![previousTime, currentTime, ...previous, ...current].every(Number.isFinite)) continue;
+        length += Math.hypot(current[0] - previous[0], current[1] - previous[1], current[2] - previous[2]);
+    }
+    return length;
+}
+
+export function interpolateDirectorTransform(base: DirectorTransform, keyframes: DirectorKeyframe[], time: number): DirectorTransform {
+    if (keyframes.some((frame) => frame.positionKeyed === false || frame.rotationKeyed === false || frame.scaleKeyed === false)) {
+        return {
+            position: interpolateDirectorTransformUnfiltered(base, keyframes.filter((frame) => frame.positionKeyed !== false), time).position,
+            rotation: interpolateDirectorTransformUnfiltered(base, keyframes.filter((frame) => frame.rotationKeyed !== false), time).rotation,
+            scale: interpolateDirectorTransformUnfiltered(base, keyframes.filter((frame) => frame.scaleKeyed !== false), time).scale,
+        };
+    }
+    return interpolateDirectorTransformUnfiltered(base, keyframes, time);
+}
+
+function interpolateDirectorTransformUnfiltered(base: DirectorTransform, keyframes: DirectorKeyframe[], time: number): DirectorTransform {
+    if (!keyframes.length) return base;
+    const previous = [...keyframes].reverse().find((item) => item.time <= time) || keyframes[0];
+    const next = keyframes.find((item) => item.time >= time) || keyframes[keyframes.length - 1];
+    if (previous.id === next.id) return previous.transform;
+    const progress = resolveDirectorKeyframeProgress((time - previous.time) / Math.max(next.time - previous.time, DIRECTOR_KEYFRAME_EPSILON), previous.easing);
+    const rotation = new Quaternion().setFromEuler(new Euler(...previous.transform.rotation)).slerp(new Quaternion().setFromEuler(new Euler(...next.transform.rotation)), progress);
+    return {
+        position: lerpVec3(previous.transform.position, next.transform.position, progress),
+        rotation: new Euler().setFromQuaternion(rotation).toArray().slice(0, 3) as DirectorVec3,
+        scale: lerpVec3(previous.transform.scale, next.transform.scale, progress),
+    };
+}
+
+export function interpolateDirectorBoneRotation(base: DirectorQuat, keyframes: DirectorBoneKeyframe[], time: number): DirectorQuat {
+    if (!keyframes.length) return base;
+    const previous = [...keyframes].reverse().find((item) => item.time <= time) || keyframes[0];
+    const next = keyframes.find((item) => item.time >= time) || keyframes[keyframes.length - 1];
+    if (previous.id === next.id) return previous.rotation;
+    const progress = resolveDirectorKeyframeProgress((time - previous.time) / Math.max(next.time - previous.time, DIRECTOR_KEYFRAME_EPSILON), previous.easing);
+    return new Quaternion(...previous.rotation).slerp(new Quaternion(...next.rotation), progress).toArray() as DirectorQuat;
+}
+
+export function directorBoneLabel(bone: string) {
+    return ({
+        hips: "骨盆", spine: "脊柱", chest: "胸腔", neck: "颈部", head: "头部",
+        leftShoulder: "左肩", leftUpperArm: "左上臂", leftLowerArm: "左前臂", leftHand: "左手",
+        rightShoulder: "右肩", rightUpperArm: "右上臂", rightLowerArm: "右前臂", rightHand: "右手",
+        leftUpperLeg: "左大腿", leftLowerLeg: "左小腿", leftFoot: "左脚",
+        rightUpperLeg: "右大腿", rightLowerLeg: "右小腿", rightFoot: "右脚",
+        leftThumb1: "左拇指·根", leftThumb2: "左拇指·中", leftThumb3: "左拇指·尖",
+        leftIndex1: "左食指·根", leftIndex2: "左食指·中", leftIndex3: "左食指·尖",
+        leftMiddle1: "左中指·根", leftMiddle2: "左中指·中", leftMiddle3: "左中指·尖",
+        leftRing1: "左无名指·根", leftRing2: "左无名指·中", leftRing3: "左无名指·尖",
+        leftPinky1: "左小指·根", leftPinky2: "左小指·中", leftPinky3: "左小指·尖",
+        rightThumb1: "右拇指·根", rightThumb2: "右拇指·中", rightThumb3: "右拇指·尖",
+        rightIndex1: "右食指·根", rightIndex2: "右食指·中", rightIndex3: "右食指·尖",
+        rightMiddle1: "右中指·根", rightMiddle2: "右中指·中", rightMiddle3: "右中指·尖",
+        rightRing1: "右无名指·根", rightRing2: "右无名指·中", rightRing3: "右无名指·尖",
+        rightPinky1: "右小指·根", rightPinky2: "右小指·中", rightPinky3: "右小指·尖",
+    } as Record<string, string>)[bone] || bone;
+}
+
+export function directorPoseLabel(pose: DirectorPose) {
+    return ({ neutral: "自然", stand: "站立", t_pose: "T 型", walk: "行走", run: "跑步", sit: "坐姿", squat: "蹲下", kneel_single: "单膝跪", kneel_double: "双膝跪", hands_hips: "叉腰", lean: "倚靠", bow: "鞠躬", think: "思考", fight: "格斗", kick: "踢球", throw: "投掷", push: "推进", wave: "招手", reach: "伸手", arms_crossed: "抱臂", phone: "看手机" } as Record<DirectorPose, string>)[pose];
+}
+
+export function directorPoseBoneDeltas(pose: DirectorPose): Partial<Record<DirectorHumanoidBone, DirectorQuat>> {
+    // Soldier 的左右上臂局部 Z 轴方向一致，正向旋转才会把两侧手臂从 T Pose 放下。
+    const armsDown = { leftUpperArm: poseQuaternion(0, 0, 1.28), rightUpperArm: poseQuaternion(0, 0, 1.28) };
+    const poses: Record<DirectorPose, Partial<Record<DirectorHumanoidBone, DirectorQuat>>> = {
+        neutral: armsDown,
+        stand: armsDown,
+        t_pose: {},
+        walk: { ...armsDown, leftUpperArm: poseQuaternion(0.36, 0, 1.2), rightUpperArm: poseQuaternion(-0.36, 0, 1.2), leftUpperLeg: poseQuaternion(-0.32, 0, 0), rightUpperLeg: poseQuaternion(0.32, 0, 0) },
+        run: { ...armsDown, leftUpperArm: poseQuaternion(0.75, 0, 1.05), rightUpperArm: poseQuaternion(-0.75, 0, 1.05), leftLowerArm: poseQuaternion(-0.7, 0, 0), rightLowerArm: poseQuaternion(-0.7, 0, 0), leftUpperLeg: poseQuaternion(-0.65, 0, 0), rightUpperLeg: poseQuaternion(0.55, 0, 0), rightLowerLeg: poseQuaternion(0.8, 0, 0) },
+        sit: { ...armsDown, leftUpperLeg: poseQuaternion(-1.35, 0, 0), rightUpperLeg: poseQuaternion(-1.35, 0, 0), leftLowerLeg: poseQuaternion(1.25, 0, 0), rightLowerLeg: poseQuaternion(1.25, 0, 0) },
+        squat: { ...armsDown, hips: poseQuaternion(0.25, 0, 0), leftUpperLeg: poseQuaternion(-0.75, 0, 0), rightUpperLeg: poseQuaternion(-0.75, 0, 0), leftLowerLeg: poseQuaternion(1.2, 0, 0), rightLowerLeg: poseQuaternion(1.2, 0, 0) },
+        kneel_single: { ...armsDown, leftUpperLeg: poseQuaternion(-0.95, 0, 0), leftLowerLeg: poseQuaternion(1.45, 0, 0), rightUpperLeg: poseQuaternion(-0.35, 0, 0), rightLowerLeg: poseQuaternion(0.75, 0, 0) },
+        kneel_double: { ...armsDown, leftUpperLeg: poseQuaternion(-0.55, 0, 0), rightUpperLeg: poseQuaternion(-0.55, 0, 0), leftLowerLeg: poseQuaternion(1.45, 0, 0), rightLowerLeg: poseQuaternion(1.45, 0, 0) },
+        hands_hips: { leftUpperArm: poseQuaternion(0, 0, 0.75), rightUpperArm: poseQuaternion(0, 0, 0.75), leftLowerArm: poseQuaternion(-0.1, 0.2, -1.5), rightLowerArm: poseQuaternion(-0.1, -0.2, 1.5) },
+        lean: { ...armsDown, hips: poseQuaternion(0, 0, 0.18), spine: poseQuaternion(0, 0, -0.12), head: poseQuaternion(0, 0, -0.08) },
+        bow: { ...armsDown, hips: poseQuaternion(0.5, 0, 0), spine: poseQuaternion(0.28, 0, 0), head: poseQuaternion(-0.18, 0, 0) },
+        think: { ...armsDown, rightUpperArm: poseQuaternion(-0.25, 0, 0.55), rightLowerArm: poseQuaternion(-1.35, 0, 0.3), head: poseQuaternion(0.05, -0.22, 0) },
+        fight: { leftUpperArm: poseQuaternion(-0.65, 0, 0.7), rightUpperArm: poseQuaternion(-0.55, 0, 0.65), leftLowerArm: poseQuaternion(-1.2, 0, 0), rightLowerArm: poseQuaternion(-1.25, 0, 0), chest: poseQuaternion(0, 0.2, 0), leftUpperLeg: poseQuaternion(-0.15, 0, 0), rightUpperLeg: poseQuaternion(0.2, 0, 0) },
+        kick: { ...armsDown, leftUpperArm: poseQuaternion(0.3, 0, 1.1), rightUpperArm: poseQuaternion(-0.3, 0, 1.1), rightUpperLeg: poseQuaternion(-1.1, 0, 0), rightLowerLeg: poseQuaternion(0.35, 0, 0) },
+        throw: { leftUpperArm: poseQuaternion(-0.35, 0.2, 0.35), rightUpperArm: poseQuaternion(-1.2, 0, 0.25), rightLowerArm: poseQuaternion(-1.05, 0, 0), chest: poseQuaternion(0, -0.3, 0) },
+        push: { leftUpperArm: poseQuaternion(-0.9, 0, 0.3), rightUpperArm: poseQuaternion(-0.9, 0, 0.3), leftLowerArm: poseQuaternion(-0.35, 0, 0), rightLowerArm: poseQuaternion(-0.35, 0, 0), chest: poseQuaternion(0.15, 0, 0) },
+        wave: { ...armsDown, rightUpperArm: poseQuaternion(0, 0, -0.35), rightLowerArm: poseQuaternion(0, 0, -1.45), rightHand: poseQuaternion(0, 0, -0.3) },
+        reach: { ...armsDown, rightUpperArm: poseQuaternion(-1.35, 0, -0.05), rightLowerArm: poseQuaternion(-0.1, 0, 0) },
+        arms_crossed: { leftUpperArm: poseQuaternion(-0.65, 0, 0.65), rightUpperArm: poseQuaternion(-0.65, 0, 0.65), leftLowerArm: poseQuaternion(-1.2, 0.15, -0.4), rightLowerArm: poseQuaternion(-1.2, -0.15, 0.4) },
+        phone: { ...armsDown, leftUpperArm: poseQuaternion(-0.45, 0, 0.95), rightUpperArm: poseQuaternion(-0.45, 0, 0.95), leftLowerArm: poseQuaternion(-1.1, 0, 0.15), rightLowerArm: poseQuaternion(-1.1, 0, -0.15), head: poseQuaternion(0.28, 0, 0) },
+    };
+    return poses[pose];
+}
+
+export function directorColorLabel(value: string) {
+    const hsl = { h: 0, s: 0, l: 0 };
+    new Color(value).getHSL(hsl);
+    if (hsl.l >= 0.86 && hsl.s <= 0.2) return "白色";
+    if (hsl.l <= 0.18) return "黑色";
+    if (hsl.s <= 0.16) return hsl.l >= 0.52 ? "浅灰色" : "深灰色";
+    const hue = hsl.h * 360;
+    if (hue < 18 || hue >= 345) return "红色";
+    if (hue < 48) return "橙色";
+    if (hue < 72) return "黄色";
+    if (hue < 165) return "绿色";
+    if (hue < 195) return "青色";
+    if (hue < 255) return "蓝色";
+    if (hue < 290) return "紫色";
+    return "粉色";
+}
+
+function poseQuaternion(x: number, y: number, z: number): DirectorQuat {
+    return new Quaternion().setFromEuler(new Euler(x, y, z)).toArray() as DirectorQuat;
+}
+
+function lerpVec3(from: DirectorVec3, to: DirectorVec3, progress: number): DirectorVec3 {
+    return from.map((value, index) => value + (to[index] - value) * progress) as DirectorVec3;
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-session.ts
+LINES: 1-79
+========================================================================
+import type { DirectorScene, DirectorScreenshot } from "../../../types/director";
+
+/**
+ * 打开期间本地 draft 是唯一权威：只有 scene id 变化（或首次挂载）才重建会话。
+ * 同 id 的父级镜像回流绝不能重新 clone / 清历史 / 重置播放头。
+ */
+export function shouldReinitializeDirectorSession(input: { initializedSceneId: string | null; nextSceneId: string | null }) {
+    const { initializedSceneId, nextSceneId } = input;
+    if (!nextSceneId) return false;
+    return initializedSceneId !== nextSceneId;
+}
+
+/** 以 id upsert，调用方必须传入「当前最新」数组，避免旧闭包覆盖并发保存。 */
+export function upsertDirectorSceneById(scenes: DirectorScene[], scene: DirectorScene): DirectorScene[] {
+    return scenes.some((item) => item.id === scene.id) ? scenes.map((item) => (item.id === scene.id ? scene : item)) : [...scenes, scene];
+}
+
+/** Commit a canvas director-node description to its shot prompt; stale shot ids fall back safely. */
+export function updateDirectorShotPrompt(scene: DirectorScene, requestedShotId: string | undefined, input: string): DirectorScene {
+    const prompt = input.trim();
+    if (!prompt || scene.shots.length === 0) return scene;
+    const shotId = requestedShotId && scene.shots.some((shot) => shot.id === requestedShotId)
+        ? requestedShotId
+        : scene.shots.some((shot) => shot.id === scene.activeShotId) ? scene.activeShotId : scene.shots[0].id;
+    const current = scene.shots.find((shot) => shot.id === shotId)!;
+    if (current.prompt === prompt) return scene;
+    return { ...scene, shots: scene.shots.map((shot) => shot.id === shotId ? { ...shot, prompt } : shot) };
+}
+
+/**
+ * 输出上传可能跨越数秒。只把生成出的预览引用合并到最新场景，绝不拿输出开始时的
+ * scene 快照覆盖期间发生的标题、对象、关键帧或镜头编辑。
+ */
+export function mergeDirectorOutputPreview(scene: DirectorScene, input: { sceneId: string; shotId: string; previewNodeId: string }) {
+    if (scene.id !== input.sceneId || !scene.shots.some((shot) => shot.id === input.shotId)) return null;
+    return {
+        ...scene,
+        shots: scene.shots.map((shot) => (shot.id === input.shotId ? { ...shot, previewNodeId: input.previewNodeId, depthNodeId: undefined, normalNodeId: undefined } : shot)),
+    };
+}
+
+/** Asynchronous uploads and asset registration must not publish into a switched canvas or deleted shot. */
+export function isDirectorOutputTargetCurrent(input: {
+    currentProjectId: string | null;
+    outputProjectId: string;
+    projectExists: boolean;
+    sourceNode: { id: string; metadata?: { directorSceneId?: string } } | undefined;
+    sourceNodeId: string;
+    latestScene: Pick<DirectorScene, "id" | "shots"> | undefined;
+    sceneId: string;
+    shotId: string;
+}): boolean {
+    return input.currentProjectId === input.outputProjectId
+        && input.projectExists
+        && input.sourceNode?.id === input.sourceNodeId
+        && input.sourceNode.metadata?.directorSceneId === input.sceneId
+        && input.latestScene?.id === input.sceneId
+        && input.latestScene.shots.some((shot) => shot.id === input.shotId);
+}
+
+/** 截图上传完成后合入最新场景，避免旧快照覆盖期间的其他编辑。 */
+export function appendDirectorScreenshot(scene: DirectorScene, input: { sceneId: string; shotId: string; screenshot: DirectorScreenshot }): DirectorScene {
+    if (scene.id !== input.sceneId || !scene.shots.some((shot) => shot.id === input.shotId)) return scene;
+    return {
+        ...scene,
+        shots: scene.shots.map((shot) => shot.id === input.shotId ? { ...shot, screenshots: [...(shot.screenshots || []), input.screenshot] } : shot),
+    };
+}
+
+export function nextDirectorScreenshotName(cameraName: string, existingCount: number): string {
+    return `${cameraName}-shot-${String(existingCount + 1).padStart(2, "0")}`;
+}
+
+/** 长截图/录制结束前，场景引用与活动镜头必须仍是操作开始时的快照。 */
+export function isDirectorOutputSnapshotCurrent(scene: DirectorScene | null, expected: { scene: DirectorScene; shotId: string }) {
+    if (scene !== expected.scene) return false;
+    const activeShot = scene.shots.find((shot) => shot.id === scene.activeShotId) || scene.shots[0];
+    return activeShot?.id === expected.shotId;
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-shortcuts.ts
+LINES: 1-169
+========================================================================
+/**
+ * 导演台键盘快捷键解析。
+ *
+ * 纯函数：只把「按键事件形状」映射为语义动作，不碰 DOM、不改场景。
+ * 组件层负责注册监听与执行动作，因此这里可以完整单测。
+ *
+ * 安全边界：焦点落在任何交互控件（输入框、按钮、链接、role 型控件、
+ * 可编辑区域）或其内部时，绝不把按键解析为全局快捷键。
+ * 否则用户改名时会误删对象、按 Space 激活按钮时会误切换播放。
+ */
+
+/**
+ * 语义动作。只保留导演台里已经存在真实执行路径的动作：
+ * 变换模式（DirectorViewportDock 的 V/R/F，兼容 W/E）、删除选中对象或灯光、
+ * 撤销/重做（顶栏按钮）、切换选中对象显隐（检查器「可见」开关）、
+ * 取消选择、播放/暂停（时间轴 transport）。
+ *
+ * 聚焦、复制、重命名没有对应实现，不在这里造无处可去的动作。
+ */
+export type DirectorShortcutAction = { kind: "transform-mode"; mode: "translate" | "rotate" | "scale" } | { kind: "nudge-selected"; direction: "up" | "down" | "left" | "right"; fine?: boolean } | { kind: "delete-selected" } | { kind: "undo" } | { kind: "redo" } | { kind: "toggle-visibility" } | { kind: "deselect" } | { kind: "toggle-play" } | { kind: "open-add-menu" };
+
+/** 只取事件的必要形状，便于测试构造，也避免耦合真实 KeyboardEvent。 */
+export type DirectorKeyEvent = {
+    key: string;
+    ctrlKey?: boolean;
+    metaKey?: boolean;
+    shiftKey?: boolean;
+    altKey?: boolean;
+    /** 事件目标是否落在交互控件内，由调用方判定后传入。 */
+    isInteractiveTarget?: boolean;
+};
+
+const TRANSFORM_KEYS: Record<string, "translate" | "rotate" | "scale"> = {
+    v: "translate",
+    r: "rotate",
+    f: "scale",
+    w: "translate",
+    e: "rotate",
+};
+
+/**
+ * 解析按键为动作；不匹配返回 null。
+ *
+ * 约定：
+ * - 交互控件语境一律不解析，交还给控件本身；
+ * - 带修饰键的组合优先（Undo/Redo），避免 Ctrl+R 被当作 rotate；
+ * - 单字母快捷键不区分大小写，Shift+W 仍是 translate；
+ * - Redo 同时接受 Ctrl/Cmd+Shift+Z 与 Ctrl/Cmd+Y。
+ */
+export function resolveDirectorShortcut(event: DirectorKeyEvent): DirectorShortcutAction | null {
+    if (event.isInteractiveTarget) return null;
+
+    const key = String(event.key || "");
+    const lower = key.toLowerCase();
+    const accel = Boolean(event.ctrlKey || event.metaKey);
+
+    if (accel) {
+        // Alt 组合留给浏览器/系统，不抢。
+        if (event.altKey) return null;
+        if (lower === "z") return event.shiftKey ? { kind: "redo" } : { kind: "undo" };
+        if (lower === "y") return { kind: "redo" };
+        return null;
+    }
+
+    if (event.altKey) return null;
+
+    const arrowDirections: Record<string, "up" | "down" | "left" | "right"> = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
+    if (arrowDirections[key]) return { kind: "nudge-selected", direction: arrowDirections[key], ...(event.shiftKey ? { fine: true } : {}) };
+
+    if (lower === "a" && event.shiftKey) return { kind: "open-add-menu" };
+    if (lower in TRANSFORM_KEYS) return { kind: "transform-mode", mode: TRANSFORM_KEYS[lower] };
+    if (key === "Delete" || key === "Backspace") return { kind: "delete-selected" };
+    if (lower === "h") return { kind: "toggle-visibility" };
+    if (key === "Escape") return { kind: "deselect" };
+    if (key === " " || key === "Spacebar") return { kind: "toggle-play" };
+
+    return null;
+}
+
+/**
+ * 交互控件的唯一真源。
+ * DIRECTOR_INTERACTIVE_SELECTOR（真实 DOM 的 closest 用）与
+ * isDirectorInteractiveNode（单节点判定）都从这里派生，避免两处清单漂移。
+ */
+const INTERACTIVE_TAGS = ["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A", "OPTION", "LABEL", "SUMMARY"] as const;
+
+/**
+ * role 型控件：AntD 大量用 role 而非原生标签表达按钮、开关、菜单项。
+ * Space/Delete/Backspace 对这些控件都有自己的含义，必须让它们优先。
+ */
+const INTERACTIVE_ROLES = [
+    "textbox",
+    "combobox",
+    "spinbutton",
+    "searchbox",
+    "button",
+    "switch",
+    "tab",
+    "menuitem",
+    "menuitemcheckbox",
+    "menuitemradio",
+    "option",
+    "slider",
+    "checkbox",
+    "radio",
+    "link",
+    "listbox",
+    "menu",
+    "radiogroup",
+    "treeitem",
+] as const;
+
+/** 供真实 DOM 的 Element.closest 使用：命中控件自身或任何交互祖先。 */
+export const DIRECTOR_INTERACTIVE_SELECTOR = [...INTERACTIVE_TAGS.map((tag) => tag.toLowerCase()), ...INTERACTIVE_ROLES.map((role) => `[role="${role}"]`), '[contenteditable="true"]', '[contenteditable=""]'].join(",");
+
+/**
+ * 判断单个节点自身是否是交互控件。不看祖先。
+ * 祖先由 blocksDirectorShortcut 通过 closest 处理。
+ */
+export function isDirectorInteractiveNode(target: unknown): boolean {
+    if (!target || typeof target !== "object") return false;
+    const node = target as { tagName?: unknown; isContentEditable?: unknown; getAttribute?: (name: string) => string | null };
+    if (node.isContentEditable === true) return true;
+
+    const tagName = typeof node.tagName === "string" ? node.tagName.toUpperCase() : "";
+    if ((INTERACTIVE_TAGS as readonly string[]).includes(tagName)) return true;
+
+    if (typeof node.getAttribute === "function") {
+        const role = node.getAttribute("role");
+        if (role && (INTERACTIVE_ROLES as readonly string[]).includes(role)) return true;
+        const editable = node.getAttribute("contenteditable");
+        if (editable === "" || editable === "true") return true;
+    }
+    return false;
+}
+
+/**
+ * 事件目标是否应当阻止全局快捷键。
+ *
+ * 用 closest 而不是只看 target 自身：点击按钮里的 <svg>/<span> 时
+ * event.target 是子元素，只判自身会漏掉整个控件。
+ * closest 同时覆盖 SVG 元素（SVGElement 也实现 Element.closest）。
+ *
+ * 没有 closest 的目标（window、document、测试替身）退化为单节点判定。
+ */
+export function blocksDirectorShortcut(target: unknown): boolean {
+    if (!target || typeof target !== "object") return false;
+    const node = target as { closest?: (selector: string) => unknown };
+    if (typeof node.closest === "function") return Boolean(node.closest(DIRECTOR_INTERACTIVE_SELECTOR));
+    return isDirectorInteractiveNode(target);
+}
+
+/**
+ * 指针激活后释放焦点，使全局快捷键立刻可用。
+ *
+ * 为什么需要：blocksDirectorShortcut 会吃掉聚焦控件上的所有全局快捷键（这是刻意的，
+ * Space/Delete/Backspace 属于控件自己）。但鼠标点完一个工具按钮或场景行之后，
+ * 焦点仍留在按钮上，于是「点选对象 -> 按 Delete」这类主流程会静默失效。
+ *
+ * detail === 0 表示键盘激活（Enter/Space 合成的 click），此时必须保留焦点，
+ * 否则 Tab 序列会断、键盘用户会丢失位置。判据与 plugins 页一致。
+ *
+ * 导演台的按钮分散在 workbench、dock、sequencer 三处，各自没有公共基组件，
+ * 因此这条规则集中在这里，避免每个 onClick 各写一遍而慢慢走偏。
+ */
+export function releaseDirectorFocusAfterPointer(event: { detail: number; currentTarget: { blur?: () => void } }): void {
+    if (event.detail === 0) return;
+    event.currentTarget.blur?.();
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-stage-palette.ts
+LINES: 1-10
+========================================================================
+import { Color } from "three";
+
+/** Only new dark scenes use the charcoal stage. Existing light scenes retain their previous floor/grid. */
+export function directorStagePalette(background: string): { ground: string; cell: string; section: string } {
+    const color = new Color(background);
+    const lightness = color.getHSL({ h: 0, s: 0, l: 0 }).l;
+    return lightness < 0.22
+        ? { ground: "#151820", cell: "#4a7094", section: "#5f8bb0" }
+        : { ground: "#aeb7bf", cell: "#8f99a3", section: "#626d77" };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-stage-transform.ts
+LINES: 1-49
+========================================================================
+import { Euler, Matrix4, Quaternion, Vector3 } from "three";
+
+import type { DirectorScene, DirectorTransform, DirectorVec3 } from "@/types/director";
+
+export type DirectorStageTransform = NonNullable<DirectorScene["stageTransform"]>;
+
+export const DIRECTOR_DEFAULT_STAGE_TRANSFORM: DirectorStageTransform = {
+    scale: 1,
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+};
+
+export function directorStageTransform(scene: Pick<DirectorScene, "stageTransform">): DirectorStageTransform {
+    const value = scene.stageTransform;
+    if (!value || !Number.isFinite(value.scale) || value.scale < 0.1 || value.scale > 10) return DIRECTOR_DEFAULT_STAGE_TRANSFORM;
+    if (![value.position, value.rotation].every((axis) => Array.isArray(axis) && axis.length === 3 && axis.every(Number.isFinite))) return DIRECTOR_DEFAULT_STAGE_TRANSFORM;
+    return value;
+}
+
+export function directorStageMatrix(stage: DirectorStageTransform): Matrix4 {
+    const rotation = new Euler(...stage.rotation.map((degrees) => degrees * Math.PI / 180) as DirectorVec3);
+    return new Matrix4().compose(new Vector3(...stage.position), new Quaternion().setFromEuler(rotation), new Vector3(stage.scale, stage.scale, stage.scale));
+}
+
+export function directorStagePoint(stage: DirectorStageTransform, point: DirectorVec3): DirectorVec3 {
+    return new Vector3(...point).applyMatrix4(directorStageMatrix(stage)).toArray() as DirectorVec3;
+}
+
+export function directorStageLocalPoint(stage: DirectorStageTransform, point: DirectorVec3): DirectorVec3 {
+    return new Vector3(...point).applyMatrix4(directorStageMatrix(stage).invert()).toArray() as DirectorVec3;
+}
+
+export function directorStageDirection(stage: DirectorStageTransform, direction: DirectorVec3): DirectorVec3 {
+    const result = new Vector3(...direction).transformDirection(directorStageMatrix(stage));
+    return result.toArray() as DirectorVec3;
+}
+
+/** Convert a world-space viewport camera back into local scene coordinates before saving it. */
+export function directorStageLocalCamera(stage: DirectorStageTransform, world: DirectorTransform): DirectorTransform {
+    if (stage.scale === 1 && stage.position.every((value) => value === 0) && stage.rotation.every((value) => value === 0)) return world;
+    const worldRotation = new Quaternion().setFromEuler(new Euler(...world.rotation));
+    const stageRotation = new Quaternion().setFromEuler(new Euler(...stage.rotation.map((degrees) => degrees * Math.PI / 180) as DirectorVec3));
+    const localRotation = new Euler().setFromQuaternion(stageRotation.invert().multiply(worldRotation));
+    return {
+        ...world,
+        position: directorStageLocalPoint(stage, world.position),
+        rotation: [localRotation.x, localRotation.y, localRotation.z],
+    };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-templates.ts
+LINES: 1-153
+========================================================================
+import { nanoid } from "nanoid";
+
+import { createDirectorActor, createDirectorCamera, createDirectorLight, createDirectorObject, directorFocalLengthToFov, DIRECTOR_ACTOR_COLORS } from "@/lib/canvas/director/director-scene";
+import { DIRECTOR_DEFAULT_GROUND } from "@/lib/canvas/director/director-ground";
+import { DIRECTOR_DEFAULT_STAGE_TRANSFORM } from "@/lib/canvas/director/director-stage-transform";
+import type { DirectorCamera, DirectorLight, DirectorObject, DirectorScene, DirectorShot } from "@/types/director";
+
+/**
+ * 新建场景模板。
+ *
+ * 为什么存在：createDirectorScene 无条件塞一个默认演员，产品/空场景根本不需要它，
+ * 而双人、走位这类常见开局每次都要手工摆一遍。模板把「开局布局」变成显式选择。
+ *
+ * 硬约束：
+ * - 纯函数 + 确定性布局。同一模板每次生成的结构完全一致，只有 id 与时间戳不同。
+ * - 每次调用都产生独立 id（工厂内部 nanoid），两个实例不会共享对象身份。
+ * - 不改变 DirectorScene 版本：模板只预填已有场景字段。
+ * - 对象之间 XZ 占位不重叠，判据与 resolveDirectorPlacement 完全一致。
+ */
+
+export type DirectorTemplateId = "empty" | "monologue" | "dialogue" | "blocking" | "product";
+
+export type DirectorTemplate = {
+    id: DirectorTemplateId;
+    name: string;
+    description: string;
+    /** 列表里给用户的预期提示，不参与生成。 */
+    summary: string;
+};
+
+/** 展示顺序即用户看到的顺序：空场景在最前，其余按上手复杂度递增。 */
+export const DIRECTOR_TEMPLATES: DirectorTemplate[] = [
+    { id: "empty", name: "空场景", description: "只有摄影机和三点布光，没有任何演员或道具。", summary: "摄影机 + 布光" },
+    { id: "monologue", name: "单人对白", description: "一名演员居中，中近景机位，适合独白与特写。", summary: "1 演员 · 中近景" },
+    { id: "dialogue", name: "双人对话", description: "两名演员面对面分立左右，过肩机位起手。", summary: "2 演员 · 对话机位" },
+    { id: "blocking", name: "人物走位", description: "三名演员分散站位，广角机位便于安排走动路线。", summary: "3 演员 · 广角" },
+    { id: "product", name: "产品/道具镜头", description: "产品置于中心，背景板与侧面道具就位，长焦特写。", summary: "产品 + 背景板 · 长焦" },
+];
+
+type TemplateBlueprint = {
+    objects: DirectorObject[];
+    camera: DirectorCamera;
+    shot: Omit<DirectorShot, "id" | "cameraId">;
+};
+
+/**
+ * 三点布光：主光、轮廓光、环境光。
+ * 五个模板共用同一套光位，避免模板之间打光风格漂移。
+ */
+function threePointRig(): DirectorLight[] {
+    return [createDirectorLight("directional", "主光", [4, 6, 4], 2.4), createDirectorLight("directional", "轮廓光", [-4, 3, -2], 1.1), createDirectorLight("ambient", "环境光", [0, 0, 0], 0.65)];
+}
+
+/** 按模板意图摆机位。focalLength 与 fov 一起写，保证两者自洽。 */
+function templateCamera(input: { name: string; position: DirectorCamera["transform"]["position"]; target: DirectorCamera["target"]; focalLength: number; focusDistance: number; aperture: number }): DirectorCamera {
+    const base = createDirectorCamera(input.name);
+    return {
+        ...base,
+        transform: { ...base.transform, position: input.position },
+        target: input.target,
+        focalLength: input.focalLength,
+        fov: directorFocalLengthToFov(input.focalLength),
+        aperture: input.aperture,
+        focusDistance: input.focusDistance,
+    };
+}
+
+/** 演员朝向：绕 Y 轴。左侧演员朝右为 +PI/2，右侧演员朝左为 -PI/2。 */
+function facing(actor: DirectorObject, yaw: number): DirectorObject {
+    return { ...actor, transform: { ...actor.transform, rotation: [0, yaw, 0] } };
+}
+
+function buildBlueprint(id: DirectorTemplateId): TemplateBlueprint {
+    if (id === "monologue") {
+        return {
+            objects: [createDirectorActor("演员 1", [0, 0, 0], DIRECTOR_ACTOR_COLORS[0])],
+            camera: templateCamera({ name: "主摄影机", position: [1.5, 1.65, 3.1], target: [0, 1.15, 0], focalLength: 50, focusDistance: 3.4, aperture: 2.2 }),
+            shot: { name: "镜头 1", duration: 5, fps: 24, shotSize: "medium", cameraMove: "static", prompt: "" },
+        };
+    }
+
+    if (id === "dialogue") {
+        // dx = 1.6 >= (0.8 + 0.8) / 2 + 0.25 = 1.05，两名演员必然不重叠。
+        return {
+            objects: [facing(createDirectorActor("演员 1", [-0.8, 0, 0.3], DIRECTOR_ACTOR_COLORS[0]), Math.PI / 2), facing(createDirectorActor("演员 2", [0.8, 0, -0.3], DIRECTOR_ACTOR_COLORS[2]), -Math.PI / 2)],
+            camera: templateCamera({ name: "主摄影机", position: [2.9, 1.7, 3.4], target: [0, 1.1, 0], focalLength: 40, focusDistance: 4.2, aperture: 2.8 }),
+            shot: { name: "镜头 1", duration: 6, fps: 24, shotSize: "medium", cameraMove: "static", prompt: "" },
+        };
+    }
+
+    if (id === "blocking") {
+        // 三名演员两两 dx >= 1.8，全部大于 1.05 阈值。
+        return {
+            objects: [createDirectorActor("演员 1", [-1.8, 0, 0.6], DIRECTOR_ACTOR_COLORS[0]), createDirectorActor("演员 2", [0, 0, -0.4], DIRECTOR_ACTOR_COLORS[2]), createDirectorActor("演员 3", [1.8, 0, 0.8], DIRECTOR_ACTOR_COLORS[3])],
+            camera: templateCamera({ name: "主摄影机", position: [0.6, 3.1, 7.4], target: [0, 1, 0], focalLength: 28, focusDistance: 7.6, aperture: 4 }),
+            shot: { name: "镜头 1", duration: 8, fps: 24, shotSize: "wide", cameraMove: "static", prompt: "" },
+        };
+    }
+
+    if (id === "product") {
+        // 产品镜头没有演员。背景板靠 dz=1.35 拉开，侧面道具靠 dx=1.15 拉开。
+        const product = createDirectorObject("box", "产品主体", [0, 0.5, 0], "#b8c0ca");
+        const backdrop = createDirectorObject("plane", "背景板", [0, 1.4, -1.35], "#e8ebef");
+        const prop = createDirectorObject("cylinder", "侧面道具", [1.15, 0.4, 0.5], "#8795a5");
+        return {
+            objects: [
+                { ...product, transform: { ...product.transform, scale: [0.9, 0.9, 0.9] } },
+                { ...backdrop, transform: { ...backdrop.transform, scale: [3.2, 2, 1] } },
+                { ...prop, transform: { ...prop.transform, scale: [0.5, 0.8, 0.5] } },
+            ],
+            camera: templateCamera({ name: "主摄影机", position: [1.1, 1.05, 2.35], target: [0, 0.55, 0], focalLength: 85, focusDistance: 2.6, aperture: 2.8 }),
+            shot: { name: "镜头 1", duration: 4, fps: 24, shotSize: "close_up", cameraMove: "push_in", prompt: "" },
+        };
+    }
+
+    return {
+        objects: [],
+        camera: templateCamera({ name: "主摄影机", position: [4.8, 2.7, 6.8], target: [0, 1, 0], focalLength: 35, focusDistance: 5, aperture: 2.8 }),
+        shot: { name: "镜头 1", duration: 5, fps: 24, shotSize: "medium", cameraMove: "static", prompt: "" },
+    };
+}
+
+/**
+ * 按模板生成全新场景。
+ * 未知 id 回落到空场景 —— 宁可少给内容，也不要偷偷塞回默认演员。
+ */
+export function createDirectorSceneFromTemplate(templateId: DirectorTemplateId, title = "未命名场景"): DirectorScene {
+    const blueprint = buildBlueprint(templateId);
+    const now = new Date().toISOString();
+    const shotId = nanoid();
+    return {
+        id: nanoid(),
+        version: 1,
+        title,
+        background: "#060608",
+        environmentIntensity: 0.7,
+        gridVisible: true,
+        gridSnap: false,
+        panoramaRotation: 0,
+        panoramaRadius: 60,
+        ground: { ...DIRECTOR_DEFAULT_GROUND },
+        stageTransform: { ...DIRECTOR_DEFAULT_STAGE_TRANSFORM, position: [...DIRECTOR_DEFAULT_STAGE_TRANSFORM.position], rotation: [...DIRECTOR_DEFAULT_STAGE_TRANSFORM.rotation] },
+        labelsVisible: true,
+        aspectRatio: "adaptive",
+        objects: blueprint.objects,
+        cameras: [blueprint.camera],
+        lights: threePointRig(),
+        shots: [{ ...blueprint.shot, id: shotId, cameraId: blueprint.camera.id }],
+        activeShotId: shotId,
+        createdAt: now,
+        updatedAt: now,
+    };
+}
 
 
 ========================================================================
@@ -3145,945 +4119,5 @@ LINES: 1-1050
     height: 2px !important;
     border-radius: 999px;
     background: var(--brand) !important;
-}
-
-
-========================================================================
-FILE: web/src/pages/account/index.tsx
-LINES: 1-880
-========================================================================
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
-import { App as AntApp, Alert, Button, Input, InputNumber, Segmented, Spin, Table, Tabs, Tag } from "antd";
-import type { TableColumnsType } from "antd";
-import dayjs from "dayjs";
-import { ArrowUpRight, Check, Crown, Gift, ImagePlus, Inbox, Layers, Receipt, RefreshCw, Sparkles, Ticket } from "lucide-react";
-import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
-
-import { BrandName } from "@/components/brand/brand-wordmark";
-import { apiRequest } from "@/services/api/client";
-import { useAuthStore } from "@/stores/use-auth-store";
-import { matchesCanvasSession } from "@/lib/canvas/canvas-session";
-import { formatGenerationDiscount } from "@/lib/membership";
-import { availablePaymentProviders, paymentClient, type PaymentClient } from '@/lib/payment-client';
-import "./account.css";
-
-type Plan = { id: string; name: string; days: number; priceCents: number; monthlyCredits: number; tierId: string | null; tierName: string | null; tierLevel: number | null; description: string; generationDiscount: number; grantCredits: number };
-type RechargePackage = { id: string; name: string; credits: number; priceCents: number; originalPriceCents: number | null; description: string; sort: number };
-type SiteInfo = { creditPriceCents: number; minCredits: number; payTypes: string[]; providers: string[]; alipayProducts?: PaymentClient[] };
-type OrderRow = { orderNo: string; type: string; credits: number; amountCents: number; refundAmountCents: number | null; fulfillmentIssue: string | null; provider: string; payType: string; status: string; createdAt: string; paidAt: string | null };
-type LedgerRow = { id: number; type: string; amount: number; balanceAfter: number; remark: string | null; createdAt: string };
-
-const formatTime = (value?: string | null) => (value ? dayjs(value).format("YYYY-MM-DD HH:mm") : "-");
-
-export default function AccountPage() {
-    const userId = useAuthStore((state) => state.user?.id ?? null);
-    const epoch = useAuthStore((state) => state.sessionEpoch);
-    const ready = useAuthStore((state) => state.ready);
-    if (!ready || !userId) return null;
-    return <AccountContent key={`${epoch}:${userId}`} />;
-}
-
-function useAccountScope() {
-    const owner = useAuthStore((state) => state.user?.id ?? null);
-    const epoch = useAuthStore((state) => state.sessionEpoch);
-    return { owner, current: () => Boolean(owner && matchesCanvasSession(owner, epoch, useAuthStore.getState())) };
-}
-
-/* 所有二级页共用同一个面板骨架：标题 15/600 + 说明 12 + 右上操作。 */
-function Panel({ title, desc, extra, bodyClassName, className, children }: {
-    title?: ReactNode;
-    desc?: ReactNode;
-    extra?: ReactNode;
-    bodyClassName?: string;
-    className?: string;
-    children: ReactNode;
-}) {
-    return (
-        <section className={className ? `acct-panel ${className}` : "acct-panel"}>
-            {title || extra ? (
-                <header className="acct-panel-head">
-                    <div className="min-w-0">
-                        {title ? <h2 className="acct-panel-title">{title}</h2> : null}
-                        {desc ? <p className="acct-panel-desc">{desc}</p> : null}
-                    </div>
-                    {extra ? <div className="acct-panel-extra">{extra}</div> : null}
-                </header>
-            ) : null}
-            <div className={bodyClassName ? `acct-panel-body ${bodyClassName}` : "acct-panel-body"}>{children}</div>
-        </section>
-    );
-}
-
-function Loading() {
-    return <div className="acct-loading"><Spin /></div>;
-}
-
-function RefreshAction({ loading, onRefresh }: { loading: boolean; onRefresh: () => void }) {
-    const { t } = useTranslation();
-    return (
-        <Button type="text" size="small" icon={<RefreshCw className="size-3.5" />} loading={loading} onClick={onRefresh}>
-            {t("account.refresh")}
-        </Button>
-    );
-}
-
-function AccountContent() {
-    const { t } = useTranslation();
-    const user = useAuthStore((state) => state.user);
-    const refreshWallet = useAuthStore((state) => state.refreshWallet);
-    const [searchParams, setSearchParams] = useSearchParams();
-    const requestedTab = searchParams.get("tab");
-    const tab = ["overview", "membership", "recharge", "orders", "ledger", "redeem", "invite", "settings"].includes(requestedTab ?? "") ? requestedTab! : "overview";
-    const setTab = (next: string) => setSearchParams({ tab: next });
-
-    useEffect(() => {
-        void refreshWallet();
-    }, [refreshWallet]);
-
-    return (
-        // 外层必须是定高 flex 列：.jm-page 靠 flex:1 + overflow-y 自己滚。
-        // 少了这层，.jm-page 的 flex:1 没有 flex 父级，高度退化成内容高，
-        // 会被 layout 的 overflow-hidden 直接裁掉——表现就是二级页内容多了却没有滚动条。
-        <div className="page-surface flex h-full flex-col overflow-hidden bg-background text-foreground">
-            <main className="account-page jm-page">
-                <div className="jm-page-inner">
-                    <header className="jm-page-head">
-                        <div className="min-w-0">
-                            <h1 className="jm-page-title">{t("account.title")}</h1>
-                            <p className="jm-page-desc truncate">{user?.email}</p>
-                        </div>
-                    </header>
-                    <Tabs
-                        className="account-tabs"
-                        activeKey={tab}
-                        onChange={setTab}
-                        items={[
-                            { key: "overview", label: t("account.overview"), children: <Overview onTab={setTab} /> },
-                            { key: "membership", label: t("account.membership"), children: <Recharge membershipOnly /> },
-                            { key: "recharge", label: t("account.recharge"), children: <Recharge /> },
-                            { key: "orders", label: t("account.orders"), children: <Orders /> },
-                            { key: "ledger", label: t("account.ledger"), children: <Ledger /> },
-                            { key: "redeem", label: t("account.redeem"), children: <Redeem /> },
-                            { key: "invite", label: t("account.invite"), children: <Invite /> },
-                            { key: "settings", label: t("account.settings"), children: <Settings /> },
-                        ]}
-                    />
-                </div>
-            </main>
-        </div>
-    );
-}
-
-function Overview({ onTab }: { onTab: (tab: string) => void }) {
-    const { t } = useTranslation();
-    const wallet = useAuthStore((state) => state.wallet);
-    const active = Boolean(wallet?.member);
-    const available = wallet?.availableCredits ?? wallet?.balance ?? 0;
-
-    const shortcuts = [
-        { key: "orders", icon: Receipt, title: t("account.orders"), desc: t("account.quickOrdersDesc") },
-        { key: "ledger", icon: Layers, title: t("account.ledger"), desc: t("account.quickLedgerDesc") },
-        { key: "redeem", icon: Ticket, title: t("account.redeem"), desc: t("account.quickRedeemDesc") },
-        { key: "invite", icon: Gift, title: t("account.invite"), desc: t("account.quickInviteDesc") },
-    ];
-
-    return (
-        <div className="acct-stack">
-            <div className="acct-overview-grid">
-                <section className="acct-panel">
-                    <div className="acct-panel-body">
-                        <div className="acct-row-between">
-                            <span className="acct-label">{t("account.balance")}</span>
-                            <span className="acct-chip">{t("account.held")} · {wallet?.held ?? 0}</span>
-                        </div>
-                        <div className="acct-metric mt-3.5">{available}</div>
-                        <p className="acct-note mt-2.5">{t("account.overviewHint")}</p>
-                        <div className="acct-actions">
-                            <button type="button" className="jm-btn jm-btn-primary" onClick={() => onTab("recharge")}>
-                                {t("account.goRecharge")}
-                            </button>
-                            <button type="button" className="jm-btn jm-btn-secondary" onClick={() => onTab("ledger")}>
-                                {t("account.ledger")}
-                            </button>
-                        </div>
-                    </div>
-                </section>
-                <section className="acct-panel">
-                    <div className="acct-panel-body">
-                        <span className="acct-label">{t("account.member")}</span>
-                        <div className="acct-member-name">
-                            <span className={`acct-dot ${active ? "is-on" : ""}`} />
-                            {active ? wallet?.tierName || wallet?.planName || t("account.member") : t("account.nonMember")}
-                        </div>
-                        <p className="acct-note mt-2">
-                            {active ? t("account.memberUntil", { date: formatTime(wallet?.memberUntil) }) : t("account.freePlanHint")}
-                        </p>
-                        <div className="acct-kv">
-                            <span>{t("account.discountLabel")}</span>
-                            <span className="acct-kv-value">{formatGenerationDiscount(wallet?.generationDiscount)}</span>
-                        </div>
-                        <div className="acct-actions">
-                            <Button block size="large" onClick={() => onTab("membership")}>
-                                {active ? t("account.membership") : t("account.goMembership")}
-                            </Button>
-                        </div>
-                    </div>
-                </section>
-            </div>
-
-            <Panel title={t("account.quickEntry")} bodyClassName="is-flush">
-                <div className="acct-quick-grid">
-                    {shortcuts.map(({ key, icon: Icon, title, desc }) => (
-                        <button key={key} type="button" className="acct-tile" onClick={() => onTab(key)}>
-                            <span className="acct-tile-icon"><Icon aria-hidden /></span>
-                            <span className="acct-tile-body">
-                                <span className="acct-tile-title">{title}</span>
-                                <span className="acct-tile-desc">{desc}</span>
-                            </span>
-                        </button>
-                    ))}
-                </div>
-            </Panel>
-        </div>
-    );
-}
-
-function Recharge({ membershipOnly = false }: { membershipOnly?: boolean }) {
-    const { t } = useTranslation();
-    const { message, modal } = AntApp.useApp();
-    const scope = useAccountScope();
-    const wallet = useAuthStore((state) => state.wallet);
-    const member = wallet?.member;
-    const [site, setSite] = useState<SiteInfo | null>(null);
-    const [plans, setPlans] = useState<Plan[]>([]);
-    const [packages, setPackages] = useState<RechargePackage[]>([]);
-    const [packageId, setPackageId] = useState("");
-    const [credits, setCredits] = useState(100);
-    const [payType, setPayType] = useState("");
-    const [provider, setProvider] = useState("");
-    const [paying, setPaying] = useState(false);
-
-    useEffect(() => {
-        void Promise.all([
-            apiRequest<SiteInfo>("/api/site"),
-            membershipOnly ? apiRequest<{ plans: Plan[] }>("/api/plans") : Promise.resolve({ plans: [] }),
-            membershipOnly ? Promise.resolve({ packages: [] }) : apiRequest<{ packages: RechargePackage[] }>("/api/recharge-packages"),
-        ])
-            .then(([siteData, planData, packageData]) => {
-                if (!scope.current()) return;
-                setSite(siteData);
-                setPlans(planData.plans);
-                setPackages(packageData.packages);
-                const provider = availablePaymentProviders(siteData, paymentClient())[0] ?? '';
-                setProvider(provider);
-                setPayType(siteData.payTypes.find((value) => provider !== 'alipay' || value === 'alipay') ?? "");
-            })
-            .catch((error: unknown) => { if (scope.current()) message.error(error instanceof Error ? error.message : String(error)); });
-    }, [message, membershipOnly]);
-
-    if (!site) return <Loading />;
-
-    const selected = packages.find((item) => item.id === packageId) ?? null;
-    const price = selected ? selected.priceCents / 100 : ((credits || 0) * site.creditPriceCents) / 100;
-    const payTypes = site.payTypes.filter((value) => provider !== 'alipay' || value === 'alipay').map((value) => ({ value, label: value === "wxpay" ? t("account.wxpay") : t("account.alipay") }));
-    const providers = availablePaymentProviders(site, paymentClient()).map((value) => ({ value, label: value === 'alipay' ? t('account.alipayOfficial') : value === "zpay" ? t("account.zpay") : t("account.epay") }));
-    const payDisabled = site.providers.length === 0 || payTypes.length === 0;
-    function selectProvider(value: string) {
-        setProvider(value);
-        setPayType(site!.payTypes.find((type) => (value !== 'alipay' || type === 'alipay') && type === payType) ?? site!.payTypes.find((type) => value !== 'alipay' || type === 'alipay') ?? '');
-    }
-
-    async function submit(payload: { type: "credits" | "plan"; credits?: number; planId?: string; packageId?: string }) {
-        if (!scope.current()) return;
-        if (!provider || !providers.some(item => item.value === provider) || !payTypes.some((type) => type.value === payType)) {
-            message.error(t("account.payNotConfigured"));
-            return;
-        }
-        const auth = useAuthStore.getState();
-        const owner = auth.ready ? auth.user?.id : undefined;
-        const session = auth.sessionEpoch;
-        if (!owner) { message.error(t("account.paymentAccountChanged")); return; }
-        const sameAccount = () => useAuthStore.getState().ready && useAuthStore.getState().user?.id === owner && useAuthStore.getState().sessionEpoch === session;
-        setPaying(true);
-        try {
-            const order = await apiRequest<{ orderNo: string; payUrl: string; amountCents: number; credits: number; planDays: number | null; planName: string | null; upgradeQuote: { previousEndsAt: string } | null }>("/api/orders", { method: "POST", headers: { "X-Sundas-User": owner }, json: { ...payload, provider, payType, paymentClient: paymentClient() } });
-            if (!sameAccount()) throw new Error(t("account.paymentAccountChanged"));
-            const amount = (order.amountCents / 100).toFixed(2);
-            const content = order.upgradeQuote
-                ? t("account.upgradeConfirm", { amount, end: formatTime(order.upgradeQuote.previousEndsAt) })
-                : payload.type === "plan"
-                    ? t("account.planOrderConfirm", { amount, name: order.planName, days: order.planDays, credits: order.credits })
-                    : t("account.creditOrderConfirm", { amount, credits: order.credits });
-            let cancelled = false;
-            modal.confirm({ title: t(order.upgradeQuote ? "account.upgradeConfirmTitle" : "account.orderConfirmTitle"), content, okText: t("account.upgradePay"), cancelText: t("account.upgradeCancel"), onOk: async () => {
-                try {
-                    if (!sameAccount()) throw new Error(t("account.paymentAccountChanged"));
-                    const status = await apiRequest<{ order: { payable: boolean } }>(`/api/orders/${encodeURIComponent(order.orderNo)}`, { headers: { "X-Sundas-User": owner } });
-                    if (cancelled) return;
-                    if (!sameAccount()) throw new Error(t("account.paymentAccountChanged"));
-                    if (!status.order.payable) throw new Error(t("account.paymentOrderUnavailable"));
-                    window.location.href = order.payUrl;
-                } catch (error) { setPaying(false); if (!cancelled) message.error(error instanceof Error ? error.message : String(error)); }
-            }, onCancel: () => { cancelled = true; setPaying(false); } });
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : String(error));
-            setPaying(false);
-        }
-    }
-
-    const benefits = [
-        { icon: Sparkles, title: t("account.benefitCredits"), text: t("account.benefitCreditsDesc") },
-        { icon: ImagePlus, title: t("account.benefitModalities"), text: t("account.benefitModalitiesDesc") },
-        { icon: Layers, title: t("account.benefitShared"), text: t("account.benefitSharedDesc") },
-    ];
-
-    const payTypeControl = (
-        <div className="flex flex-wrap items-center gap-2">
-            <span className="acct-label">{t("account.payType")}</span>
-            {payTypes.length ? (
-                <Segmented options={payTypes} value={payType} onChange={(value) => setPayType(String(value))} />
-            ) : (
-                <span className="acct-note">{t("account.payNotConfigured")}</span>
-            )}
-            {providers.length > 1 ? (
-                <Segmented options={providers} value={provider} onChange={(value) => selectProvider(String(value))} />
-            ) : null}
-        </div>
-    );
-
-    return (
-        <div className="acct-stack">
-            {membershipOnly && (
-                <section className="acct-panel acct-hero">
-                    <div className="acct-hero-body">
-                        <div className="min-w-0">
-                            <div className="acct-eyebrow">
-                                <Crown className="size-4" />
-                                <BrandName text="SUNDAS MEMBERSHIP" imageClassName="opacity-70" />
-                            </div>
-                            <h2 className="acct-hero-title">{t("account.membershipHeroTitle")}</h2>
-                            <p className="acct-hero-desc">{t("account.membershipHeroDesc")}</p>
-                        </div>
-                        <div className="acct-hero-aside">
-                            <span className="acct-label">{t("account.currentMember")}</span>
-                            <div className="acct-member-name">
-                                <span className={`acct-dot ${member ? "is-on" : ""}`} />
-                                {member ? wallet?.tierName || wallet?.planName || t("account.member") : t("account.nonMember")}
-                            </div>
-                            <div className="acct-kv">
-                                <span>{t("account.discountLabel")}</span>
-                                <span className="acct-kv-value">{formatGenerationDiscount(wallet?.generationDiscount)}</span>
-                            </div>
-                            <p className="acct-note mt-3.5">
-                                {member ? t("account.memberUntil", { date: formatTime(wallet?.memberUntil) }) : t("account.memberActiveHint")}
-                            </p>
-                        </div>
-                    </div>
-                    <div className="acct-benefit-grid">
-                        {benefits.map(({ icon: Icon, title, text }) => (
-                            <div key={title}>
-                                <Icon aria-hidden className="size-4 text-foreground" />
-                                <h3 className="acct-benefit-title">{title}</h3>
-                                <p className="acct-benefit-desc">{text}</p>
-                            </div>
-                        ))}
-                    </div>
-                </section>
-            )}
-
-            {payDisabled ? <Alert type="warning" showIcon message={t("account.payNotConfigured")} /> : null}
-
-            {!membershipOnly && (
-                <div className="acct-split">
-                    <Panel title={t("account.recharge")} desc={t("account.priceHint", { price: (site.creditPriceCents / 100).toFixed(2), min: site.minCredits })}>
-                        {packages.length ? (
-                            <div className="acct-package-grid">
-                                {packages.map((item) => (
-                                    <button
-                                        key={item.id}
-                                        type="button"
-                                        onClick={() => setPackageId((current) => (current === item.id ? "" : item.id))}
-                                        className={`acct-package ${packageId === item.id ? "is-active" : ""}`}
-                                        aria-pressed={packageId === item.id}
-                                    >
-                                        <span className="acct-package-name">{item.name}</span>
-                                        <span className="acct-package-price">
-                                            ¥{(item.priceCents / 100).toFixed(2)}
-                                            {item.originalPriceCents && item.originalPriceCents > item.priceCents ? (
-                                                <span className="acct-package-origin">¥{(item.originalPriceCents / 100).toFixed(2)}</span>
-                                            ) : null}
-                                        </span>
-                                        <span className="acct-package-meta">{t("account.packageCredits", { credits: item.credits })}</span>
-                                        {item.description ? <span className="acct-package-desc">{item.description}</span> : null}
-                                    </button>
-                                ))}
-                            </div>
-                        ) : null}
-
-                        <div className={`acct-amount-row ${packages.length ? "" : "is-first"}`}>
-                            <div>
-                                <label className="acct-label mb-2" htmlFor="account-credits">
-                                    {t("account.customAmount")}
-                                    <span className="acct-hint">{t("account.customCreditsHint", { min: site.minCredits })}</span>
-                                </label>
-                                <InputNumber
-                                    id="account-credits"
-                                    size="large"
-                                    min={site.minCredits}
-                                    step={10}
-                                    value={credits}
-                                    onChange={(value) => { setCredits(Number(value) || site.minCredits); setPackageId(""); }}
-                                />
-                            </div>
-                        </div>
-                    </Panel>
-
-                    <Panel title={t("account.payInfo")} desc={t("account.paySummaryHint")}>
-                        <span className="acct-label">{t("account.payAmount")}</span>
-                        <div className="acct-pay-amount">¥{price.toFixed(2)}</div>
-                        <p className="acct-note mt-2">
-                            {selected ? t("account.selectedPackage", { name: selected.name, credits: selected.credits }) : t("account.packageCredits", { credits })}
-                        </p>
-                        <div className="acct-pay-block">
-                            <span className="acct-label">{t("account.payType")}</span>
-                            {payTypes.length ? (
-                                <Segmented block options={payTypes} value={payType} onChange={(value) => setPayType(String(value))} />
-                            ) : (
-                                <span className="acct-note">{t("account.payNotConfigured")}</span>
-                            )}
-                        </div>
-                        {providers.length > 1 ? (
-                            <div className="acct-pay-block">
-                                <span className="acct-label">{t("account.provider")}</span>
-                                <Segmented block options={providers} value={provider} onChange={(value) => selectProvider(String(value))} />
-                            </div>
-                        ) : null}
-                        <div className="acct-pay-footer">
-                            <Button
-                                type="primary"
-                                size="large"
-                                block
-                                loading={paying}
-                                disabled={payDisabled}
-                                onClick={() => void submit(selected ? { type: "credits", packageId: selected.id } : { type: "credits", credits })}
-                            >
-                                {t("account.payNow")}
-                            </Button>
-                        </div>
-                    </Panel>
-                </div>
-            )}
-
-            {membershipOnly && (plans.length ? (
-                <>
-                    <Panel title={t("account.membershipPlans")} desc={t("account.membershipPlansDesc")} extra={payTypeControl}>
-                        {member && <p className="acct-note mb-4">{t("account.renewalCurrentTerms")}</p>}
-                        <div className="acct-plan-grid">
-                            {plans.map((plan) => {
-                                const current = wallet?.planId === plan.id;
-                                return (
-                                    <div key={plan.id} className={`acct-plan ${current ? "is-current" : ""}`}>
-                                        <div className="acct-plan-meta">
-                                            <span>{plan.tierLevel ? `LV.${plan.tierLevel} · ${plan.tierName}` : t("account.plans")}</span>
-                                            {current ? <span className="acct-plan-badge">{t("account.currentPlan")}</span> : null}
-                                        </div>
-                                        <h3 className="acct-plan-name">{plan.name}</h3>
-                                        <p className="acct-plan-desc">{plan.description || t("account.membershipPlansDesc")}</p>
-                                        <div className="acct-plan-price">
-                                            ¥{(plan.priceCents / 100).toFixed(2)}
-                                            <span>/ {t("account.planDays", { days: plan.days })}</span>
-                                        </div>
-                                        <div className="acct-plan-discount">
-                                            <span className="acct-label">{t("account.discountLabel")}</span>
-                                            <div className="acct-plan-discount-value">{formatGenerationDiscount(plan.generationDiscount)}</div>
-                                            <p className="acct-note mt-1.5">基础报价 100 积分，折后 {Math.ceil(100 * plan.generationDiscount)} 积分</p>
-                                            <p className="acct-note">仅演示会员折扣，实际按模型及活动报价计费。</p>
-                                        </div>
-                                        <ul className="acct-plan-features">
-                                            <li><Check aria-hidden className="size-3.5" />{t("account.planMonthly", { credits: plan.monthlyCredits })}</li>
-                                            {plan.grantCredits > 0 && <li><Check aria-hidden className="size-3.5" />开通赠送 {plan.grantCredits} 积分</li>}
-                                            <li><Check aria-hidden className="size-3.5" />工作台与画布共享会员折扣</li>
-                                            <li><Check aria-hidden className="size-3.5" />有效期 {t("account.planDays", { days: plan.days })}</li>
-                                        </ul>
-                                        <Button
-                                            type={current ? "primary" : "default"}
-                                            loading={paying}
-                                            disabled={payDisabled}
-                                            onClick={() => void submit({ type: "plan", planId: plan.id })}
-                                        >
-                                            {current ? "续费当前套餐" : member ? "选择此套餐" : "开通会员"}
-                                            <ArrowUpRight className="size-4" />
-                                        </Button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </Panel>
-
-                    <section className="acct-panel">
-                        <div className="acct-panel-body grid gap-6 sm:grid-cols-2">
-                            <div>
-                                <h3 className="acct-benefit-title mt-0">折扣如何生效？</h3>
-                                <p className="acct-benefit-desc">开通后自动用于生成报价与扣费；最终积分向上取整，单次最低 1 积分。当前会员按购买时的折扣执行，新购或续费以订单确认的权益为准。</p>
-                            </div>
-                            <div>
-                                <h3 className="acct-benefit-title mt-0">升级与续费如何计算？</h3>
-                                <p className="acct-benefit-desc">同套餐续费延长有效期；升档仅覆盖原会员剩余时间，按新旧套餐价差及剩余时间比例计算，积分按周期差额折算。具体以订单确认信息为准。</p>
-                            </div>
-                        </div>
-                    </section>
-                </>
-            ) : <Panel title={t("account.membershipPlans")}><EmptyState text="暂无可购买的会员套餐，请稍后再来。" /></Panel>)}
-        </div>
-    );
-}
-
-function EmptyState({ text }: { text: string }) {
-    return (
-        <div className="jm-empty">
-            <span className="jm-empty-icon"><Inbox className="size-6" strokeWidth={1.5} /></span>
-            <p className="jm-empty-title">{text}</p>
-        </div>
-    );
-}
-
-function Orders() {
-    const { t } = useTranslation();
-    const { message } = AntApp.useApp();
-    const scope = useAccountScope();
-    const [rows, setRows] = useState<OrderRow[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    async function load() {
-        if (!scope.owner || !scope.current()) return;
-        setLoading(true);
-        try {
-            const data = await apiRequest<{ items: OrderRow[] }>("/api/orders?page=1&pageSize=20", { headers: { "X-Sundas-User": scope.owner } });
-            if (scope.current()) setRows(data.items);
-        } catch (error) {
-            if (scope.current()) message.error(error instanceof Error ? error.message : String(error));
-        } finally {
-            if (scope.current()) setLoading(false);
-        }
-    }
-
-    useEffect(() => {
-        void load();
-    }, []);
-
-    const statusMap: Record<string, { label: string; color: string }> = {
-        pending: { label: t("account.orderPending"), color: "gold" },
-        paid: { label: t("account.orderPaid"), color: "green" },
-        closed: { label: t("account.orderClosed"), color: "default" },
-        refunded: { label: t("account.orderRefunded"), color: "red" },
-    };
-
-    const columns: TableColumnsType<OrderRow> = [
-        { title: t("account.orderNo"), dataIndex: "orderNo" },
-        { title: t("account.type"), dataIndex: "type", render: (value: string) => (value === "plan" ? t("account.typePlan") : t("account.typeCredits")) },
-        { title: t("account.amount"), dataIndex: "amountCents", align: "right", width: 116, render: (value: number) => `¥${(value / 100).toFixed(2)}` },
-        { title: t("account.refundAmount"), dataIndex: "refundAmountCents", align: "right", width: 116, render: (value: number | null) => value == null ? "—" : `¥${(value / 100).toFixed(2)}` },
-        { title: t("account.credits"), dataIndex: "credits", align: "right", width: 108 },
-        { title: t("account.status"), dataIndex: "status", width: 210, render: (value: string, row) => <Tag color={row.fulfillmentIssue ? "orange" : statusMap[value]?.color}>{row.fulfillmentIssue ? t("account.orderReview") : statusMap[value]?.label ?? value}</Tag> },
-        { title: t("account.createdAt"), dataIndex: "createdAt", width: 160, render: formatTime },
-    ];
-
-    return (
-        <Panel
-            title={t("account.ordersTitle")}
-            desc={rows.some((row) => row.refundAmountCents != null) ? t("account.refundHint") : t("account.orderHint")}
-            bodyClassName="is-flush"
-            extra={<RefreshAction loading={loading} onRefresh={() => void load()} />}
-        >
-            <Table<OrderRow>
-                className="account-table"
-                rowKey="orderNo"
-                size="middle"
-                loading={loading}
-                dataSource={rows}
-                columns={columns}
-                pagination={false}
-                scroll={{ x: 860 }}
-                locale={{ emptyText: <EmptyState text={t("account.noOrders")} /> }}
-            />
-        </Panel>
-    );
-}
-
-function Ledger() {
-    const { t } = useTranslation();
-    const { message } = AntApp.useApp();
-    const scope = useAccountScope();
-    const [rows, setRows] = useState<LedgerRow[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    async function load() {
-        if (!scope.owner || !scope.current()) return;
-        setLoading(true);
-        try {
-            const data = await apiRequest<{ items: LedgerRow[] }>("/api/ledger?page=1&pageSize=30", { headers: { "X-Sundas-User": scope.owner } });
-            if (scope.current()) setRows(data.items);
-        } catch (error) {
-            if (scope.current()) message.error(error instanceof Error ? error.message : String(error));
-        } finally {
-            if (scope.current()) setLoading(false);
-        }
-    }
-
-    useEffect(() => {
-        void load();
-    }, []);
-
-    const typeMap: Record<string, string> = {
-        grant: t("account.ledgerGrant"),
-        consume: t("account.ledgerConsume"),
-        refund: t("account.ledgerRefund"),
-        expire: t("account.ledgerExpire"),
-        adjust: t("account.ledgerAdjust"),
-    };
-
-    const columns: TableColumnsType<LedgerRow> = [
-        { title: t("account.type"), dataIndex: "type", width: 120, render: (value: string) => typeMap[value] ?? value },
-        { title: t("account.amount"), dataIndex: "amount", align: "right", width: 120, render: (value: number) => <span className={value > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>{value > 0 ? `+${value}` : value}</span> },
-        { title: t("account.balanceAfter"), dataIndex: "balanceAfter", align: "right", width: 140 },
-        { title: t("account.remark"), dataIndex: "remark", render: (value: string | null) => value ?? "-" },
-        { title: t("account.createdAt"), dataIndex: "createdAt", width: 160, render: formatTime },
-    ];
-
-    return (
-        <Panel
-            title={t("account.ledgerTitle")}
-            desc={t("account.records", { count: rows.length })}
-            bodyClassName="is-flush"
-            extra={<RefreshAction loading={loading} onRefresh={() => void load()} />}
-        >
-            <Table<LedgerRow>
-                className="account-table"
-                rowKey="id"
-                size="middle"
-                loading={loading}
-                dataSource={rows}
-                columns={columns}
-                pagination={false}
-                scroll={{ x: 720 }}
-                locale={{ emptyText: <EmptyState text={t("account.noLedger")} /> }}
-            />
-        </Panel>
-    );
-}
-
-function Redeem() {
-    const { t } = useTranslation();
-    const { message } = AntApp.useApp();
-    const scope = useAccountScope();
-    const refreshWallet = useAuthStore((state) => state.refreshWallet);
-    const [code, setCode] = useState("");
-    const [loading, setLoading] = useState(false);
-
-    async function submit() {
-        if (!code.trim() || !scope.owner || !scope.current()) return;
-        setLoading(true);
-        try {
-            const data = await apiRequest<{ credits: number }>("/api/redeem", { method: "POST", headers: { "X-Sundas-User": scope.owner }, json: { code: code.trim() } });
-            if (!scope.current()) return;
-            message.success(t("account.redeemSuccess", { credits: data.credits }));
-            setCode("");
-            await refreshWallet();
-        } catch (error) {
-            if (scope.current()) message.error(error instanceof Error ? error.message : String(error));
-        } finally {
-            if (scope.current()) setLoading(false);
-        }
-    }
-
-    return (
-        <div className="acct-split">
-            <Panel title={t("account.redeemTitle")} desc={t("account.redeemHint")}>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                    <Input
-                        size="large"
-                        className="sm:flex-1"
-                        value={code}
-                        onChange={(event) => setCode(event.target.value)}
-                        placeholder={t("account.redeemPlaceholder")}
-                        onPressEnter={() => void submit()}
-                    />
-                    <Button type="primary" size="large" className="sm:w-[112px]" loading={loading} onClick={() => void submit()}>
-                        {t("account.redeemButton")}
-                    </Button>
-                </div>
-            </Panel>
-            <Panel title={t("account.redeemNotes")}>
-                <ol className="acct-note-list">
-                    <li className="acct-note-item">{t("account.redeemNote1")}</li>
-                    <li className="acct-note-item">{t("account.redeemNote2")}</li>
-                    <li className="acct-note-item">{t("account.redeemNote3")}</li>
-                </ol>
-            </Panel>
-        </div>
-    );
-}
-
-function Invite() {
-    const { t } = useTranslation();
-    const { message } = AntApp.useApp();
-    const scope = useAccountScope();
-    const [data, setData] = useState<{
-        code: string;
-        invitees: number;
-        rebateCredits: number;
-        revokedCredits: number;
-        rebates: { orderNo: string; inviteeEmail: string; rebateCredits: number; rebatePercent: number; status: string; createdAt: string }[];
-        invited: { email: string; status: string; totalRebate: number; createdAt: string }[];
-    } | null>(null);
-    const [loading, setLoading] = useState(true);
-
-    async function load() {
-        if (!scope.owner || !scope.current()) return;
-        setLoading(true);
-        try {
-            const result = await apiRequest<NonNullable<typeof data>>("/api/invite", { headers: { "X-Sundas-User": scope.owner } });
-            // 后端在新账户 / 灰度环境下可能缺字段，补齐再用，避免整页白屏
-            if (scope.current()) setData({
-                code: result?.code ?? "",
-                invitees: result?.invitees ?? 0,
-                rebateCredits: result?.rebateCredits ?? 0,
-                revokedCredits: result?.revokedCredits ?? 0,
-                rebates: result?.rebates ?? [],
-                invited: result?.invited ?? [],
-            });
-        } catch (error) {
-            if (scope.current()) message.error(error instanceof Error ? error.message : String(error));
-        } finally {
-            if (scope.current()) setLoading(false);
-        }
-    }
-
-    useEffect(() => {
-        void load();
-    }, []);
-
-    async function copy(value: string, okText: string) {
-        if (!scope.current()) return;
-        await navigator.clipboard?.writeText(value);
-        if (scope.current()) message.success(okText);
-    }
-
-    if (loading && !data) return <Loading />;
-    if (!data) return null;
-
-    const inviteLink = `${window.location.origin}/register?invite=${data.code}`;
-
-    const invitedColumns: TableColumnsType<(typeof data.invited)[number]> = [
-        { title: t("account.inviteeEmail"), dataIndex: "email" },
-        { title: t("account.rebateAmount"), dataIndex: "totalRebate", align: "right", width: 140, render: (value: number) => <span className="tabular-nums">{value}</span> },
-        { title: t("account.status"), dataIndex: "status", width: 120, render: (value: string) => <Tag color={value === "active" ? "green" : "default"}>{value === "active" ? "正常" : "已禁用"}</Tag> },
-        { title: t("account.createdAt"), dataIndex: "createdAt", width: 160, render: formatTime },
-    ];
-
-    const rebateColumns: TableColumnsType<(typeof data.rebates)[number]> = [
-        { title: t("account.orderNo"), dataIndex: "orderNo" },
-        { title: t("account.inviteeEmail"), dataIndex: "inviteeEmail" },
-        { title: t("account.rebateAmount"), dataIndex: "rebateCredits", align: "right", width: 140, render: (value: number) => <span className="tabular-nums">{value}</span> },
-        {
-            title: t("account.status"),
-            dataIndex: "status",
-            width: 120,
-            render: (value: string) => <Tag color={value === "granted" ? "green" : "red"}>{value === "granted" ? "已发放" : t("account.rebateRevoked")}</Tag>,
-        },
-        { title: t("account.createdAt"), dataIndex: "createdAt", width: 160, render: formatTime },
-    ];
-
-    return (
-        <div className="acct-stack">
-            <Panel title={t("account.inviteTitle")} desc={t("account.inviteHint")}>
-                <div className="acct-code-row">
-                    <span className="acct-code">{data.code}</span>
-                    <Button onClick={() => void copy(data.code, t("account.copied"))}>{t("account.copyCode")}</Button>
-                </div>
-                <div className="acct-link-row">
-                    <span className="acct-link">{inviteLink}</span>
-                    <Button onClick={() => void copy(inviteLink, t("account.copiedLink"))}>{t("account.copyLink")}</Button>
-                </div>
-                <div className="acct-stat-grid">
-                    <div className="acct-stat">
-                        <span className="acct-label">{t("account.inviteesTotal")}</span>
-                        <div className="acct-stat-value">{data.invitees}</div>
-                    </div>
-                    <div className="acct-stat">
-                        <span className="acct-label">{t("account.rebateTotal")}</span>
-                        <div className="acct-stat-value">{data.rebateCredits}</div>
-                    </div>
-                    <div className="acct-stat">
-                        <span className="acct-label">{t("account.rebateRevoked")}</span>
-                        <div className="acct-stat-value text-muted-foreground">{data.revokedCredits}</div>
-                    </div>
-                </div>
-            </Panel>
-
-            <Panel title={t("account.inviteFriends")} desc={t("account.records", { count: data.invited.length })} bodyClassName="is-flush">
-                <Table
-                    className="account-table"
-                    rowKey="email"
-                    size="middle"
-                    dataSource={data.invited}
-                    columns={invitedColumns}
-                    pagination={false}
-                    scroll={{ x: 640 }}
-                    locale={{ emptyText: <EmptyState text={t("account.inviteEmpty")} /> }}
-                />
-            </Panel>
-
-            <Panel title={t("account.inviteRebates")} desc={t("account.records", { count: data.rebates.length })} bodyClassName="is-flush">
-                <Table
-                    className="account-table"
-                    rowKey="orderNo"
-                    size="middle"
-                    dataSource={data.rebates}
-                    columns={rebateColumns}
-                    pagination={false}
-                    scroll={{ x: 720 }}
-                    locale={{ emptyText: <EmptyState text={t("account.rebateEmpty")} /> }}
-                />
-            </Panel>
-        </div>
-    );
-}
-
-function Settings() {
-    const { t } = useTranslation();
-    const { message } = AntApp.useApp();
-    const scope = useAccountScope();
-    const user = useAuthStore((state) => state.user);
-    const wallet = useAuthStore((state) => state.wallet);
-    const changePassword = useAuthStore((state) => state.changePassword);
-    const [oldPassword, setOldPassword] = useState("");
-    const [newPassword, setNewPassword] = useState("");
-    const [confirm, setConfirm] = useState("");
-    const [loading, setLoading] = useState(false);
-
-    async function submit() {
-        if (!scope.owner || !scope.current()) return;
-        if (newPassword.length < 8) {
-            message.error(t("auth.passwordTooShort"));
-            return;
-        }
-        if (newPassword !== confirm) {
-            message.error(t("auth.passwordMismatch"));
-            return;
-        }
-        setLoading(true);
-        try {
-            await changePassword(oldPassword, newPassword, scope.owner);
-            if (!scope.current()) return;
-            message.success(t("account.passwordChanged"));
-            setOldPassword("");
-            setNewPassword("");
-            setConfirm("");
-        } catch (error) {
-            if (scope.current()) message.error(error instanceof Error ? error.message : String(error));
-        } finally {
-            if (scope.current()) setLoading(false);
-        }
-    }
-
-    return (
-        <div className="acct-settings-grid">
-            <Panel title={t("account.accountInfo")} desc={t("account.accountInfoHint")}>
-                <div className="acct-info-row">
-                    <span className="acct-label">{t("account.emailLabel")}</span>
-                    <span className="acct-info-value">{user?.email}</span>
-                </div>
-                <div className="acct-info-row">
-                    <span className="acct-label">{t("account.member")}</span>
-                    <span className="acct-info-value">
-                        {wallet?.member ? (wallet?.tierName || wallet?.planName || t("account.member")) : t("account.nonMember")}
-                    </span>
-                </div>
-                <div className="acct-info-row">
-                    <span className="acct-label">{t("account.balance")}</span>
-                    <span className="acct-info-value tabular-nums">{wallet?.availableCredits ?? wallet?.balance ?? 0}</span>
-                </div>
-            </Panel>
-
-            <Panel title={t("account.changePassword")} desc={t("account.passwordHint")}>
-                <div className="acct-field-grid">
-                    <label className="acct-field">
-                        <span className="acct-label">{t("account.oldPassword")}</span>
-                        <Input.Password size="large" value={oldPassword} onChange={(event) => setOldPassword(event.target.value)} autoComplete="current-password" />
-                    </label>
-                    <label className="acct-field">
-                        <span className="acct-label">{t("account.newPassword")}</span>
-                        <Input.Password size="large" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" />
-                    </label>
-                    <label className="acct-field">
-                        <span className="acct-label">{t("account.confirmNewPassword")}</span>
-                        <Input.Password size="large" value={confirm} onChange={(event) => setConfirm(event.target.value)} autoComplete="new-password" />
-                    </label>
-                </div>
-                <div className="acct-form-footer is-end">
-                    <Button type="primary" size="large" loading={loading} onClick={() => void submit()}>
-                        {t("account.savePassword")}
-                    </Button>
-                </div>
-            </Panel>
-        </div>
-    );
-}
-
-
-========================================================================
-FILE: web/src/pages/admin/access/index.tsx
-LINES: 1-48
-========================================================================
-import { useEffect, useState } from "react";
-import { App, Button, Checkbox, Input, Modal, Select, Table } from "antd";
-import type { TableColumnsType } from "antd";
-import { accessApi, type AdminRole, type Administrator } from "@/services/api/admin/access";
-import { useAdminRequest } from "../use-admin-request";
-import { AdminField, AdminPanel } from "../components/ui";
-
-type RoleDraft = { id?: string; code: string; name: string; description: string; permissions: string[] };
-const emptyRole = (): RoleDraft => ({ code: "", name: "", description: "", permissions: [] });
-const sections: Record<string, string> = { media: "用户私有素材", dashboard: "看板", prompts: "提示词源", users: "用户", credits: "积分", tasks: "任务", channels: "渠道", models: "模型", invites: "邀请返佣", orders: "订单", catalog: "套餐", announcements: "公告", promo: "宣发", redeem: "兑换码", settings: "系统设置", admins: "管理员", audit: "审计日志" };
-const actions: Record<string, string> = { read: "查看", manage: "管理", sync: "同步", "reset-password": "重置密码", adjust: "调整积分", review: "登记核对", resolve: "处理冻结", export: "导出" };
-function permissionLabel(value: string) {
-    const [section, action] = value.split(".");
-    return `${sections[section] ?? section}：${actions[action] ?? action}`;
-}
-export function AccessTab() {
-    const request = useAdminRequest(); const api = accessApi(request); const { message, modal } = App.useApp();
-    const [roles, setRoles] = useState<AdminRole[]>([]); const [all, setAll] = useState<string[]>([]); const [admins, setAdmins] = useState<Administrator[]>([]);
-    const [loading, setLoading] = useState(false); const [saving, setSaving] = useState(false);
-    const [role, setRole] = useState<RoleDraft | null>(null); const [assignment, setAssignment] = useState<{ id?: string; userId: string; roles: string[] } | null>(null);
-    const report = (error: unknown) => message.error(error instanceof Error ? error.message : String(error));
-    async function load() { setLoading(true); try { const [a, b] = await Promise.all([api.roles(), api.administrators()]); setRoles(a.roles); setAll(a.permissions); setAdmins(b.administrators); } catch (e) { report(e); } finally { setLoading(false); } }
-    useEffect(() => { void load(); }, [request]);
-    async function saveRole() { if (!role) return; setSaving(true); try { await api.saveRole(role.id, role); setRole(null); message.success("角色已保存"); await load(); } catch (e) { report(e); } finally { setSaving(false); } }
-    async function saveAdmin() { if (!assignment) return; setSaving(true); try { if (assignment.id) await api.assign(assignment.id, assignment.roles); else await api.addAdmin(assignment.userId, assignment.roles); setAssignment(null); message.success("管理员角色已保存"); await load(); } catch (e) { report(e); } finally { setSaving(false); } }
-    function removeRole(item: AdminRole) { modal.confirm({ title: `删除角色 ${item.name}？`, onOk: async () => { try { await api.deleteRole(item.id); await load(); } catch (e) { report(e); } } }); }
-    function removeAdmin(item: Administrator) { modal.confirm({ title: `撤销 ${item.email} 的管理员身份？`, onOk: async () => { try { await api.remove(item.id); await load(); } catch (e) { report(e); } } }); }
-    const roleColumns: TableColumnsType<AdminRole> = [
-        { title: "角色", dataIndex: "name" }, { title: "代码", dataIndex: "code" }, { title: "管理员数", dataIndex: "userCount" },
-        { title: "权限", render: (_, row) => row.code === "super_admin" ? "全部权限" : row.permissions.map(permissionLabel).join("、") || "无" },
-        { title: "操作", render: (_, row) => <div className="flex gap-2"><Button size="small" disabled={row.code === "super_admin"} onClick={() => setRole({ id: row.id, code: row.code, name: row.name, description: row.description, permissions: row.permissions })}>编辑</Button><Button size="small" disabled={row.isSystem} onClick={() => removeRole(row)}>删除</Button></div> },
-    ];
-    const adminColumns: TableColumnsType<Administrator> = [
-        { title: "账号", dataIndex: "email" }, { title: "昵称", dataIndex: "displayName" }, { title: "状态", dataIndex: "status", render: (v: string) => v === "active" ? "正常" : "已禁用" },
-        { title: "角色", render: (_, row) => row.roleNames.join("、") || "未分配" },
-        { title: "操作", render: (_, row) => <div className="flex gap-2"><Button size="small" onClick={() => setAssignment({ id: row.id, userId: row.id, roles: row.roleIds })}>分配角色</Button><Button size="small" danger onClick={() => removeAdmin(row)}>撤销</Button></div> },
-    ];
-    return <div className="space-y-5">
-        <AdminPanel title="管理员" actions={<div className="flex gap-2"><Button onClick={() => void load()} loading={loading}>刷新</Button><Button type="primary" onClick={() => setAssignment({ userId: "", roles: [] })}>添加管理员</Button></div>} flush><Table rowKey="id" dataSource={admins} columns={adminColumns} loading={loading} pagination={false} scroll={{ x: 700 }} /></AdminPanel>
-        <AdminPanel title="角色权限" actions={<Button onClick={() => setRole(emptyRole())}>新增角色</Button>} flush><Table rowKey="id" dataSource={roles} columns={roleColumns} loading={loading} pagination={false} scroll={{ x: 800 }} /></AdminPanel>
-        <Modal title={role?.id ? "编辑角色" : "新增角色"} open={Boolean(role)} onCancel={() => setRole(null)} onOk={() => void saveRole()} confirmLoading={saving} width={760}>
-            {role && <div className="space-y-3"><AdminField label="角色名称"><Input value={role.name} onChange={e => setRole({ ...role, name: e.target.value })} /></AdminField><AdminField label="角色代码"><Input disabled={Boolean(role.id)} value={role.code} onChange={e => setRole({ ...role, code: e.target.value })} /></AdminField><AdminField label="说明"><Input value={role.description} onChange={e => setRole({ ...role, description: e.target.value })} /></AdminField><AdminField label="权限"><Checkbox.Group value={role.permissions} onChange={values => setRole({ ...role, permissions: values as string[] })}><div className="space-y-2">{Object.entries(sections).map(([section, title]) => { const values = all.filter(value => value.startsWith(`${section}.`)); return values.length ? <div key={section} className="flex flex-wrap gap-x-3 gap-y-1"><span className="min-w-20 font-medium">{title}</span>{values.map(value => <Checkbox key={value} value={value}>{actions[value.split(".")[1]] ?? value}</Checkbox>)}</div> : null; })}</div></Checkbox.Group></AdminField></div>}
-        </Modal>
-        <Modal title={assignment?.id ? "分配角色" : "添加管理员"} open={Boolean(assignment)} onCancel={() => setAssignment(null)} onOk={() => void saveAdmin()} confirmLoading={saving}>
-            {assignment && <div className="space-y-3">{!assignment.id && <AdminField label="已有用户 ID"><Input value={assignment.userId} onChange={e => setAssignment({ ...assignment, userId: e.target.value })} /></AdminField>}<AdminField label="角色"><Select mode="multiple" className="w-full" value={assignment.roles} options={roles.map(item => ({ value: item.id, label: item.name }))} onChange={value => setAssignment({ ...assignment, roles: value })} /></AdminField></div>}
-        </Modal>
-    </div>;
 }
 

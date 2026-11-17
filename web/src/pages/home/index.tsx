@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { App } from "antd";
-import { ArrowUp, ArrowUpRight, ChevronDown, Heart, ImagePlus, LoaderCircle, Minus, Music, PlayCircle, Plus, Share2, Sparkles, Video, X, Zap } from "lucide-react";
+import { ArrowUp, ArrowUpRight, ChevronDown, ImagePlus, LoaderCircle, Minus, Music, PlayCircle, Plus, Sparkles, Video, X, Zap } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { nanoid } from "nanoid";
 import { useTranslation } from "react-i18next";
@@ -30,10 +30,7 @@ import { modelOptionName, useConfigStore } from "@/stores/use-config-store";
 import { currentMediaOwner, uploadBlobToServer } from "@/services/cloud-media";
 import "./home.css";
 import "./home-landing.css";
-import "./home-enhanced.css";
-import "./home-enhanced-v2.css";
 import "./home-jimeng.css";
-import { initHomePageEnhancements } from "./home-enhancements";
 import { useCreditEstimate } from '@/hooks/use-credit-estimate';
 
 type CreationMode = "image" | "video";
@@ -184,11 +181,6 @@ export default function HomePage({ landing = false, suppressPromo = false }: { l
         void loadSiteInfo().then((data) => setHome(data.home ?? {})).catch(() => setHome({}));
     }, []);
 
-    const enhancementsRef = useRef<HTMLElement>(null);
-    useEffect(() => {
-        if (enhancementsRef.current) return initHomePageEnhancements(enhancementsRef.current);
-    }, [authReady, viewOwner, viewEpoch]);
-
     // 灵感大厅展示条数：视频/图片页签可分别设置，未设置时沿用统一的 promptLimit，0 表示不限。
     const activeLimit = inspirationMode === "video" ? videoLimit : imageLimit;
     const promptCards = (inspirationMode === "video" ? videoPrompts : imagePrompts).slice(0, activeLimit || undefined);
@@ -297,7 +289,7 @@ export default function HomePage({ landing = false, suppressPromo = false }: { l
     if (viewOwner !== userId || viewEpoch !== sessionEpoch || !isCurrentView()) return null;
 
     return (
-        <main ref={enhancementsRef} className={landing ? "home-page home-landing" : "home-page home-explore"}>
+        <main className={landing ? "home-page home-landing" : "home-page home-explore"}>
             {/* 影幕展示：首页顶部竖版片段墙循环播放，向下渐隐到纯色底（内容层在其上方） */}
             {landing ? (
                 <div className="home-backdrop" aria-hidden="true">
@@ -391,7 +383,8 @@ export default function HomePage({ landing = false, suppressPromo = false }: { l
                                 disabled={materialBusy || materials.length >= MAX_MATERIALS}
                                 onClick={() => {
                                     if (!user) {
-                                        message.warning(t("home.referenceLogin"));
+                                        message.info(t("home.referenceLogin"));
+                                        openAuthDialog("login", { redirect: "/" });
                                         return;
                                     }
                                     materialInputRef.current?.click();
@@ -625,10 +618,7 @@ export default function HomePage({ landing = false, suppressPromo = false }: { l
                                             </span>
                                         ) : null}
                                         {/* 遮罩层必须 pointer-events-none：否则鼠标命中的是遮罩而不是 <video>，悬浮播放不会触发 */}
-                                        <span className="home-prompt-hover pointer-events-none" aria-hidden="true">
-                                            <span className="home-prompt-like"><Heart className="size-3.5" /></span>
-                                            <span className="home-prompt-share"><Share2 className="size-3.5" /></span>
-                                        </span>
+                                        <span className="home-prompt-hover pointer-events-none" aria-hidden="true" />
                                     </span>
                                     <span className="home-prompt-body">
                                         <span className="home-prompt-avatar" aria-hidden="true">{title.slice(0, 1)}</span>

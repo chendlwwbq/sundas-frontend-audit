@@ -49,7 +49,8 @@
     border: 1px solid var(--hj-border);
     background: rgba(255, 255, 255, 0.03);
 }
-.home-landing .landing-switch a {
+.home-landing .landing-switch > a,
+.home-landing .landing-switch > button {
     flex: none;
     min-width: 96px;
     padding: 8px 18px;
@@ -58,7 +59,8 @@
     font-weight: 500;
     transition: color 0.15s ease, background-color 0.15s ease;
 }
-.home-landing .landing-switch a:hover { color: var(--hj-text); }
+.home-landing .landing-switch > a:hover,
+.home-landing .landing-switch > button:hover { color: var(--hj-text); }
 .home-landing .landing-switch .is-active {
     /* 激活态走品牌青柠：淡青柠底 + 青柠字 + 1px 青柠描边 */
     background: rgba(216, 255, 62, 0.14);

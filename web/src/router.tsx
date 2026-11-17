@@ -42,7 +42,7 @@ function CreationHome() {
             navigate(`/create?mode=${mode}`, { replace: true });
         } catch { /* a bad guest draft must not block the workspace */ }
     }, [user?.id, ready, navigate]);
-    if (!ready) return <PageSkeleton />;
+    if (!ready) return <PageSkeleton embedded />;
     return user ? (params.get("mode") === "chat" ? <ChatPage key={`${user.id}:${useAuthStore.getState().sessionEpoch}`} /> : params.get("mode") === "video" ? <VideoPage /> : <ImagePage />) : <GuestCreation />;
 }
 

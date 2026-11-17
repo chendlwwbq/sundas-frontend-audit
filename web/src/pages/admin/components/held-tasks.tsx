@@ -8,7 +8,7 @@ import { AdminPanel } from "./ui";
 import { CreditReview } from "../tasks/credit-review";
 import { useAdminPermissions } from "../permissions";
 
-type HeldTask = { id: string; type: string; status: string; modelName: string; upstreamId: string | null; email: string; heldCredits: number | null; reservationMismatch: boolean; reservationIssue: string | null; createdAt: string; reconciliationRequired: boolean; imageRecheckable: boolean | null; error: string | null };
+type HeldTask = { id: string; type: string; status: string; modelName: string; upstreamId: string | null; submissionReference?: string | null; submissionRequests?: Record<string, string | null>; email: string; heldCredits: number | null; reservationMismatch: boolean; reservationIssue: string | null; createdAt: string; reconciliationRequired: boolean; imageRecheckable: boolean | null; error: string | null };
 type LatestReview = {state:string;note:string;createdAt:string} | null;
 type ExpiryIssue = { id: string; userId: string; email: string; amount: number; remaining: number; balance: number | null; expiresAt: string | null; latestReview:LatestReview };
 type WalletIssue = { userId: string; email: string; balance: number | null; held: number | null; lotTotal: string; reservationTotal: string; latestReview:LatestReview };
@@ -182,7 +182,7 @@ export function HeldTasksTab() {
         { title: "创建时间", dataIndex: "createdAt", render: (value: string) => dayjs(value).format("YYYY-MM-DD HH:mm:ss") },
         { title: "处理", render: (_value, row) => row.heldCredits === null || row.reservationMismatch ? "请人工核对账目" : !["queued", "running"].includes(row.status) ? permissions.includes("tasks.resolve") ? <Button size="small" onClick={() => { setAction("terminal"); setTarget(row); setNote(""); }}>核对冻结</Button> : "—" : row.upstreamId
             ? permissions.includes("tasks.review") ? <Button size="small" disabled={!row.reconciliationRequired || (row.type !== "video" && !(row.type === 'image' && row.imageRecheckable))} onClick={() => { setAction("recheck"); setTarget(row); setNote(""); }}>查询上游</Button> : "—"
-            : <div className="flex gap-2">{permissions.includes("tasks.resolve") && <Button size="small" onClick={() => { setAction("release"); setTarget(row); setNote(""); }}>核查并释放</Button>}{permissions.includes("tasks.review") && (row.type === "video" || (row.type === 'image' && row.imageRecheckable)) && row.reconciliationRequired && <Button size="small" onClick={() => { setAction("attach"); setTarget(row); setNote(""); setUpstreamId(""); }}>补录上游 ID</Button>}</div> },
+            : <div className="flex gap-2">{permissions.includes("tasks.resolve") && <Button size="small" onClick={() => { setAction("release"); setTarget(row); setNote(""); }}>核查并释放</Button>}{permissions.includes("tasks.review") && (row.type === "video" || (row.type === 'image' && row.imageRecheckable)) && row.reconciliationRequired && <Button size="small" onClick={() => { setAction("attach"); setTarget(row); setNote(""); setUpstreamId(row.submissionReference || ""); }}>补录上游 ID</Button>}</div> },
     ];
     return <>
         {permissions.includes("tasks.read") && <AdminPanel title="任务核对" description="显示未关闭冻结的任务，以及缺少有效冻结记录的未完成任务。已有上游任务 ID 的视频及支持核对的图片任务请通过上游核查；不要仅凭等待时间判断失败。" actions={<RefreshStatus checkedAt={checkedAt} onRefresh={()=>void load()} />} flush>

@@ -1,13 +1,746 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
-
 
 ========================================================================
 FILE: web/src/i18n/locales/en-US.ts
-LINES: 739-789
+LINES: 1-789
 ========================================================================
+export default {
+    meta: {
+        title: "sundas",
+        description: "AI video creation workspace",
+    },
+    theme: { toggle: "Toggle theme" },
+    common: {
+        cancel: "Cancel",
+        save: "Save",
+        edit: "Edit",
+        done: "Done",
+        delete: "Delete",
+        copy: "Copy",
+        copied: "Copied",
+        details: "Details",
+        addToAssets: "Add to My Assets",
+        addedToAssets: "Added to My Assets",
+        copyPrompt: "Copy prompt",
+        promptCopied: "Prompt copied",
+        created: "Created: {{date}}",
+        updated: "Updated: {{date}}",
+        all: "All",
+        view: "View",
+        download: "Download",
+        upload: "Upload",
+        requestCanceled: "Request canceled",
+        durationMinutes: "{{minutes}}m {{seconds}}s",
+        durationSeconds: "{{seconds}}s",
+        imageReadFailed: "Failed to read image",
+        appleImageConvertFailed: "This browser could not convert the HEIC/HEIF image. Export it as JPG or PNG and upload again.",
+        unsupportedImageFormatTitle: "Unsupported image format",
+        unsupportedImageFormatDescription: "HEIC/HEIF/AVIF photos from mobile devices need to be exported as JPG or PNG before uploading; taking a screenshot as PNG also works.",
+        mediaLocalOnlyTitle: "Media not uploaded to the cloud",
+        mediaLocalOnlyDescription: "This media is stored only in this browser and may be lost when switching devices or clearing browser data. Check your connection or storage space and upload again.",
+        localOnly: "Local only",
+        localOnlyHint: "This file has not been uploaded to the cloud and may be unavailable on another device",
+        retryUpload: "Upload again",
+        uploadingStatus: "Uploading",
+        waitingStatus: "Waiting",
+        uploadFailedStatus: "Upload failed",
+        optimizePrompt: "Optimize prompt",
+        optimizePromptHint: "Optimize prompt (credits are charged by the configured optimizer model)",
+        optimizingPrompt: "Optimizing prompt",
+        optimizePromptApplied: "Prompt optimized, {{credits}} credits used",
+        optimizePromptFailed: "Failed to optimize prompt. Please try again.",
+        optimizePromptUnavailable: "Prompt optimization is not configured. Contact the administrator.",
+        optimizePromptInsufficientCredits: "Insufficient credits. Please top up and try again.",
+        optimizePromptRateLimited: "Too many optimization requests. Please try again later.",
+        optimizePromptUndo: "Undo",
+        optimizePromptChanged: "The prompt changed, so the optimization result was not applied.",
+        optimizePromptTooLong: "Prompt cannot exceed 4,000 characters",
+        optimizePromptNoModel: "Select a generation model first",
+    },
+    settingsPanels: {
+        common: { auto: "Auto", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Maximum" },
+        image: { title: "Image settings", quality: "Quality", size: "Size", align16: "Align to multiples of 16", align16Hint: "Round dimensions up to the next multiple of 16 after input", resolution: "Resolution", aspectRatio: "Aspect ratio", transparent: "Transparent background", transparentHint: "Generate an image without a background when supported by the model", count: "Image count", images: "{{count}} images" },
+        video: { title: "Video settings", quality: "Quality", size: "Size", seconds: "Seconds", mode: "Mode", modes: { frames: "First & last frame", reference: "General reference" }, resolution: "Resolution", ratio: "Aspect ratio", duration: "Duration", smart: "Smart", output: "Output", generateAudio: "Generate audio", watermark: "Add watermark", adaptive: "Adaptive", sizes: { landscape: "Landscape", portrait: "Portrait", square: "Square", widescreen: "Widescreen", tall: "Tall", auto: "Auto" }, ratios: { landscape: "Landscape", portrait: "Portrait", square: "Square", standardLandscape: "Standard landscape", standardPortrait: "Standard portrait", cinematic: "Cinematic", adaptive: "Adaptive" } },
+        audio: { title: "Audio settings", voice: "Voice", format: "Format", speed: "Speed", instructions: "Voice instructions", instructionsPlaceholder: "For example: natural, warm, and suitable for narration." },
+        text: { title: "Text settings", reasoning: "Reasoning effort", count: "Generation count" },
+        model: { select: "Select model", assign: "Assign a model for {{capability}} in the provider settings", noMatch: "No matching {{capability}} models", addFirst: "Add a provider and models in Settings first", capabilities: { image: "image generation", video: "video", text: "text", audio: "audio" } },
+    },
+    generation: { pending: ["Creating image", "Almost there", "Just a little longer", "Refining details"] },
+    imageReferences: { label: "Image {{index}}", separator: ", ", promptPrefix: "Reference image labels: {{labels}}. Use these labels to interpret image references in the prompt.\n\n{{prompt}}" },
+    modelPlugin: {
+        pollTimeout: "Plugin polling timed out. Check the request script or try again later.", executionFailed: "Model request script failed: {{message}}", noImages: "The model request script did not return any images",
+        variables: { prompt: "User prompt with the system prompt already included", images: "Reference images as a data URL array, available for image editing and image-to-video", videos: "Reference videos as a File array you can form.append; empty when none are attached from the canvas or workbench", audios: "Reference audio as a File array you can form.append; empty when none are attached from the canvas or workbench", messages: "Conversation message array including the system message", params: "Generation parameters: image {size,resolution,quality,count,background}, video {mode,seconds,size,resolution,ratio,generateAudio,watermark} (mode is frames for first/last frame or reference for general references; more than 2 images become reference), audio {voice,format,speed,instructions}", model: "Model name without the provider prefix", baseUrl: "Provider endpoint as entered, without appending /v1", apiKey: "Provider API key; add it to request headers yourself", systemPrompt: "Original system prompt", reasoningEffort: "Text reasoning effort; auto lets the script decide whether to send it", http: "Convenience client: http.post(path, body, {headers,params,responseType}), http.get(path, opts), and http.url(path). Authorization: Bearer apiKey is included by default and can be overridden. Relative paths append /v1 to baseUrl.", request: "Raw request({ method, url, headers, params, data, responseType }) with no default headers. Add authentication yourself. Relative URLs are joined to baseUrl without /v1.", poll: "poll(request, extract, {intervalMs,timeoutMs}) continues until extract returns a truthy value", sleep: "Delay with sleep(ms)", signal: "Cancellation signal that can be passed to http/request", onDelta: "Push streaming text with onDelta(text) for text models" },
+        returns: { image: "Text-to-image and image editing use different APIs; distinguish them by whether images is empty. Return an image URL or data URL, an array of them, or [{ dataUrl }] / [{ url }] / [{ b64_json }].", video: "Poll inside the script and return { url }, { blob }, or a video URL string.", audio: "Return a Blob, base64/data URL string, or { b64_json } / { data } / { url }.", text: "Push streaming output with onDelta(text), then return the complete text string." },
+        templates: { openai: "OpenAI format", gemini: "Gemini format" },
+        authoring: {
+            intro: "Write a model request script for Infinite Canvas. Capability: {{capability}}. Target model: {{model}}.",
+            shape: "Write an async function whose parameter list names the variables you use, and unpack params into fields such as size, quality, and count. Do not import modules or use Markdown fences. Send the request and return the result inside the function. The runtime injects matching locals, so finish with return await functionName({ the same arguments }).",
+            returnTitle: "Return requirements",
+            variablesTitle: "Available variables",
+            rulesTitle: "Rules",
+            rules: "- Write an async function whose parameter list names the variables you use, and unpack params into fields such as size, quality, count, and seconds. Document each field with a /** */ JSDoc comment above the function.\n- Send raw HTTP with request({ method, url, headers, params, data, responseType }). Use http.post / http.get when you want Authorization: Bearer apiKey by default.\n- Relative URLs: request joins them to baseUrl without /v1; http relative paths append /v1 to baseUrl.\n- Async video tasks usually create a job and then poll(request, extract, { intervalMs, timeoutMs }) until extract returns a truthy value.\n- images is a data URL string array. videos and audios are File arrays you can form.append(field, file); they are empty when no references are attached.\n- Do not set Content-Type on FormData; let the browser add the boundary.\n- Return the result from the function, then finish with return await functionName({ the same arguments }). Output only the complete script, with no explanation.",
+            examplesTitle: "Complete examples (adapt them to the real API; do not copy them unchanged)",
+            draftTitle: "Current user draft (revise this; if empty, write from scratch)",
+            anyModel: "(the currently selected model)",
+        },
+    },
+    apiErrors: { streamIncomplete: "The text response was incomplete. Please retry.", requestFailed: "Request failed", requestCanceled: "Request canceled", baseUrlRequired: "Configure the Base URL first", apiKeyRequired: "Configure the API key first", authenticationFailed: "Authentication failed. Check the API key, plan permissions, and model permissions.", rateLimited: "The request was rate-limited or the quota is insufficient. Try again later.", notFound: "The endpoint was not found (404). Check the Base URL and selected model.", badGateway: "Gateway error (502). The API service is temporarily unavailable.", serviceBusy: "Service unavailable (503). Try again later.", httpFailed: "Request failed (HTTP {{status}}). Check the Base URL and API key.", htmlError: "The service returned an HTML error page ({{preview}})", imageTimeout: "The image request timed out. The endpoint did not respond in time; retry later or switch channels.", audioModelRequired: "Configure an audio model first", audioGenerationFailed: "Audio generation failed", scriptNoAudio: "The model request script did not return audio", geminiAudioUnsupported: "The Gemini API format does not support audio generation. Use an OpenAI-format provider.", invalidImageSizeFormat: "Unsupported image size. Use auto, 9:16, or 1024x1024.", positiveImageRatio: "The image ratio must use positive numbers, such as 9:16.", imageRatioLimit: "The image aspect ratio cannot exceed 3:1. Adjust the dimensions.", positiveImageDimensions: "Image dimensions must be positive integers, such as 1024x1024.", imageDimensionStep: "Image width and height must be multiples of 16.", imageEdgeLimit: "The longest image edge cannot exceed 3840px.", imagePixelLimit: "The total image pixel count must be between 655360 and 8294400.", unknownImageResponse: "The API returned data in an unknown format (fields: {{fields}}). Check model or API compatibility.", upstreamHtmlError: "The service gateway returned an error. Try again later.", sensitiveImageRejected: "The reference image may contain sensitive information and was blocked by upstream review. Replace it and try again.", sensitiveTextRejected: "The prompt may contain sensitive information and was blocked by upstream review. Modify the prompt and try again.", sensitiveVideoRejected: "The generated video may contain sensitive information and was blocked by upstream review. Modify the prompt or reference images and try again.", sensitiveContentRejected: "The content may contain sensitive information and was blocked by upstream review. Modify the prompt or reference images and try again.", realPersonRejected: "The reference image may contain a real person and was blocked by upstream content review. Remove or replace real-person images and try again.", contentModerationRejected: "Content review failed. Adjust the prompt or reference images and try again.", audioCopyrightRejected: "The generated audio was blocked for a possible music copyright issue. Turn off audio generation or remove music, song, or lyric descriptions from the prompt and try again.", upstreamServiceUnavailable: "The upstream service is temporarily unavailable. Try again later.", requestId: " (Request ID: {{id}})", noImageReturned: "The API did not return an image. The prompt may have triggered safety review or the model may not support this operation.", geminiRejected: "Gemini rejected the request: {{reason}}", geminiNoImage: "The Gemini API did not return an image", maskModelUnsupported: "This model does not support mask editing. Use another provider.", noContent: "No content returned", modelReadFailed: "Failed to load models", videoTimeout: "{{provider}}video generation timed out. Try again later.", pluginVideoExpired: "The plugin video task has expired. Generate it again.", scriptNoVideo: "The model request script did not return a video", noPlayableVideo: "The video API did not return a playable video", noVideoTaskId: "The video API did not return a task ID", videoTaskCreateFailed: "Failed to create video task", videoGenerationFailed: "Video generation failed", videoTaskQueryFailed: "Failed to query video task", videoPromptRequired: "Enter a video prompt or connect a reference image, video, or audio asset", referenceImageReadFailed: "Failed to read the reference image. Choose another image or upload it again.", invalidReferenceVideo: "A reference video must be a public URL, asset ID, or locally saved video", invalidReferenceAudio: "Reference audio must be a public URL, asset ID, or locally saved audio file", videoModelRequired: "Configure a video model first", geminiVideoUnsupported: "The Gemini API format does not support video generation. Use an OpenAI-format provider.", noVideoTask: "The API did not return a video task", videoDownloadFailed: "Failed to download video", localAssetReadFailed: "Failed to read local asset" },
+    prompts: {
+        title: "Prompt Center",
+        library: "Prompt Library",
+        total: "{{count}} prompts",
+        category: "Category",
+        tags: "Tags",
+        search: "Search titles, content, or tags",
+        searchTitle: "Search by title",
+        loadFailed: "Failed to load prompts",
+        sourceMissing: "Prompt source not found",
+        use: "Use this prompt",
+        empty: "No matching prompts found",
+        loading: "Loading...",
+        loadMore: "Scroll down to load more",
+        end: "You've reached the end",
+    },
+    assets: {
+        title: "My Assets",
+        description: "Save frequently used text and images, then find them quickly by type, title, or tag.",
+        tabAssets: "Asset library",
+        tabHistory: "History files",
+        historyTitle: "History files",
+        historyDescription: "These uploads and unarchived files are not in the asset library, but still use personal storage. Clean up files you no longer need.",
+        historyLoadFailed: "Failed to load history files",
+        historyCleaned: "Cleaned up",
+        historyCleanupFailed: "Cleanup failed",
+        historyInUse: "In use",
+        historyCleanup: "Clean up",
+        historyCleanupConfirm: "Delete this file? This cannot be undone.",
+        historyCleanupAll: "Clean all",
+        historyCleanupAllConfirm: "Clean {{count}} removable files ({{size}})? This cannot be undone.",
+        historyCleanupAllDone: "Cleaned {{count}} files",
+        historyCleanupAllPartial: "Cleaned {{count}} files; {{failed}} failed",
+        historyEmpty: "No history files",
+        historyHint: "Files marked “In use” are still referenced by canvases or other content. Remove those references before cleaning up.",
+
+        search: "Search titles, content, tags, or sources",
+        type: "Type",
+        export: "Export assets",
+        import: "Import assets",
+        add: "Add asset",
+        edit: "Edit asset",
+        empty: "No assets found",
+        emptyTitle: "No assets yet",
+        emptyHint: "Save prompts, reference images, and finished renders here, then find them fast by type, title, or tag.",
+        noMatchHint: "Try another keyword, or switch the type filter back to All.",
+        total: "{{count}} assets",
+        manual: "Added manually",
+        selectImage: "Select an image file",
+        updated: "Asset updated",
+        saved: "Asset saved",
+        textCopied: "Text copied",
+        noneToExport: "No assets to export",
+        imported: "Imported {{count}} assets",
+        importFailed: "Import failed. Select a valid asset package.",
+        deleted: "Asset deleted",
+        packageName: "my-assets.zip",
+        kinds: { audio: "Audio", text: "Text", image: "Image", video: "Video" },
+        fields: {
+            title: "Title",
+            titleRequired: "Enter a title",
+            titlePlaceholder: "Give the asset an easy-to-find name",
+            coverUrl: "Cover URL",
+            coverPlaceholder: "Paste an image URL or upload a local cover",
+            tags: "Tags",
+            tagsPlaceholder: "Type a tag and press Enter",
+            source: "Source",
+            sourcePlaceholder: "Added manually / Canvas / Prompt Library",
+            note: "Note",
+            optional: "Optional",
+            textContent: "Text content",
+            videoContent: "Video content",
+            textRequired: "Enter text content",
+            textPlaceholder: "Save prompts, copy, reference descriptions, and other text assets",
+            imageContent: "Image content",
+        },
+        selectImageFile: "Select image file",
+        noImageSelected: "No image selected",
+        preview: "Preview",
+        noCover: "No cover",
+        untitled: "Untitled asset",
+        noTags: "No tags",
+        untagged: "Untagged",
+        unknownSource: "Source not specified",
+        details: "Asset details",
+        deleteTitle: "Delete asset",
+        deleteConfirm: "Delete “{{name}}”? It will be removed from My Assets.",
+        copyText: "Copy text",
+        downloadImage: "Download image",
+        downloadVideo: "Download video",
+        downloadFailed: "Download failed. Please try again.",
+    },
+    notFound: {
+        title: "Page not found",
+        description: "There is no page at this address. It may have moved or been merged into another section.",
+        home: "Back to home",
+    },
+    workbench: {
+        logs: "Generation history",
+        settings: "Settings",
+        prompt: "Prompt",
+        viewPrompts: "Browse prompts",
+        viewAssets: "Browse My Assets",
+        clipboard: "Clipboard",
+        upload: "Upload",
+        adjust: "Adjust",
+        generate: "Generate",
+        results: "Results",
+        waiting: "Waiting {{time}}",
+        model: "Model",
+        generating: "Generating",
+        success: "Succeeded",
+        failed: "Generation failed",
+        retry: "Retry",
+        new: "New",
+        selectAll: "Select all",
+        noLogs: "No generation history",
+        deleteLogs: "Delete generation history",
+        deleteLogsConfirm: "Delete the selected {{count}} generation records?",
+        successCount: "{{count}} succeeded",
+        failCount: "{{count}} failed",
+        itemCount: "{{count}} images",
+        untitled: "Untitled",
+        configFirst: "Complete the configuration first",
+        generationFailed: "Generation failed",
+        retrySuccess: "Retry succeeded",
+    },
+    imageWorkbench: {
+        title: "Image Studio",
+        promptPlaceholder: "Describe the subject, style, composition, lighting, and intended use",
+        references: "Reference images",
+        removeReference: "Remove reference image",
+        dropReferences: "Drop to add reference images",
+        noReferences: "No reference images. Drag images here to add them.",
+        clipboardEmpty: "No readable images found on the clipboard",
+        clipboardAdded: "Added {{count}} reference images",
+        promptRequired: "Enter an image prompt",
+        configIncomplete: "Image generation configuration is incomplete",
+        invalidParams: "Invalid image generation parameters",
+        busy: "The Image Studio is already running a task",
+        generated: "Images generated",
+        addedReference: "Added to reference images",
+        resultTitle: "Generated image {{count}}",
+        source: "Image Studio",
+        unsupportedAsset: "Image Studio only supports text and image assets",
+        missingResult: "The API returned no image",
+        empty: "No images generated yet",
+        resultAlt: "Generated image {{count}}",
+        addReference: "Add as reference",
+        unsupportedFiles: "Unsupported reference files were ignored. Use JPG, PNG, WebP, or HEIC images.",
+        referenceAdded: "{{count}} reference image(s) added",
+    },
+    videoWorkbench: {
+        title: "Video Studio",
+        promptPlaceholder: "Describe camera movement, subject action, atmosphere, and visual style",
+        references: "Reference images",
+        videoReferences: "Reference videos",
+        audioReferences: "Reference audio",
+        removeImage: "Remove reference image",
+        removeVideo: "Remove reference video",
+        removeAudio: "Remove reference audio",
+        dropReferences: "Drop to upload reference assets",
+        noImages: "No reference material. Drag in images, video, or audio; up to 7 images.",
+        noVideos: "No reference videos. Drag in up to 3 files.",
+        noAudio: "No reference audio. Drag in up to 3 MP3/WAV files, each under 15 MB.",
+        unsupportedFiles: "Unsupported reference assets were ignored. Use images, MP4/MOV video, or MP3/WAV audio.",
+        imageTooLarge: "Reference images over 30 MB were ignored",
+        videoTooLarge: "Reference videos over 200 MB were ignored",
+        audioTooLarge: "Reference audio over 15 MB was ignored",
+        audioDurationInvalid: "Reference audio outside the duration limits was ignored: 2–15 seconds each, 15 seconds total.",
+        clipboardEmpty: "No readable images found on the clipboard",
+        clipboardAdded: "Added {{count}} reference images",
+        promptRequired: "Enter a video prompt",
+        referenceError: "{{error}}. {{hint}}",
+        invalidParams: "Invalid video generation parameters",
+        busy: "The Video Studio is already running a task",
+        generated: "Video generated",
+        timeout: "Video generation timed out. Try again later.",
+        submitUnconfirmed: "Submission failed and no task was created. Check your network and try again.",
+        resultTitle: "Generated video",
+        source: "Video Studio",
+        empty: "No video generated yet",
+    },
+    canvas: {
+        defaultTitle: "Custom Canvas {{count}}",
+        library: "Canvas library",
+        title: "Infinite Canvas",
+        imported: "Imported {{count}} canvases",
+        importFailed: "Import failed. Select a valid canvas package.",
+        opening: "Opening canvas...",
+        loading: "Loading canvases...",
+        exportSelected: "Export selected",
+        deleteSelected: "Delete selected",
+        deleteAll: "Delete all",
+        import: "Import canvas",
+        create: "New canvas",
+        empty: "No canvases yet",
+        emptyDescription: "Create a canvas to save its nodes, connections, and appearance independently.",
+        collapsePanel: "Collapse panel",
+        back: "Back to projects",
+        expandPanel: "Expand panel",
+        home: "Home",
+        docs: "Documentation",
+        projects: "My Canvases",
+        deleteCurrent: "Delete current canvas",
+        importAsset: "Import asset",
+        exportCurrent: "Export current canvas",
+        undo: "Undo",
+        redo: "Redo",
+        openMenu: "Open canvas menu",
+        renameHint: "Double-click to rename the canvas",
+        shortcuts: "Keyboard shortcuts",
+        miniMapOpen: "Open minimap",
+        miniMapClose: "Close minimap",
+        resetView: "Reset view",
+        zoom: "Zoom canvas",
+        agentConnected: "Codex connected",
+        agentConnecting: "Codex {{activity}}",
+        agentDisconnected: "Codex disconnected",
+        connecting: "Connecting",
+        dock: { add: "Add node", selectTool: "Select tool", handTool: "Hand tool", assets: "Assets", shortcuts: "Canvas shortcuts", director: "Director desk", storyboard: "One-line storyboard" },
+        createPanel: {
+            title: "Add node", search: "Search nodes", empty: "No matching nodes", close: "Close", assets: "Asset library",
+            hint: "Enter creates the first match, Esc closes",
+            textHint: "Script, copy, storyboard", imageHint: "Text to image / image to image", videoHint: "Text to video / image to video", audioHint: "Voice and sound effects", configHint: "Model, size, count", groupHint: "Group selected nodes",
+        },
+        blankMenu: { paste: "Paste", selectAll: "Select all nodes", fitAll: "Fit all nodes", actualSize: "Actual size 100%", background: "Canvas background", clear: "Clear canvas" },
+        director: { defaultScene: "Shot 1", loading: "Loading the 3D director desk…", applied: "Director output added to the canvas" },
+        storyboard: {
+            title: "One-line storyboard",
+            briefPlaceholder: "Describe the video in one sentence, e.g. an orange cat napping on a sunny windowsill, healing style, 15s",
+            needBrief: "Describe the video first",
+            needModel: "Select a storyboard model first",
+            generated: "Generated {{count}} shots, {{credits}} credits charged",
+            failed: "Storyboard generation failed, please retry",
+            generating: "Breaking down shots…",
+            generatingHint: "Online models usually take 10-40s, keep this window open",
+            generate: "Generate storyboard",
+            regenerate: "Regenerate",
+            model: "Storyboard model",
+            modelPlaceholder: "Select a model",
+            noModel: "No text model is available yet. Ask the admin to add and enable one.",
+            duration: "Duration",
+            shotCount: "Shots",
+            aspect: "Aspect",
+            style: "Style",
+            stylePlaceholder: "Optional, e.g. warm Japanese film",
+            selectedSummary: "{{count}} shots / {{duration}}s selected",
+            shotLabel: "Shot {{index}}",
+            promptPlaceholder: "Image prompt",
+            videoPromptPlaceholder: "Image-to-video motion description",
+            withVideoNodes: "Also create a video node per shot",
+            apply: "Lay out on canvas ({{count}})",
+            applied: "Laid out {{count}} storyboard nodes",
+            scriptTitle: "Storyboard script · {{title}}",
+            shotTitle: "Shot {{index}} · {{duration}}s",
+            videoSuffix: " · video",
+            examples: {
+                cat: "An orange cat napping on a sunny windowsill, healing short film, 15s",
+                coffee: "Pour-over coffee from grinding to first sip, slow premium ad, 20s",
+                city: "Rainy neon street at night, one person with an umbrella, cinematic, 30s",
+            },
+        },
+        emptyHint: { title: "Double-click the canvas to add a node", description: "Or use the + button / right-click on empty space" },
+        nodeTypes: { image: "Image", text: "Text", config: "Generation config", video: "Video", audio: "Audio", group: "Group" },
+        toolbar: {
+            select: "Select", pan: "Move", focus: "Center focus", text: "Text", image: "Image", video: "Video", audio: "Audio", config: "Generation config", group: "Group", extensions: "Extension nodes", upload: "Upload assets", appearance: "Canvas appearance", clear: "Clear canvas",
+            themeMode: "Theme", light: "Light", dark: "Dark", gridStyle: "Grid style", dots: "Dots", lines: "Lines", blank: "Blank", imageInfo: "Image info",
+        },
+        project: {
+            untitled: "Untitled canvas", imported: "Imported canvas",
+            select: "Select {{name}}", stats: "{{nodes}} nodes · {{connections}} connections", updated: "Updated {{date}}", saveName: "Save name", cancelRename: "Cancel rename", export: "Export", rename: "Rename", delete: "Delete", open: "Open canvas {{name}}",
+            deleteTitle: "Delete canvases?", deleteDescription: "This will delete {{count}} canvases along with their nodes and connections.",
+        },
+        export: { defaultProjectName: "Infinite Canvas", defaultNodesName: "Canvas elements", item: "Element" },
+        createMenu: {
+            fromNode: "Generate from this node", close: "Close", text: "Generate text", textDescription: "Scripts, ad copy, and brand content", image: "Generate image", video: "Generate video", audio: "Audio reference", config: "Configuration node", configDescription: "Model, size, count, and input order", select: "Select a node",
+        },
+        node: {
+            node: "Node",
+            untitled: "Untitled node", renameHint: "Double-click to rename the node", group: "Group", nodeCount: "{{count}} nodes", generating: "Generating", failed: "Generation failed", retry: "Retry", missingPlugin: "Plugin missing", missingPluginDescription: "The plugin for node type “{{type}}” is not installed or enabled", generateImage: "Generate image from text", generate: "Generate", editText: "Double-click to edit text", emptyImage: "Empty image node", emptyVideo: "Empty video node", emptyAudio: "Empty audio node", audio: "Audio", batchExpanded: "Image group expanded", batchCollapsed: "Image group collapsed", textBatchExpanded: "Text alternatives expanded", textBatchCollapsed: "Text alternatives collapsed", createCopy: "Create copy", setPrimary: "Set as primary", setPrimaryText: "Set as primary",
+        },
+        videoFrames: { first: "Capture first frame", last: "Capture last frame", current: "Capture current frame", firstTitle: "{{name}} first frame", lastTitle: "{{name}} last frame", currentTitle: "{{name}} current frame", captured: "Image node created", failed: "Could not capture this frame. Try again." },
+        sidePanel: {
+            canvas: "Canvas", assets: "Assets", prompts: "Prompt Library", resize: "Resize left panel", elements: "Canvas elements", select: "Select", searchNodes: "Search nodes", focusNode: "Focus node", preview: "Large preview", viewList: "Switch to list", viewGrid: "Switch to thumbnails", noNodes: "No nodes on this canvas", clearAll: "Clear all", selected: "{{count}} selected", exporting: "Exporting selected elements…", exportName: "canvas-elements-{{count}}", exported: "Exported {{count}} elements", exportFailed: "Export failed. Try again.",
+            addingAssets: "Adding assets…", addedAssets: "Added {{count}} assets", mediaOnly: "Only image and video files are supported", addFailed: "Failed to add assets. Try again.", searchAssets: "Search assets", add: "Add", noAssets: "No assets", inserted: "Insert into canvas", removeAssetTitle: "Remove this asset?", remove: "Remove", removeAsset: "Remove asset", assetRemoved: "Asset removed",
+            searchPrompts: "Search prompts", noPrompts: "No prompts", promptCopied: "Prompt copied", copyFailed: "Copy failed", loadFailedRetry: "Load failed. Click to retry.", noMatchingPrompts: "No matching prompts", sourceEmpty: "No prompts from this source", viewDetails: "View details",
+            filter: { image: "Image", video: "Video", text: "Text", audio: "Audio", config: "Configuration", group: "Group" },
+        },
+        assetPicker: { title: "Select assets", insert: "Insert", search: "Search assets", empty: "No assets" },
+        imageTools: { copyPrompt: "Copy prompt", copyPromptTitle: "Copy the prompt used to generate this image", reversePrompt: "Reverse prompt", reversePromptTitle: "Create text and configuration nodes to infer the prompt", replace: "Replace image", locked: "Lock ratio", free: "Free ratio", lockTitle: "Switch to proportional scaling", freeTitle: "Switch to free resizing", mask: "Local edit", maskTitle: "Paint a mask and edit the selected area", crop: "Crop", cropTitle: "Crop into a new node", split: "Split", splitTitle: "Split the image by rows and columns", upscale: "Upscale", upscaleTitle: "Increase image resolution", superResolve: "Super resolution", superResolveTitle: "AI super resolution", angle: "Multi-angle", angleTitle: "Generate another angle", view: "View image", viewTitle: "View image details", more: "More", configure: "Configure quick tools", customize: "Customize toolbar", showLabels: "Show button labels", description: "Choose the quick tools shown in the image-node toolbar.", preview: "Node preview", imageNode: "Image node", quickTools: "Quick tools" },
+        nodeToolbar: { noPrompt: "No prompt to copy", infoTitle: "View node information", info: "Info", removeTitle: "Remove node", retryTitle: "Generate again", queryVideoTask: "Get task status", queryVideoTaskTitle: "Query video generation status by task ID", videoTaskId: "Task ID", saveAsset: "Save asset", downloadAudio: "Download audio", downloadVideo: "Download video", downloadImage: "Download image", editTextTitle: "Edit text", editText: "Edit text", decreaseFont: "Decrease font size", increaseFont: "Increase font size", zoomOut: "Smaller", zoomIn: "Larger", uploadImage: "Upload image", replaceVideo: "Replace video", uploadVideo: "Upload video", replaceAudio: "Replace audio", uploadAudio: "Upload audio", nodeInfo: "Node information", name: "Name", type: "Type", size: "Size", position: "Position", status: "Status", imageGroup: "Image group", imageSize: "Image size", group: "Group", groupTitle: "Wrap selected nodes in a group", ungroup: "Ungroup", ungroupTitle: "Remove grouping from selected nodes" },
+        configNode: { title: "Generation config", image: "Image", text: "Text", video: "Video", audio: "Audio", prompt: "Prompt", references: "Reference images", videoReferences: "Reference videos", audioReferences: "Reference audio", items: "{{count}} items", images: "{{count}} images", compose: "Compose prompt", stop: "Stop", generate: "Generate" },
+        projectPage: {
+            stopTitle: "Stop generation?", stopDescription: "The current request will be interrupted. Completed results will be kept.", stop: "Stop", continue: "Continue generating", configConnection: "Configuration nodes cannot be connected to each other", notFound: "Current canvas not found", exporting: "Exporting current canvas…", exported: "Current canvas exported", clipboardText: "Clipboard text", clipboardImageAdded: "Added image from clipboard", clipboardTextAdded: "Added text from clipboard", noTextToSave: "No text to save", canvasText: "Canvas text", noVideoToSave: "No video to save", canvasVideo: "Canvas video", noImageToSave: "No image to save", canvasImage: "Canvas image", emptyReverse: "The image node is empty, so its prompt cannot be inferred", reverseTitle: "Reverse prompt", reverseConfigTitle: "Reverse prompt configuration", splitTitle: "{{name}} {{row}}-{{column}}", splitSuccess: "Split into {{count}} child nodes", maskResult: "Local edit result", maskFailed: "Local edit failed", generationFailed: "Generation failed", partialFailed: "Some images failed to generate", partialTextFailed: "Some text alternatives failed to generate", allFailed: "All images failed to generate", retryPromptMissing: "No prompt found for retry", referenceMissing: "The reference image is missing, so retry cannot continue", emptyTextImage: "The text node is empty, so an image cannot be generated", untitledCanvas: "Untitled canvas", superResolve: "AI super resolution", notImplemented: "Not implemented yet", imageDetails: "Image details", clearTitle: "Clear canvas?", clear: "Clear", clearDescription: "This will delete every node and connection on the current canvas.", reversePreset: "Infer a prompt suitable for AI image generation from the reference image.\n\nRequirements:\n1. Output only the prompt, with no explanation.\n2. Cover the subject, composition, style, lighting, color, materials, lens, and atmosphere.\n3. Write a complete prompt that can be used directly with an image model.", maskPrompt: "{{source}} is the original image. {{mask}} marks the area to edit with a translucent blue overlay on the original image. Only modify the area covered by the blue overlay, keep everything else identical to the original, output a full image with the same size as the original, and do not keep any blue overlay in the result. Edit request: {{prompt}}", maskNodeTitle: "Mask annotation", editTextPrompt: "Revise the text according to the instructions.\n\nOriginal:\n{{source}}\n\nInstructions:\n{{prompt}}"
+        },
+        reverseComposer: "Reference image: @[node:{{imageId}}]\nTask: @[node:{{textId}}]",
+        editors: {
+            reset: "Reset", zoomOut: "Zoom out", zoomIn: "Zoom in", loading: "Loading", unknown: "Unknown", cancel: "Cancel",
+            angleTitle: "AI Multi-angle", angleDescription: "The left side previews direction only; the result is regenerated from the original image", horizontal: "Horizontal angle", pitch: "Pitch angle", distance: "Camera distance", lens: "Wide-angle lens", standard: "Standard", wide: "Wide", aiGenerate: "Generate with AI",
+            upscaleTitle: "Upscale image", source: "Source", targetPixels: "Target pixels", maxReached: "The image is already 4K and does not need upscaling", targetReached: "The image already meets the target pixel count", algorithm: "Upscaling algorithm", outputSize: "Output size", upscale: "Generate upscaled image", high: "High-quality interpolation", highDescription: "Best for photos and detailed images", bilinear: "Bilinear", bilinearDescription: "Smooth and fast", nearest: "Nearest neighbor", nearestDescription: "Best for pixel art",
+            cropTitle: "Crop image", adjustCrop: "Adjust crop box", cropHint: "Mouse wheel to zoom · middle button or Space + left drag to pan", cropSize: "Crop size {{size}}", ratio: "Ratio {{ratio}}", original: "Original {{width}} x {{height}}", confirmCrop: "Crop", free: "Free", fixed: "Fixed", originalMode: "Original",
+            maskTitle: "Local mask edit", maskHint: "Mouse wheel to zoom · middle button or Space + left drag to pan · Alt + left/right drag to resize brush · Ctrl/Cmd+Z to undo · Ctrl/Cmd+Shift+Z to redo", brush: "Brush", erase: "Erase", undoMaskTitle: "Undo mask stroke (Ctrl/Cmd+Z)", undoMask: "Undo mask stroke", redoMaskTitle: "Redo mask stroke (Ctrl/Cmd+Shift+Z)", redoMask: "Redo mask stroke", brushSize: "Brush size", editInstructions: "Edit instructions", maskPlaceholder: "For example: change the selected area to metal while preserving the original lighting", maskPromptRequired: "Enter edit instructions", maskRequired: "Paint the area to edit first", maskExport: "Export to canvas", maskGenerate: "Generate now",
+            splitTitle: "Split image", splitDescription: "Create {{count}} image nodes and arrange them in the original grid to the right of the canvas", splitHint: "Mouse wheel to zoom · middle button or Space + left drag to pan · Delete removes the selected line · Ctrl/Cmd+Z to undo · Ctrl/Cmd+Shift+Z to redo", undoSplitTitle: "Undo split adjustment (Ctrl/Cmd+Z)", undoSplit: "Undo split adjustment", redoSplitTitle: "Redo split adjustment (Ctrl/Cmd+Shift+Z)", redoSplit: "Redo split adjustment", rows: "Rows", columns: "Columns", horizontalLine: "Horizontal line", verticalLine: "Vertical line", deleteLine: "Delete line", resetLines: "Reset lines", pieceCount: "Pieces", pieces: "{{count}}", averageSize: "Average size", generateChildren: "Create child nodes",
+        },
+        promptPanel: { modes: { image: "Image", video: "Video", audio: "Audio", text: "Text", editImage: "Edit image", editText: "Edit text" }, addReference: "Ref", video: "Describe the video you want to generate", audio: "Describe the audio you want to generate", image: "Describe the image you want to generate", text: "Describe the text you want to generate", editImage: "Describe how you want to change this image", editText: "Describe how you want to revise this text", expandEditor: "Expand editor", editorTitle: "Edit prompt", stopGeneration: "Stop generation", generate: "Generate", stop: "Stop", sendHint: "Ctrl / ⌘ + Enter to generate, Enter for a new line" },
+        references: { title: "References", select: "Select references from canvas", disconnect: "Disconnect reference", empty: "No content", selecting: "Adding references", choose: "Select", selectingHint: "Select references from canvas · ESC to return" },
+        composer: { title: "Compose prompt", description: "Use @ to reference connected assets; references are renumbered before sending", placeholder: "Enter a prompt and use @ to reference connected images, text, or groups", imagePreview: "Referenced image preview", resources: { image: "Image {{index}}", video: "Video {{index}}", audio: "Audio {{index}}", text: "Text {{index}}", group: "Group {{index}}" } },
+        controls: { ratio: "Ratio", duplicate: "Duplicate", delete: "Delete", images: "{{count}} images", texts: "{{count}} options", generations: "{{count}} runs", reasoning: "Reasoning" },
+        generation: { interrupted: "Generation was interrupted by a page refresh. Generate again.", front: "front view", rotateRight: "rotated {{angle}} degrees right", rotateLeft: "rotated {{angle}} degrees left", level: "eye-level view", topDown: "{{angle}}-degree top-down view", lowAngle: "{{angle}}-degree low-angle view", angleLabel: "AI multi-angle: {{horizontal}}, {{pitch}}, camera distance {{distance}}, {{lens}} lens", anglePrompt: "Regenerate a new view of the same subject from the reference image. Preserve the subject, colors, materials, and visual style; do not merely apply perspective distortion. {{angle}}." },
+        agentOps: { add_node: "Add node", update_node: "Update node", delete_node: "Delete node", delete_connections: "Delete connections", connect_nodes: "Connect", set_viewport: "Adjust view", select_nodes: "Select nodes", run_generation: "Run generation" },
+        shortcut: {
+            dragCanvas: "Drag canvas",
+            pan: "Pan view",
+            toggleTool: "Temporarily switch Select / Move",
+            wheel: "Mouse wheel",
+            zoom: "Zoom canvas",
+            zoomSlider: "Zoom slider",
+            preciseZoom: "Adjust zoom precisely",
+            boxSelect: "Select multiple nodes",
+            addSelection: "Add nodes to selection",
+            selectAll: "Select all nodes",
+            copyPaste: "Copy/paste nodes or paste clipboard text/images",
+            copyPasteNodes: "Copy/paste nodes",
+            delete: "Delete selection",
+            group: "Group selected nodes",
+            ungroup: "Ungroup selected nodes",
+            escape: "Clear selection and close overlays",
+            dropMedia: "Drop images/videos/audio",
+            upload: "Upload to canvas",
+            drag: "Drag",
+            click: "Click",
+        },
+    },
+    navigation: {
+        create: "Create",
+        explore: "Explore",
+        home: "Home",
+        canvas: "Canvas",
+        image: "Image",
+        video: "Video",
+        prompts: "Prompts",
+        models: "Models",
+        assets: "Assets",
+        config: "Settings",
+        creation: "Create",
+        resources: "Resources",
+        account: "Account",
+        accountCenter: "Account",
+        admin: "Admin console",
+        workspace: "Workspace",
+        workspaceName: "AI video creation workspace",
+        contact: "Contact us",
+        communityTitle: "Join our community",
+        communitySubtitle: "Scan to join the official group",
+        communityFooter: "Scan to join · click a QR code to enlarge",
+        viewQr: "Click to enlarge",
+        contactAction: "Contact",
+        contactFetchError: "Could not load contact details",
+        noContacts: "No contact details yet",
+        contactDialogHint: "Scan a QR code to join our community for updates and support",
+        closeMenu: "Close menu",
+        openMenu: "Open menu",
+        close: "Close",
+        contactChannels: {
+            wechat: "WeChat",
+            wechat_group: "WeChat Group",
+            wecom: "WeCom",
+            qq: "QQ",
+            qq_group: "QQ Group",
+            email: "Email",
+            phone: "Phone",
+            telegram: "Telegram",
+            whatsapp: "WhatsApp",
+            link: "Custom link",
+        },
+    },
+    topNav: {
+        openMenu: "Open navigation menu",
+        menu: "Navigation menu",
+        navigation: "Navigation",
+        docs: "Documentation",
+        switchLanguage: "Switch to {{language}}",
+        shortcuts: "Keyboard shortcuts",
+        lightTheme: "Switch to light theme",
+        darkTheme: "Switch to dark theme",
+    },
+    home: {
+        promptError: "Failed to load prompts",
+        description: "Generate, connect, and reshape <content>images, text, and graphics</content> in <canvas>Infinite Canvas</canvas>, turning one-off generations into a continuous creative process.",
+        start: "Get started",
+        openCanvas: "Open canvas",
+        showcaseTitle: "Keep every great result",
+        showcaseDescription: "Save reliable prompts, visual references, and generated images so your next creation starts from proven ideas.",
+        viewPrompts: "View prompt library",
+        composerTitle: "Start with a frame",
+        composerDescription: "Describe a shot, a character, or a story, then continue in the right studio.",
+        heroKicker: "AI video creation workspace",
+        heroTitleLead: "Start with ",
+        heroTitleAccent: "a frame",
+        heroTitleTail: ".",
+        heroDescription: "Describe a shot, a character, or a story. Image and video share one starting point.",
+        heroVideoCta: "Generate video",
+        heroCanvasCta: "Open canvas",
+        promptPlaceholder: "Describe the image, camera movement, or story you want to create…",
+        estimateSelectModel: "Select a model for pricing",
+        estimateLoading: "Calculating credits…",
+        estimateUnavailable: "Estimate unavailable",
+        estimateCredits: "Est. {{credits}} credits / run",
+        estimateNote: "Confirm in the workbench to generate. Final credits depend on settings and route.",
+        startCreating: "Start creating",
+        recentCanvases: "Recent canvases",
+        newCanvas: "New canvas",
+        viewAll: "View all",
+        inspirationTitle: "Inspiration hall",
+        inspirationDescription: "Pick a direction from the prompt library and keep creating.",
+        openPromptLibrary: "Open prompt library",
+        emptyPrompts: "No prompts yet",
+        usePrompt: "Create with this prompt",
+        loginToCreate: "Sign in to start creating",
+        imageMode: "Image",
+        videoMode: "Video",
+        shortcutHint: "⌘ / Ctrl + Enter to start",
+        referenceImages: "References",
+        addMaterial: "Add material",
+        materialHintVideo: "Drop or add images for first / last frames, or add video and MP3 references",
+        materialHintImage: "Drop or add reference images",
+        materialUnsupported: "Unsupported material type",
+        materialTooLarge: "Material file is too large",
+        materialUploadFailed: "Failed to upload material",
+        appleImageConvertFailed: "Could not convert this Apple photo. Please export it as JPG and try again.",
+        imageMaterialsOnly: "Image mode only supports images",
+        removeReference: "Remove reference",
+        referenceLogin: "Sign in to add references",
+        referenceImageOnly: "References must be JPG / PNG / WebP",
+        referenceImageTooLarge: "Each reference must be under 10MB",
+        referenceUploadFailed: "Failed to upload reference",
+        recentCanvasesNote: "Pick up where you left off",
+        resolutionPanel: "Resolution",
+        resolutionPanelHint: "768P is billed at the 720P tier. Switching quality can change the pricing model and quote.",
+        ratioPanel: "Aspect ratio",
+        ratioPanelHint: "Options come from the current model. Switch freely between landscape, portrait, and square.",
+        secondsPanel: "Duration",
+        secondsPanelHint: "Changing duration updates the quote before you generate.",
+        secondsRange: "{{min}}–{{max}} seconds",
+        secondsChoose: "Choose a duration supported by the current model",
+        decreaseSeconds: "Decrease duration",
+        increaseSeconds: "Increase duration",
+        imageQualityPanel: "Image quality",
+        imageQualityPanelHint: "Higher quality preserves more detail and may cost more time and credits.",
+        statsTitle: "Platform stats",
+        statsWorksValue: "32M",
+        statsWorksUnit: "+",
+        statsWorksLabel: "Works generated",
+        statsCreatorsValue: "1.8M",
+        statsCreatorsUnit: "",
+        statsCreatorsLabel: "Active creators",
+        statsDurationValue: "12",
+        statsDurationUnit: "s",
+        statsDurationLabel: "Average render time",
+        statsSuccessValue: "98",
+        statsSuccessUnit: "%",
+        statsSuccessLabel: "Task success rate",
+    },
+    version: {
+        viewUpdates: "View release updates",
+        title: "Release updates",
+        currentVersion: "Current version",
+        latestVersion: "Latest version",
+        checking: "Checking...",
+        checkUpdates: "Check for updates",
+        unreleased: "Unreleased",
+        latest: "Latest",
+        current: "Current",
+        readFailed: "Failed to read version",
+        changelogFailed: "Failed to read changelog",
+        updated: "Latest version information loaded",
+        updateFailed: "Failed to load the latest version information",
+        types: { added: "Added", fixed: "Fixed", changed: "Changed", optimized: "Optimized", docs: "Docs" },
+    },
+    config: {
+        title: "Settings & Preferences",
+        description: "Default models and generation preferences",
+        modalDescription: "Default models and generation preferences",
+        promptSources: {
+            add: "Add source",
+            deleteTitle: "Delete “{{name}}”?",
+            deleteDescription: "The source configuration will be removed. Items already saved to My Assets are unaffected.",
+            refreshed: "Updated {{count}} prompts from “{{name}}”",
+            refreshFailedCached: "Update failed; the previous cache was kept",
+            refreshPartial: "Update complete: {{success}} succeeded and {{failed}} failed. Failed sources kept their previous cache.",
+            refreshAllSuccess: "Updated {{sources}} sources with {{total}} prompts",
+            refreshFailed: "Update failed",
+            builtIn: "Built-in",
+            itemCount: "{{count}} prompts",
+            failed: "Failed",
+            healthy: "Healthy",
+            unsynced: "Not synced",
+            lastSuccess: "Last successful {{time}}",
+            neverFetched: "Not fetched yet",
+            view: "View content",
+            refresh: "Fetch now",
+            edit: "Edit source",
+            schedule: "Scheduled fetch",
+            interval: "Fetch interval",
+            refreshAll: "Fetch all now",
+            lastFetched: "Last fetched {{time}}",
+            neverScheduled: "No scheduled fetch yet",
+            scheduleDescription: "When enabled, all active sources are fetched on this interval while the page is open.",
+            intervals: {
+                disabled: "Disabled",
+                minutes30: "Every 30 minutes",
+                hour1: "Every hour",
+                hours6: "Every 6 hours",
+                hours24: "Every 24 hours",
+            },
+            editor: {
+                addTitle: "Add prompt source",
+                editTitle: "Edit prompt source",
+                nameRequired: "Enter a source name",
+                invalidUrl: "Enter a valid JSON URL",
+                invalidHomepage: "Enter a valid homepage URL",
+                name: "Source name",
+                namePlaceholder: "Used for categories and labels",
+                homepage: "Source homepage (optional)",
+                enabled: "Enable source",
+                jsonFormat: "JSON format",
+            },
+            content: {
+                loadFailed: "Failed to fetch prompts",
+                title: "{{name}} · Prompt content",
+                count: "{{count}} prompts",
+                refresh: "Update now",
+                empty: "No prompts",
+                cover: "Cover",
+                titleColumn: "Title",
+                tags: "Tags",
+                actions: "Actions",
+            },
+            runtime: { requestFailed: "Request failed ({{status}})", urlRequired: "JSON URL is required", fetchFailed: "Failed to fetch “{{name}}”: {{error}}", noPrompts: "No valid prompts were parsed from “{{name}}”", invalidRoot: "Invalid “{{name}}” format: the root value must be an array" },
+        },
+        importedDirectConfig: "Local direct connection settings imported",
+        importedChannelCreated: "Added provider “{{name}}” without changing existing providers",
+        importedChannelUpdated: "Updated connection settings for provider “{{name}}”",
+        importedChannelBaseUrlRequired: "The import link has no Base URL. No providers were changed.",
+        importedChannelBaseUrlInvalid: "The import link has an invalid Base URL. No providers were changed.",
+        saved: "Settings saved",
+        savedContinue: "Settings saved. Continue with your previous request.",
+        channels: {
+            description: "Choose a protocol for each provider, fetch its models, assign capabilities, and optionally customize request scripts.",
+            add: "Add provider",
+            unnamed: "Unnamed provider",
+            numberedName: "Provider {{count}}",
+            modelCount: "{{count}} models",
+            missingUrl: "API endpoint not set",
+            keepOne: "Keep at least one provider",
+            defaultName: "Default provider",
+            newName: "New provider",
+            indexedName: "Provider {{index}}",
+        },
+        preferences: {
+            interface: "Interface",
+            language: "Display language",
+            languageDescription: "Change the language used by the interface and components.",
+            defaultModels: "Default models",
+            defaultImageModel: "Default image model",
+            defaultVideoModel: "Default video model",
+            defaultTextModel: "Default text model",
+            defaultAudioModel: "Default audio model",
+            generation: "Generation preferences",
+            imageResolution: "Default image resolution",
+            videoResolution: "Default video resolution",
+            canvasImageCount: "Default canvas image count",
+            canvasImageCountDescription: "Used by new canvas image and configuration nodes. Individual nodes can override it.",
+            regenerateBehavior: "When generating on a node that already has content",
+            regenerateBehaviorOverwrite: "Regenerate in place (overwrite the node)",
+            regenerateBehaviorOverwriteDescription: "Replace the node's content and settings in place without creating a new node. Copy the node first to keep the old result.",
+            regenerateBehaviorNewNode: "Create a new node (original behavior)",
+            regenerateBehaviorNewNodeDescription: "Keep the current node and create a new one for the result. Good for variants or branches.",
+            autoFocusOnSelect: "Auto-center on select",
+            audioVoice: "Default audio voice",
+            audioFormat: "Default audio format",
+            audioSpeed: "Default audio speed",
+            audioInstructions: "Default audio instructions",
+            audioInstructionsPlaceholder: "For example: natural, warm, and suitable for narration.",
+            systemPrompt: "System prompt",
+            systemPromptPlaceholder: "For example: You are a visual director specializing in cinematic, photorealistic imagery.",
+        },
+        channelEditor: {
+            title: "Edit provider",
+            name: "Provider name",
+            protocol: "Protocol",
+            baseUrl: "API endpoint",
+            models: "Provider models",
+            modelDescription: "{{count}} selected; assign a capability to each model and optionally customize its request script.",
+            selectModels: "Select models",
+            scriptReady: "Script set",
+            script: "Request script",
+            empty: "Select models to fetch or manually add models.",
+            capabilities: {
+                image: "Image",
+                video: "Video",
+                text: "Text",
+                audio: "Audio",
+            },
+        },
+        modelSelect: {
+            missingConfig: "Enter an API endpoint and API key first",
+            fetched: "Fetched {{count}} models",
+            fetchFailed: "Failed to fetch models",
+            title: "Select provider models",
+            selected: "{{selected}} / {{total}} selected",
+            confirm: "Confirm",
+            search: "Search models",
+            modelName: "Enter a model name",
+            add: "Add model",
+            fetch: "Fetch model list",
+            description: "If the provider does not expose an OpenAI /models endpoint, add model names manually here.",
+            fetchedTab: "Fetched models ({{count}})",
+            existingTab: "Selected models ({{count}})",
+            visibleSelected: "{{selected}} / {{total}} selected in this list",
+            selectVisible: "Select this list",
+            clearVisible: "Clear this list",
+            fetchedEmpty: "Fetch models from the provider or add a model name manually.",
+            existingEmpty: "No models selected.",
+        },
+        scriptEditor: {
+            title: "{{capability}} request script",
+            description: "Follow the three steps on the left: read the rules, copy the brief for another AI, then paste the script on the right. Leave it empty to use the default request.",
+            stepRule: "Read the rules",
+            stepRuleHint: "Write an async function. Put prompt, images, params, and other locals in the parameter list, and unpack params into size, quality, count, and similar fields. Send the request and return the result, then call the function once.",
+            stepAi: "Let another AI write it",
+            stepAiCopy: "Copy the variables, return requirements, and writing rules from this page.",
+            stepAiAsk: "Paste the brief into ChatGPT, Claude, or any other AI, then attach the API docs you want to call.",
+            stepAiPaste: "Paste the returned script into the editor on the right and save it.",
+            stepAiIncludes: "The copied brief includes the current model, return requirements, all available variables, and writing rules. It does not include the API key.",
+            stepEdit: "Paste and save",
+            editorTitle: "Script editor",
+            editorHint: "Paste the script from another AI here, or start from a template below.",
+            editorEmpty: "Using the default request",
+            editorFilled: "Custom script entered",
+            startFromTemplate: "Start from a template",
+            insertTemplate: "Insert {{name}} template",
+            restoreDefault: "Restore default request",
+            returnRequirements: "Return requirements",
+            variables: "Available variables",
+            variablesHint: "Click a variable to insert it into the editor.",
+            variablesHintVideo: "Video models can use videos and audios as reference video and audio files.",
+            insert: "Click to insert",
+            placeholder: "// Paste a script written by another AI. Leave empty to use the default request.",
+            copyBrief: "Copy script brief",
+            briefCopied: "Script brief copied. Paste it into your AI.",
+        },
+        protocols: {
+        },
+    },
+    agent: {
         status: { failed: "Connection failed", connected: "Connected", connecting: "Connecting", disconnected: "Disconnected" },
         state: { ready: "Ready", connectionRequired: "Enter the Local URL and Connect token", invalidUrl: "The Local URL is invalid", offline: "Offline", skillReadFailed: "Failed to read Skill", skillParseFailed: "Failed to parse Skill", requestFailed: "Local Agent request failed" },
         siteTools: { canvasList: "Canvas list", generationStatus: "Generation task status", imageConfig: "Image configuration", imageGenerate: "Generate in Image Studio", videoConfig: "Video configuration", videoGenerate: "Generate in Video Studio", promptSearch: "Search prompts", assetList: "Asset list", assetAdd: "Add asset", unknownTool: "Unknown tool: {{name}}", canvasLoading: "The canvas is still loading. Try again shortly.", canvasHint: "Use site_navigate to open /canvas/{id}", assetsLoading: "Assets are still loading. Try again shortly.", assetTitleRequired: "Provide the asset title", textContentRequired: "content is required when kind=text", imageUrlRequired: "imageUrl is required when kind=image", imageReadFailed: "Could not read the image. Use a data URL or a cross-origin accessible image URL.", assetKindUnsupported: "assets_add supports only kind=text or kind=image", imageGenerationStarted: "Opened Image Studio and started generation. Use generation_get_status to query the task.", imageConfigApplied: "Opened Image Studio and applied the parameters without starting generation.", videoGenerationStarted: "Opened Video Studio and started generation. Use generation_get_status to query the task.", videoConfigApplied: "Opened Video Studio and applied the parameters without starting generation." },
@@ -63,7 +796,7 @@ LINES: 739-789
 
 ========================================================================
 FILE: web/src/i18n/locales/zh-CN.ts
-LINES: 1-741
+LINES: 1-789
 ========================================================================
 export default {
     meta: {
@@ -806,12 +1539,6 @@ export default {
         status: { failed: "连接失败", connected: "已连接", connecting: "连接中", disconnected: "未连接" },
         state: { ready: "就绪", connectionRequired: "请填写 Local URL 和 Connect token", invalidUrl: "Local URL 格式不正确", offline: "离线", skillReadFailed: "读取 Skill 失败", skillParseFailed: "Skill 解析失败", requestFailed: "本地 Agent 请求失败" },
         siteTools: { canvasList: "画布列表", generationStatus: "生成任务状态", imageConfig: "生图配置", imageGenerate: "生图工作台生成", videoConfig: "视频配置", videoGenerate: "视频创作台生成", promptSearch: "搜索提示词", assetList: "资产列表", assetAdd: "添加资产", unknownTool: "未知工具：{{name}}", canvasLoading: "画布还在加载中，请稍后重试", canvasHint: "用 site_navigate 跳转 /canvas/{id} 打开对应画布", assetsLoading: "资产还在加载中，请稍后重试", assetTitleRequired: "请提供资产标题 title", textContentRequired: "kind=text 时需要提供 content 文本内容", imageUrlRequired: "kind=image 时需要提供 imageUrl（图片地址或 dataURL）", imageReadFailed: "无法读取该图片地址，请改用 dataURL 或可跨域访问的图片链接", assetKindUnsupported: "assets_add 仅支持 kind=text 或 kind=image", imageGenerationStarted: "已跳转生图工作台并触发生成，可用 generation_get_status 查询任务", imageConfigApplied: "已跳转生图工作台并填入参数，未触发生成", videoGenerationStarted: "已跳转视频创作台并触发生成，可用 generation_get_status 查询任务", videoConfigApplied: "已跳转视频创作台并填入参数，未触发生成" },
-
-
-========================================================================
-FILE: web/src/i18n/locales/zh-CN.ts
-LINES: 742-789
-========================================================================
         history: { workspace: "工作空间", defaultWorkspace: "默认画布目录", selected: "已选 {{count}} 条", count: "{{count}} 条历史", empty: "暂无历史", deleteCount: "删除 {{count}} 条", refresh: "刷新", newThread: "新对话", selectThread: "选择{{name}}", untitled: "未命名对话", current: "当前", noWorkspaceThreads: "当前工作空间还没有对话记录", connectHint: "连接本地 Agent 后显示历史记录" },
         skills: { selectLocal: "选择本地 Skill", search: "搜索 Skill", loading: "正在读取 Skill…", noMatch: "没有匹配的已启用 Skill", none: "还没有可用的 Skill", select: "选择 Skill", connectHint: "连接 Agent 后使用 Skill" },
         skillManager: {
@@ -1068,1170 +1795,5 @@ export function trackPageview(path: string) {
     } catch {
         /* Ignore analytics reporting errors. */
     }
-}
-
-
-========================================================================
-FILE: web/src/lib/app-theme.ts
-LINES: 1-152
-========================================================================
-import type { ThemeConfig } from "antd";
-import { theme as antdTheme } from "antd";
-
-// sundas brand: lime #D8FF3E accent on near-black (dark) / warm white (light).
-const brand = {
-    primary: "#D8FF3E",
-    primaryInk: "#11130A",
-    primaryHover: "#E3FF6B",
-    primaryActive: "#B8E81C",
-    link: { light: "#4D7C0F", dark: "#D8FF3E" },
-};
-
-const neutral = {
-    light: {
-        elevatedBg: "#FFFFFF",
-        itemHoverBg: "rgba(29, 33, 41, 0.06)",
-        itemSelectedBg: "rgba(216, 255, 62, 0.12)",
-        itemSelectedHoverBg: "rgba(216, 255, 62, 0.18)",
-        itemText: "#1D2129",
-        tableSelectedBg: "rgba(216, 255, 62, 0.08)",
-        tableSelectedHoverBg: "rgba(216, 255, 62, 0.14)",
-    },
-    dark: {
-        elevatedBg: "#1F1F1F",
-        itemHoverBg: "rgba(255, 255, 255, 0.08)",
-        itemSelectedBg: "rgba(255, 255, 255, 0.08)",
-        itemSelectedHoverBg: "rgba(255, 255, 255, 0.12)",
-        itemText: "rgba(255, 255, 255, 0.88)",
-        tableSelectedBg: "rgba(216, 255, 62, 0.08)",
-        tableSelectedHoverBg: "rgba(216, 255, 62, 0.14)",
-    },
-};
-
-const fontFamily =
-    "'CapCut Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif";
-
-export function getAntThemeConfig(dark: boolean): ThemeConfig {
-    const color = dark ? neutral.dark : neutral.light;
-
-    return {
-        algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-        cssVar: { key: dark ? "sundas-dark" : "sundas-light" },
-        token: {
-            colorPrimary: brand.primary,
-            colorInfo: brand.primary,
-            colorLink: dark ? brand.link.dark : brand.link.light,
-            colorLinkHover: dark ? brand.primaryHover : "#3F6212",
-            colorLinkActive: dark ? brand.primary : brand.link.light,
-            colorTextLightSolid: brand.primaryInk,
-            colorBgElevated: color.elevatedBg,
-            colorBgContainer: dark ? "#1A1A1A" : "#FFFFFF",
-            colorBgBase: dark ? "#121212" : "#F7F8FA",
-            colorText: dark ? "rgba(255, 255, 255, 0.88)" : "#1D2129",
-            colorTextSecondary: dark ? "rgba(255, 255, 255, 0.70)" : "#4E5969",
-            colorTextTertiary: dark ? "rgba(255, 255, 255, 0.60)" : "#86909C",
-            colorTextQuaternary: dark ? "rgba(255, 255, 255, 0.40)" : "#C9CDD4",
-            colorBorder: dark ? "rgba(255, 255, 255, 0.12)" : "#C9CDD4",
-            colorBorderSecondary: dark ? "rgba(255, 255, 255, 0.08)" : "#E5E6EB",
-            borderRadius: 8,
-            fontFamily,
-            controlItemBgHover: color.itemHoverBg,
-            controlItemBgActive: color.itemSelectedBg,
-            controlItemBgActiveHover: color.itemSelectedHoverBg,
-            // 聚焦反馈：即梦式 3px 浅蓝光圈由组件样式提供，关闭 antd 默认实心外框
-            controlOutline: "transparent",
-            boxShadowSecondary: dark ? "0 12px 40px rgba(0, 0, 0, 0.5)" : "0 12px 40px rgba(0, 0, 0, 0.12)",
-        },
-        components: {
-            Input: {
-                activeShadow: "none",
-                colorBorder: dark ? "rgba(255, 255, 255, 0.12)" : "#C9CDD4",
-            },
-            InputNumber: {
-                activeShadow: "none",
-            },
-            Button: {
-                primaryShadow: "none",
-                fontWeight: 500,
-            },
-            Checkbox: {
-                colorPrimary: brand.primary,
-                colorPrimaryHover: brand.primaryHover,
-            },
-            Radio: {
-                colorPrimary: brand.primary,
-            },
-            Switch: {
-                colorPrimary: brand.primary,
-                colorPrimaryHover: brand.primaryHover,
-            },
-            Slider: {
-                colorPrimary: brand.primary,
-                colorPrimaryBorder: brand.primary,
-                colorPrimaryBorderHover: brand.primaryHover,
-            },
-            Tabs: {
-                // 选中态统一走品牌青柠（青柠文字 + 青柠下划线），不再用白字胶囊
-                inkBarColor: brand.primary,
-                itemColor: dark ? "rgba(255, 255, 255, 0.60)" : "#4E5969",
-                itemHoverColor: dark ? "rgba(255, 255, 255, 0.92)" : "#1D2129",
-                itemSelectedColor: dark ? brand.primary : "#3F6212",
-                titleFontSize: 14,
-            },
-            Segmented: {
-                trackBg: dark ? "rgba(255, 255, 255, 0.06)" : "#F2F3F5",
-                itemColor: dark ? "rgba(255, 255, 255, 0.60)" : "#4E5969",
-                itemHoverColor: dark ? "rgba(255, 255, 255, 0.92)" : "#1D2129",
-                itemHoverBg: dark ? "rgba(255, 255, 255, 0.06)" : "rgba(29, 33, 41, 0.04)",
-                // 激活态：青柠淡底 + 青柠字（与素材库/提示词库的筛选胶囊同一套语言）
-                itemSelectedBg: dark ? "rgba(216, 255, 62, 0.16)" : "#EAFFB4",
-                itemSelectedColor: dark ? brand.primary : "#3F6212",
-            },
-            Dropdown: {
-                colorBgElevated: color.elevatedBg,
-                colorText: color.itemText,
-                controlItemBgHover: color.itemHoverBg,
-                controlItemBgActive: color.itemSelectedBg,
-                controlItemBgActiveHover: color.itemSelectedHoverBg,
-            },
-            Menu: {
-                popupBg: color.elevatedBg,
-                itemActiveBg: color.itemSelectedBg,
-                itemHoverBg: color.itemHoverBg,
-                itemSelectedBg: color.itemSelectedBg,
-                itemSelectedColor: color.itemText,
-                darkPopupBg: neutral.dark.elevatedBg,
-                darkItemHoverBg: neutral.dark.itemHoverBg,
-                darkItemSelectedBg: neutral.dark.itemSelectedBg,
-                darkItemSelectedColor: neutral.dark.itemText,
-            },
-            Select: {
-                activeOutlineColor: "transparent",
-                optionActiveBg: color.itemHoverBg,
-                optionSelectedBg: color.itemSelectedBg,
-                optionSelectedColor: color.itemText,
-            },
-            Table: {
-                rowSelectedBg: color.tableSelectedBg,
-                rowSelectedHoverBg: color.tableSelectedHoverBg,
-            },
-            Modal: {
-                contentBg: dark ? "#1A1A1A" : "#FFFFFF",
-                headerBg: dark ? "#1A1A1A" : "#FFFFFF",
-            },
-            Tooltip: {
-                // 即梦暗色 tooltip：深灰底 + 白字（rgba(28,28,28,.96)）
-                colorBgSpotlight: dark ? "rgba(28, 28, 28, 0.96)" : "#1D2129",
-                colorTextLightSolid: dark ? "rgba(255, 255, 255, 0.88)" : "#FFFFFF",
-            },
-        },
-    };
-}
-
-
-========================================================================
-FILE: web/src/lib/asset-pagination.ts
-LINES: 1-24
-========================================================================
-export type AssetPage<T> = { assets: T[]; nextCursor: string | null; hasMore: boolean };
-
-// No store or baseline mutations until the entire traversal succeeds.
-export async function readAllAssetPages<T extends { id: string; version: number }>(read: (cursor?: string) => Promise<AssetPage<T>>, active: () => boolean): Promise<T[]> {
-    const assets = new Map<string,T>();
-    const cursors = new Set<string>();
-    let cursor: string | undefined;
-    do {
-        if (!active()) throw new Error('素材读取会话已变化');
-        const page = await read(cursor);
-        if (!active()) throw new Error('素材读取会话已变化');
-        if (!Array.isArray(page.assets) || typeof page.hasMore !== 'boolean'
-            || (page.hasMore ? typeof page.nextCursor !== 'string' || !page.nextCursor || !page.assets.length : page.nextCursor !== null)) throw new Error('素材分页响应不完整，请重新读取');
-        for (const asset of page.assets) {
-            const previous = assets.get(asset.id);
-            if (!previous || asset.version >= previous.version) assets.set(asset.id,asset);
-        }
-        if (!page.hasMore) break;
-        if (cursors.has(page.nextCursor!)) throw new Error('素材分页游标未推进，请重新读取');
-        cursor = page.nextCursor!;
-        cursors.add(cursor);
-    } while (true);
-    return [...assets.values()];
-}
-
-
-========================================================================
-FILE: web/src/lib/audio-generation.ts
-LINES: 1-61
-========================================================================
-export const audioVoiceOptions = [
-    { value: "alloy", label: "Alloy" },
-    { value: "ash", label: "Ash" },
-    { value: "ballad", label: "Ballad" },
-    { value: "coral", label: "Coral" },
-    { value: "echo", label: "Echo" },
-    { value: "fable", label: "Fable" },
-    { value: "nova", label: "Nova" },
-    { value: "onyx", label: "Onyx" },
-    { value: "sage", label: "Sage" },
-    { value: "shimmer", label: "Shimmer" },
-    { value: "verse", label: "Verse" },
-    { value: "marin", label: "Marin" },
-    { value: "cedar", label: "Cedar" },
-];
-
-export const audioFormatOptions = [
-    { value: "mp3", label: "MP3" },
-    { value: "wav", label: "WAV" },
-    { value: "opus", label: "Opus" },
-    { value: "aac", label: "AAC" },
-    { value: "flac", label: "FLAC" },
-    { value: "pcm", label: "PCM" },
-];
-
-export function normalizeAudioVoiceValue(value: string) {
-    return audioVoiceOptions.some((item) => item.value === value) ? value : "alloy";
-}
-
-export function normalizeAudioFormatValue(value: string) {
-    return audioFormatOptions.some((item) => item.value === value) ? value : "mp3";
-}
-
-export function normalizeAudioSpeedValue(value: string) {
-    const speed = Number(value);
-    if (!Number.isFinite(speed)) return "1";
-    return String(Math.max(0.25, Math.min(4, Number(speed.toFixed(2)))));
-}
-
-export function audioVoiceLabel(value: string) {
-    const voice = normalizeAudioVoiceValue(value);
-    return audioVoiceOptions.find((item) => item.value === voice)?.label || voice;
-}
-
-export function audioFormatLabel(value: string) {
-    const format = normalizeAudioFormatValue(value);
-    return audioFormatOptions.find((item) => item.value === format)?.label || format;
-}
-
-export function audioSpeedLabel(value: string) {
-    return `${normalizeAudioSpeedValue(value)}x`;
-}
-
-export function audioMimeType(format: string) {
-    if (format === "wav") return "audio/wav";
-    if (format === "opus") return "audio/opus";
-    if (format === "aac") return "audio/aac";
-    if (format === "flac") return "audio/flac";
-    if (format === "pcm") return "audio/pcm";
-    return "audio/mpeg";
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas-theme.ts
-LINES: 1-151
-========================================================================
-export type CanvasColorTheme = "light" | "dark";
-export type CanvasBackgroundMode = "dots" | "lines" | "blank";
-
-/**
- * 画布视觉令牌：迁移自 BeefTV 的画布主题合同。
- * - 画布底色取 #141414（不是纯黑），点阵保持低对比；
- * - 节点是内容容器，常态不描边、只用柔和投影区分层级，选中才出现 1px 亮描边；
- * - 工具栏是半透明玻璃层（rgba 面板 + backdrop-blur），层级靠明度组织，不靠重阴影。
- */
-export const canvasThemes = {
-    light: {
-        canvas: {
-            background: "#f0f0f0",
-            // 网格/点阵令牌自带最终透明度（不再由 CanvasGrid 二次叠 opacity），
-            // 直接换算成"落在 #f0f0f0 上的实际灰度"，方便调对比度。
-            dot: "rgba(0,0,0,.27)",
-            line: "rgba(0,0,0,.37)",
-            selectionStroke: "#111827",
-            selectionFill: "rgba(17,17,17,.10)",
-        },
-        node: {
-            label: "#4b5563",
-            fill: "#ffffff",
-            panel: "#ffffff",
-            stroke: "#e2e4e8",
-            edge: "rgba(15,23,42,.16)",
-            shadow: "0 6px 18px rgba(15,23,42,.08)",
-            hoverShadow: "0 10px 24px rgba(15,23,42,.12)",
-            activeStroke: "#111827",
-            placeholder: "#9ca3af",
-            text: "#111827",
-            muted: "#6b7280",
-            faint: "#9ca3af",
-        },
-        // 浮动菜单（双击画布 / 连线落点）：必须是实色面板，避免与画布内容视觉叠字。
-        menu: {
-            panel: "#ffffff",
-            border: "rgba(17,24,39,.12)",
-            shadow: "0 24px 60px rgba(15,23,42,.16), 0 2px 10px rgba(15,23,42,.08)",
-            divider: "rgba(17,24,39,.07)",
-            itemHover: "rgba(17,24,39,.05)",
-            iconBg: "rgba(17,24,39,.045)",
-            iconColor: "#4b5563",
-            header: "#4b5563",
-            title: "#111827",
-            subtitle: "#6b7280",
-        },
-        toolbar: {
-            panel: "rgba(255,255,255,.94)",
-            border: "rgba(17,24,39,.10)",
-            item: "#4b5563",
-            itemHover: "rgba(17,24,39,.06)",
-            activeBg: "rgba(17,24,39,.10)",
-            activeText: "#111827",
-        },
-        composer: {
-            surface: "rgba(255,255,255,.98)",
-            border: "rgba(17,24,39,.10)",
-            borderFocus: "rgba(17,24,39,.30)",
-            shadow: "0 1px 2px rgba(15,23,42,.06), 0 16px 40px rgba(15,23,42,.12)",
-            chip: "rgba(17,24,39,.05)",
-            chipHover: "rgba(17,24,39,.09)",
-            chipText: "#1f2937",
-            muted: "#6b7280",
-            divider: "rgba(17,24,39,.08)",
-            slot: "rgba(17,24,39,.035)",
-            slotBorder: "rgba(17,24,39,.18)",
-            sendDisabledBg: "rgba(17,24,39,.07)",
-            sendDisabledText: "#9ca3af",
-        },
-        accent: {
-            primary: "#111827",
-            primarySoft: "rgba(17,17,17,.10)",
-            onPrimary: "#ffffff",
-            danger: "#e11d48",
-        },
-        // 品牌青柠：浅底上换成深橄榄，保证文字对比度
-        brand: "#4D7C0F",
-    },
-    dark: {
-        canvas: {
-            background: "#141414",
-            // 点阵/格子不用元素级 opacity 衰减：软边圆点叠上 0.34 的 opacity 后，
-            // 峰值只剩 #212121（相对 #141414 只差 13 级灰），肉眼基本看不见，
-            // 这就是"点"看起来不生效的原因。令牌直接给最终透明度。
-            dot: "rgba(255,255,255,.2)",
-            line: "rgba(255,255,255,.07)",
-            selectionStroke: "#f1f1f1",
-            selectionFill: "rgba(255,255,255,.12)",
-        },
-        node: {
-            label: "#a3a3a3",
-            fill: "#262626",
-            panel: "#222222",
-            stroke: "rgba(255,255,255,.18)",
-            edge: "rgba(255,255,255,.18)",
-            shadow: "0 8px 24px rgba(0,0,0,.34)",
-            hoverShadow: "0 12px 30px rgba(0,0,0,.46)",
-            activeStroke: "#f1f1f1",
-            placeholder: "#737373",
-            text: "#ededed",
-            muted: "#a3a3a3",
-            faint: "#666666",
-        },
-        menu: {
-            panel: "#242424",
-            border: "rgba(255,255,255,.15)",
-            shadow: "0 28px 70px rgba(0,0,0,.62), 0 4px 14px rgba(0,0,0,.44)",
-            divider: "rgba(255,255,255,.08)",
-            itemHover: "rgba(255,255,255,.07)",
-            iconBg: "rgba(255,255,255,.055)",
-            iconColor: "#b4b4b4",
-            header: "#c8c8c8",
-            title: "#ededed",
-            subtitle: "#9a9a9a",
-        },
-        toolbar: {
-            panel: "rgba(20,20,20,.97)",
-            border: "rgba(255,255,255,.1)",
-            item: "#d4d4d4",
-            itemHover: "rgba(255,255,255,.07)",
-            activeBg: "rgba(255,255,255,.10)",
-            activeText: "#f5f6f8",
-        },
-        composer: {
-            surface: "rgba(28,28,30,.97)",
-            border: "rgba(255,255,255,.10)",
-            borderFocus: "rgba(255,255,255,.28)",
-            shadow: "0 1px 2px rgba(0,0,0,.30), 0 20px 48px rgba(0,0,0,.50)",
-            chip: "rgba(255,255,255,.06)",
-            chipHover: "rgba(255,255,255,.11)",
-            chipText: "#e7e7e7",
-            muted: "#9a9a9a",
-            divider: "rgba(255,255,255,.08)",
-            slot: "rgba(255,255,255,.04)",
-            slotBorder: "rgba(255,255,255,.20)",
-            sendDisabledBg: "rgba(255,255,255,.08)",
-            sendDisabledText: "#6f6f6f",
-        },
-        accent: {
-            primary: "#f5f5f5",
-            primarySoft: "rgba(255,255,255,.11)",
-            onPrimary: "#131313",
-            danger: "#fb7185",
-        },
-        // 品牌青柠：深色画布上用原色
-        brand: "#D8FF3E",
-    },
-} as const;
-
-export type CanvasTheme = (typeof canvasThemes)[CanvasColorTheme];
-
-
-========================================================================
-FILE: web/src/lib/canvas/canvas-agent-ops.ts
-LINES: 1-89
-========================================================================
-import { nanoid } from "nanoid";
-
-import i18n from "@/i18n";
-import { getNodeSpec, isRegisteredNodeType } from "@/lib/canvas/node-registry";
-import { CanvasNodeType, type CanvasConnection, type CanvasNodeData, type CanvasNodeMetadata, type CanvasNodeTypeId, type ViewportTransform } from "@/types/canvas";
-
-export type CanvasAgentOp =
-    | { type: "add_node"; id?: string; nodeType?: CanvasNodeTypeId; title?: string; position?: { x: number; y: number }; x?: number; y?: number; width?: number; height?: number; metadata?: CanvasNodeMetadata }
-    | { type: "update_node"; id: string; patch?: Partial<CanvasNodeData>; metadata?: CanvasNodeMetadata }
-    | { type: "delete_node"; id?: string; ids?: string[]; nodeType?: CanvasNodeTypeId }
-    | { type: "delete_connections"; id?: string; ids?: string[]; all?: boolean }
-    | { type: "connect_nodes"; id?: string; fromNodeId: string; toNodeId: string }
-    | { type: "set_viewport"; viewport: ViewportTransform }
-    | { type: "select_nodes"; ids: string[] }
-    | { type: "run_generation"; nodeId: string; mode?: "text" | "image" | "video" | "audio"; prompt?: string };
-
-export type CanvasAgentSnapshot = {
-    projectId: string;
-    title: string;
-    nodes: CanvasNodeData[];
-    connections: CanvasConnection[];
-    selectedNodeIds: string[];
-    viewport: ViewportTransform;
-};
-
-export function summarizeCanvasAgentOps(ops?: CanvasAgentOp[]) {
-    const counts = (Array.isArray(ops) ? ops : []).reduce<Record<string, number>>((acc, op) => {
-        if (!op?.type) return acc;
-        acc[op.type] = (acc[op.type] || 0) + 1;
-        return acc;
-    }, {});
-    return Object.entries(counts)
-        .map(([type, count]) => `${opLabel(type)} ${count}`)
-        .join("，");
-}
-
-export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasAgentOp[]) {
-    let nodes = snapshot.nodes;
-    let connections = snapshot.connections;
-    let selectedNodeIds = snapshot.selectedNodeIds;
-    let viewport = snapshot.viewport;
-
-    (Array.isArray(ops) ? ops : []).forEach((op, index) => {
-        if (!op?.type) return;
-        if (op.type === "add_node") {
-            const nodeType = op.nodeType && isRegisteredNodeType(op.nodeType) ? op.nodeType : CanvasNodeType.Text;
-            const spec = getNodeSpec(nodeType);
-            const node: CanvasNodeData = {
-                id: op.id || `${nodeType}-${Date.now()}-${index}`,
-                type: nodeType,
-                title: op.title || spec.title,
-                position: op.position || { x: op.x ?? index * 36, y: op.y ?? index * 36 },
-                width: op.width || spec.width,
-                height: op.height || spec.height,
-                metadata: { ...spec.metadata, ...op.metadata },
-            };
-            nodes = [...nodes, node];
-            selectedNodeIds = [node.id];
-        }
-        if (op.type === "update_node") {
-            if (!op.id) return;
-            nodes = nodes.map((node) => (node.id === op.id ? { ...node, ...op.patch, metadata: { ...node.metadata, ...op.patch?.metadata, ...op.metadata } } : node));
-        }
-        if (op.type === "delete_node") {
-            const ids = new Set(op.ids || (op.id ? [op.id] : op.nodeType ? nodes.filter((node) => node.type === op.nodeType).map((node) => node.id) : []));
-            nodes = nodes.filter((node) => !ids.has(node.id));
-            connections = connections.filter((conn) => !ids.has(conn.fromNodeId) && !ids.has(conn.toNodeId));
-            selectedNodeIds = selectedNodeIds.filter((id) => !ids.has(id));
-        }
-        if (op.type === "delete_connections") {
-            const ids = new Set(op.ids || (op.id ? [op.id] : []));
-            connections = op.all ? [] : connections.filter((conn) => !ids.has(conn.id));
-        }
-        if (op.type === "connect_nodes") {
-            if (!op.fromNodeId || !op.toNodeId) return;
-            const exists = connections.some((conn) => conn.fromNodeId === op.fromNodeId && conn.toNodeId === op.toNodeId);
-            const hasNodes = nodes.some((node) => node.id === op.fromNodeId) && nodes.some((node) => node.id === op.toNodeId);
-            if (!exists && hasNodes) connections = [...connections, { id: op.id || nanoid(), fromNodeId: op.fromNodeId, toNodeId: op.toNodeId }];
-        }
-        if (op.type === "set_viewport" && op.viewport) viewport = op.viewport;
-        if (op.type === "select_nodes") selectedNodeIds = (op.ids || []).filter((id) => nodes.some((node) => node.id === id));
-    });
-
-    return { ...snapshot, nodes, connections, selectedNodeIds, viewport };
-}
-
-function opLabel(type: string) {
-    return i18n.t(`canvas.agentOps.${type}`, { defaultValue: type });
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/canvas-export.ts
-LINES: 1-115
-========================================================================
-import { saveAs } from "file-saver";
-
-import i18n from "@/i18n";
-import { createZip } from "@/lib/zip";
-import { getMediaBlob } from "@/services/file-storage";
-import { getImageBlob } from "@/services/image-storage";
-import { useAuthStore } from "@/stores/use-auth-store";
-import { matchesCanvasSession } from "@/lib/canvas/canvas-session";
-import type { CanvasExportAsset, CanvasExportFile } from "@/types/canvas-export";
-import type { CanvasProject } from "@/stores/canvas/use-canvas-store";
-import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
-import { collectCanvasPackageMedia } from './canvas-package';
-import { parseProduction } from '../../../../shared/production';
-
-export async function exportCanvasProjects(projects: CanvasProject[], fileName = i18n.t("canvas.export.defaultProjectName")) {
-    const checkSession = captureExportSession();
-    const zipFiles: { name: string; data: BlobPart }[] = [];
-    const exportedProjects = await Promise.all(
-        projects.map(async (project) => {
-            if (project.production) parseProduction(project.production);
-            const files: CanvasExportAsset[] = [];
-            await Promise.all(
-                collectCanvasPackageMedia(project).map(async (storageKey, index) => {
-                    checkSession();
-                    const blob = storageKey.startsWith('/media/') ? await downloadPackageMedia(storageKey, checkSession) : storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
-                    if (!blob) throw new Error("画布引用的本地素材缺失，无法完整导出；请先恢复素材后重试。");
-                    const path = `projects/${project.id}/files/${index}.${fileExtension(blob.type, storageKey)}`;
-                    files.push({ storageKey, path, mimeType: blob.type || "application/octet-stream", bytes: blob.size });
-                    zipFiles.push({ name: path, data: blob });
-                }),
-            );
-            return { project, files };
-        }),
-    );
-
-    const data: CanvasExportFile = { app: "sundas", version: 4, exportedAt: new Date().toISOString(), projects: exportedProjects };
-    checkSession();
-    const zip = await createZip([{ name: "projects.json", data: JSON.stringify(data, null, 2) }, ...zipFiles]);
-    checkSession();
-    saveAs(zip, `${safeFileName(fileName)}.zip`);
-}
-
-export async function exportCanvasNodes(nodes: CanvasNodeData[], fileName = i18n.t("canvas.export.defaultNodesName")) {
-    const checkSession = captureExportSession();
-    const zipFiles: { name: string; data: BlobPart }[] = [];
-    const used = new Set<string>();
-    const uniqueName = (base: string, ext: string) => {
-        const safe = safeFileName(base) || i18n.t("canvas.export.item");
-        let name = `${safe}.${ext}`;
-        for (let i = 1; used.has(name); i += 1) name = `${safe}-${i}.${ext}`;
-        used.add(name);
-        return name;
-    };
-
-    await Promise.all(
-        nodes.map(async (node) => {
-            const title = node.title || node.type;
-            const storageKey = node.metadata?.storageKey || "";
-            if (storageKey) {
-                const blob = storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
-                if (blob) return void zipFiles.push({ name: uniqueName(title, fileExtension(blob.type, storageKey)), data: blob });
-            }
-            if (node.type === CanvasNodeType.Text) return void zipFiles.push({ name: uniqueName(title, "txt"), data: node.metadata?.content || node.metadata?.prompt || "" });
-            const content = node.metadata?.content;
-            if (content && content.startsWith("data:")) {
-                const blob = await (await fetch(content)).blob();
-                return void zipFiles.push({ name: uniqueName(title, fileExtension(blob.type, storageKey)), data: blob });
-            }
-            if (storageKey) throw new Error("节点引用的本地素材缺失，无法完整导出；请先恢复素材后重试。");
-            zipFiles.push({ name: uniqueName(title, "json"), data: JSON.stringify(node, null, 2) });
-        }),
-    );
-
-    checkSession();
-    const zip = await createZip(zipFiles);
-    checkSession();
-    saveAs(zip, `${safeFileName(fileName)}.zip`);
-}
-
-function captureExportSession() {
-    const current = useAuthStore.getState();
-    const owner = current.user?.id ?? null, epoch = current.sessionEpoch;
-    const check = () => { if (!matchesCanvasSession(owner, epoch, useAuthStore.getState())) throw new Error("账户会话已变化，请重新导出"); };
-    check();
-    return check;
-}
-
-async function downloadPackageMedia(url: string, checkSession: () => void) {
-    checkSession();
-    const owner = useAuthStore.getState().user?.id;
-    if (!owner) throw new Error('请先登录后导出媒体');
-    const response = await fetch(url, { credentials: 'same-origin', headers: { 'X-Sundas-User': owner } });
-    checkSession();
-    if (!response.ok) throw new Error('无法读取工程引用的媒体，请检查归属或文件状态');
-    const blob = await response.blob();
-    checkSession();
-    return blob;
-}
-
-function safeFileName(value: string) {
-    return value.replace(/[\\/:*?"<>|]/g, "_");
-}
-
-function fileExtension(mimeType: string, storageKey: string) {
-    if (mimeType.includes("png")) return "png";
-    if (mimeType.includes("jpeg")) return "jpg";
-    if (mimeType.includes("webp")) return "webp";
-    if (mimeType.includes("gif")) return "gif";
-    if (mimeType.includes("mp4")) return "mp4";
-    if (mimeType.includes("webm")) return "webm";
-    if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
-    if (mimeType.includes("wav")) return "wav";
-    if (mimeType.includes("ogg")) return "ogg";
-    return storageKey.startsWith("image:") ? "png" : "bin";
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/canvas-generation-helpers.ts
-LINES: 1-205
-========================================================================
-import { defaultConfig, modelOptionName, resolveModelForCapability, useConfigStore, type AiConfig } from "@/stores/use-config-store";
-import { clampVideoSecondsToRange, parseVideoResolution, videoSecondsRangeForDurations } from "@/lib/media-size";
-import i18n from "@/i18n";
-import { resolveImageUrl, uploadImage } from "@/services/image-storage";
-import { resolveMediaUrl } from "@/services/file-storage";
-import { imageMetadata, referenceUrl } from "@/lib/canvas/canvas-node-factory";
-import type { NodeGenerationInput } from "@/components/canvas/canvas-node-generation";
-import type { CanvasNodeGenerationMode } from "@/components/canvas/canvas-node-prompt-panel";
-import type { CanvasImageAngleParams } from "@/components/canvas/canvas-node-angle-dialog";
-import type { ReferenceImage } from "@/types/image";
-import { CanvasNodeType, type CanvasAssistantSession, type CanvasConnection, type CanvasNodeData, type CanvasNodeMetadata } from "@/types/canvas";
-
-export function imageExtension(dataUrl: string) {
-    return dataUrl.match(/^data:image[/]([^;]+)/)?.[1] || dataUrl.match(/image[/]([^;]+)/)?.[1] || "png";
-}
-
-export function audioExtension(mimeType?: string) {
-    if (mimeType?.includes("wav")) return "wav";
-    if (mimeType?.includes("opus")) return "opus";
-    if (mimeType?.includes("aac")) return "aac";
-    if (mimeType?.includes("flac")) return "flac";
-    if (mimeType?.includes("pcm")) return "pcm";
-    return "mp3";
-}
-
-export function generationReferenceUrls(context: { referenceImages: ReferenceImage[]; referenceVideos: Array<{ storageKey?: string; url?: string }>; referenceAudios?: Array<{ storageKey?: string; url?: string }> }) {
-    return [
-        ...context.referenceImages.map(referenceUrl).filter((url): url is string => Boolean(url)),
-        ...context.referenceVideos.map((video) => video.storageKey || video.url).filter((url): url is string => Boolean(url)),
-        ...(context.referenceAudios || []).map((audio) => audio.storageKey || audio.url).filter((url): url is string => Boolean(url)),
-    ];
-}
-
-export async function resolveMetadataReferences(metadata: CanvasNodeMetadata) {
-    if (metadata.generationType !== "edit") return [];
-    if (!metadata.references?.length) return null;
-    const references = await Promise.all(
-        metadata.references.map(async (url, index) => {
-            const dataUrl = url.startsWith("image:") ? await resolveImageUrl(url, "") : url;
-            return dataUrl ? { id: `${index}`, name: `reference-${index}.png`, type: "image/png", dataUrl, storageKey: url.startsWith("image:") ? url : undefined } : null;
-        }),
-    );
-    return references.every(Boolean) ? (references as ReferenceImage[]) : null;
-}
-
-export async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
-    return Promise.all(
-        nodes.map(async (node) => {
-            const metadata = node.metadata;
-            const content = metadata?.content;
-            if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && metadata?.storageKey) return { ...node, metadata: { ...metadata, content: await resolveMediaUrl(metadata.storageKey, content) } };
-            if (node.type !== CanvasNodeType.Image || !metadata || !content) return node;
-            const images = await Promise.all(
-                (metadata.images || []).map(async (image) => {
-                    if (!image.content) return image;
-                    return { ...image, content: await resolveImageUrl(image.storageKey, image.content) };
-                }),
-            );
-            if (metadata.storageKey) {
-                return { ...node, metadata: { ...metadata, content: await resolveImageUrl(metadata.storageKey, content), images } };
-            }
-            if (!content.startsWith("data:image/")) return node;
-            return { ...node, metadata: { ...metadata, ...imageMetadata(await uploadImage(content)) } };
-        }),
-    );
-}
-
-export async function hydrateAssistantImages(sessions: CanvasAssistantSession[]) {
-    const hydrateItem = async <T extends { dataUrl?: string; storageKey?: string }>(item: T) => {
-        if (item.storageKey) return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
-        if (item.dataUrl?.startsWith("data:image/")) {
-            const image = await uploadImage(item.dataUrl);
-            return { ...item, dataUrl: image.url, storageKey: image.storageKey };
-        }
-        return item;
-    };
-    return Promise.all(
-        sessions.map(async (session) => ({
-            ...session,
-            messages: await Promise.all(
-                session.messages.map(async (message) => ({
-                    ...message,
-                    references: await Promise.all((message.references || []).map(hydrateItem)),
-                })),
-            ),
-        })),
-    );
-}
-
-export function getGenerationCount(count: string) {
-    return Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
-}
-
-export function getInputSummary(inputs: NodeGenerationInput[]) {
-    const resources = [...new Map(inputs.flatMap((input) => (input.type === "group" ? input.children : [input])).map((input) => [input.nodeId, input])).values()];
-    return {
-        textCount: resources.filter((input) => input.type === "text").length,
-        imageCount: resources.filter((input) => input.type === "image").length,
-        videoCount: resources.filter((input) => input.type === "video").length,
-        audioCount: resources.filter((input) => input.type === "audio").length,
-    };
-}
-
-export function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefined, mode: CanvasNodeGenerationMode): AiConfig {
-    const resolved = resolveModelForCapability(config, node?.metadata?.model, mode);
-    const serverModels = useConfigStore.getState().serverModels;
-    const fallbackModel = mode === "image" ? config.imageModel : mode === "video" ? config.videoModel : mode === "audio" ? config.audioModel : config.textModel;
-    const model = serverModels.length && !serverModels.some((item) => item.id === modelOptionName(resolved) && item.capability === mode)
-        ? fallbackModel || resolved
-        : resolved;
-    const serverModel = mode === "video" ? serverModels.find((item) => item.id === modelOptionName(model)) : undefined;
-    const durations = (serverModel?.metadata as { durations?: { min?: number; max?: number } } | undefined)?.durations;
-    const secondsRange = videoSecondsRangeForDurations(durations);
-    const currentQuality = parseVideoResolution(node?.metadata?.vquality || config.vquality || defaultConfig.vquality);
-    const selectedRouteId = mode === 'video' ? node?.metadata?.videoRouteId ?? '' : '';
-    const resolutions = Object.keys((selectedRouteId ? serverModel?.routes.find((route) => route.id === selectedRouteId)?.resolutionMultipliers : undefined) ?? serverModel?.resolutionMultipliers ?? {});
-    const vquality = mode === "video" ? resolutions.length && !resolutions.includes(currentQuality) ? resolutions[0] : currentQuality : node?.metadata?.vquality || config.vquality || defaultConfig.vquality;
-    return {
-        ...config,
-        model,
-        reasoningEffort: node?.metadata?.reasoningEffort || config.reasoningEffort || defaultConfig.reasoningEffort,
-        quality: node?.metadata?.quality || config.quality || defaultConfig.quality,
-        size: node?.metadata?.size || config.size || defaultConfig.size,
-        background: node?.metadata?.background ?? config.background ?? defaultConfig.background,
-        videoSeconds: clampVideoSecondsToRange(node?.metadata?.seconds || config.videoSeconds || defaultConfig.videoSeconds, secondsRange.min, secondsRange.max),
-        vquality,
-        videoGenerateAudio: node?.metadata?.generateAudio || config.videoGenerateAudio || defaultConfig.videoGenerateAudio,
-        videoWatermark: node?.metadata?.watermark || config.videoWatermark || defaultConfig.videoWatermark,
-        videoMode: node?.metadata?.videoMode || config.videoMode || defaultConfig.videoMode,
-        videoRouteId: selectedRouteId,
-        audioVoice: node?.metadata?.audioVoice || config.audioVoice || defaultConfig.audioVoice,
-        audioFormat: node?.metadata?.audioFormat || config.audioFormat || defaultConfig.audioFormat,
-        audioSpeed: node?.metadata?.audioSpeed || config.audioSpeed || defaultConfig.audioSpeed,
-        audioInstructions: node?.metadata?.audioInstructions || config.audioInstructions || defaultConfig.audioInstructions,
-        count: String(node?.metadata?.count || (mode === "image" ? config.canvasImageCount || config.count : config.count) || defaultConfig.count),
-    };
-}
-
-export function hasResumableVideoTask(node: CanvasNodeData) {
-    return node.type === CanvasNodeType.Video && Boolean(node.metadata?.videoTaskId) && !node.metadata?.content;
-}
-
-export function resetInterruptedGeneration(nodes: CanvasNodeData[]) {
-    return nodes.map((node) =>
-        node.metadata?.status === "loading"
-            ? hasResumableVideoTask(node)
-                ? node
-                : {
-                      ...node,
-                      metadata: {
-                          ...node.metadata,
-                          status: "error" as const,
-                          errorDetails: i18n.t("canvas.generation.interrupted"),
-                          images: node.metadata.images?.map((image) => (image.status === "loading" ? { ...image, status: "error" as const, errorDetails: i18n.t("canvas.generation.interrupted") } : image)),
-                          texts: node.metadata.texts?.map((text) => (text.status === "loading" ? { ...text, status: "error" as const, errorDetails: i18n.t("canvas.generation.interrupted") } : text)),
-                      },
-                  }
-            : node,
-    );
-}
-
-export function isGenerationCanceled(error: unknown) {
-    return error instanceof Error && (error.message === i18n.t("common.requestCanceled") || error.name === "AbortError");
-}
-
-export function findRetrySourceNode(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    const queue = connections.filter((connection) => connection.toNodeId === nodeId).map((connection) => connection.fromNodeId);
-    const visited = new Set<string>();
-    while (queue.length) {
-        const id = queue.shift()!;
-        if (visited.has(id)) continue;
-        visited.add(id);
-        const node = nodes.find((item) => item.id === id);
-        if (node?.type === CanvasNodeType.Config) return node;
-        connections.filter((connection) => connection.toNodeId === id).forEach((connection) => queue.push(connection.fromNodeId));
-    }
-    return null;
-}
-
-export function sourceNodeReferenceImages(node: CanvasNodeData | null) {
-    if (!node || node.type !== CanvasNodeType.Image || !node.metadata?.content) return [];
-    return [
-        {
-            id: node.id,
-            name: `${node.title || node.id}.png`,
-            type: node.metadata.mimeType || "image/png",
-            dataUrl: node.metadata.content,
-            storageKey: node.metadata.storageKey,
-        },
-    ];
-}
-
-export function isAudioFile(file: File) {
-    return file.type.startsWith("audio/") || /\.(mp3|wav)$/i.test(file.name);
-}
-
-export function buildAngleLabel(params: CanvasImageAngleParams) {
-    const horizontal = params.horizontalAngle === 0 ? i18n.t("canvas.generation.front") : params.horizontalAngle > 0 ? i18n.t("canvas.generation.rotateRight", { angle: params.horizontalAngle }) : i18n.t("canvas.generation.rotateLeft", { angle: Math.abs(params.horizontalAngle) });
-    const pitch = params.pitchAngle === 0 ? i18n.t("canvas.generation.level") : params.pitchAngle > 0 ? i18n.t("canvas.generation.topDown", { angle: params.pitchAngle }) : i18n.t("canvas.generation.lowAngle", { angle: Math.abs(params.pitchAngle) });
-    return i18n.t("canvas.generation.angleLabel", { horizontal, pitch, distance: params.cameraDistance.toFixed(1), lens: i18n.t(params.wideAngle ? "canvas.editors.wide" : "canvas.editors.standard") });
-}
-
-export function buildAnglePrompt(params: CanvasImageAngleParams) {
-    return i18n.t("canvas.generation.anglePrompt", { angle: buildAngleLabel(params) });
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/canvas-image-data.ts
-LINES: 1-176
-========================================================================
-export type ImageCropRect = {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-};
-
-export type ImageAngleTransform = {
-    horizontalAngle: number;
-    pitchAngle: number;
-    cameraDistance: number;
-    wideAngle: boolean;
-};
-
-export type ImageUpscaleAlgorithm = "nearest" | "bilinear" | "high";
-
-export const MAX_UPSCALE_LONG_EDGE = 4096;
-
-export type ImageUpscaleParams = {
-    targetLongEdge: number;
-    algorithm: ImageUpscaleAlgorithm;
-};
-
-export type ImageSplitParams = {
-    rows: number;
-    columns: number;
-    horizontalLines?: number[];
-    verticalLines?: number[];
-};
-
-export type ImageSplitPiece = {
-    row: number;
-    column: number;
-    dataUrl: string;
-};
-
-export async function cropDataUrl(dataUrl: string, crop?: ImageCropRect) {
-    const image = await loadImage(dataUrl);
-    if (crop) {
-        return drawCrop(image, Math.floor(crop.x * image.width), Math.floor(crop.y * image.height), Math.ceil(crop.width * image.width), Math.ceil(crop.height * image.height));
-    }
-    const size = Math.min(image.width, image.height);
-    const sx = Math.max(0, Math.floor((image.width - size) / 2));
-    const sy = Math.max(0, Math.floor((image.height - size) / 2));
-    return drawCrop(image, sx, sy, size, size);
-}
-
-export async function splitDataUrl(dataUrl: string, params: ImageSplitParams): Promise<ImageSplitPiece[]> {
-    const image = await loadImage(dataUrl);
-    const xCuts = buildSplitCuts(params.verticalLines, image.width, Math.max(1, Math.floor(params.columns)));
-    const yCuts = buildSplitCuts(params.horizontalLines, image.height, Math.max(1, Math.floor(params.rows)));
-    const pieces: ImageSplitPiece[] = [];
-
-    for (let row = 0; row < yCuts.length - 1; row += 1) {
-        const sy = yCuts[row];
-        const sh = yCuts[row + 1] - sy;
-        for (let column = 0; column < xCuts.length - 1; column += 1) {
-            const sx = xCuts[column];
-            const sw = xCuts[column + 1] - sx;
-            pieces.push({ row, column, dataUrl: drawCrop(image, sx, sy, sw, sh) });
-        }
-    }
-
-    return pieces;
-}
-
-function buildSplitCuts(lines: number[] | undefined, size: number, count: number) {
-    if (!lines?.length) return Array.from({ length: count + 1 }, (_, index) => Math.floor((index * size) / count));
-    return [0, ...lines.map((line) => Math.round(line * size)).filter((line) => line > 0 && line < size).sort((a, b) => a - b), size];
-}
-
-export async function transformAngleDataUrl(dataUrl: string, params: ImageAngleTransform) {
-    const image = await loadImage(dataUrl);
-    const canvas = document.createElement("canvas");
-    const padding = Math.round(Math.max(image.width, image.height) * 0.18);
-    canvas.width = image.width + padding * 2;
-    canvas.height = image.height + padding * 2;
-    const context = canvas.getContext("2d");
-    if (!context) return dataUrl;
-    context.clearRect(0, 0, canvas.width, canvas.height);
-
-    const horizontal = params.horizontalAngle / 60;
-    const pitch = params.pitchAngle / 45;
-    const distanceScale = 1.12 - params.cameraDistance * 0.035;
-    const wideScale = params.wideAngle ? 0.88 : 1;
-    const scale = Math.max(0.64, Math.min(1.1, distanceScale * wideScale));
-    const width = image.width * scale * (1 - Math.abs(horizontal) * 0.28);
-    const height = image.height * scale * (1 - Math.abs(pitch) * 0.18);
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-    const skewX = horizontal * image.width * 0.18;
-    const skewY = pitch * image.height * 0.12;
-    const x = cx - width / 2 + horizontal * padding * 0.5;
-    const y = cy - height / 2 + pitch * padding * 0.45;
-
-    context.save();
-    context.setTransform(1, pitch * 0.08, horizontal * -0.1, 1, 0, 0);
-    context.drawImage(image, x + skewX, y + skewY, width, height);
-    context.restore();
-
-    if (params.wideAngle) {
-        const gradient = context.createRadialGradient(cx, cy, Math.min(canvas.width, canvas.height) * 0.2, cx, cy, Math.max(canvas.width, canvas.height) * 0.62);
-        gradient.addColorStop(0, "rgba(255,255,255,0)");
-        gradient.addColorStop(1, "rgba(0,0,0,0.18)");
-        context.fillStyle = gradient;
-        context.fillRect(0, 0, canvas.width, canvas.height);
-    }
-
-    return canvas.toDataURL("image/png");
-}
-
-export async function upscaleDataUrl(dataUrl: string, params: ImageUpscaleParams) {
-    const image = await loadImage(dataUrl);
-    const { width, height } = resolveUpscaleSize(image.width, image.height, params.targetLongEdge);
-    return params.algorithm === "high" ? drawStepUpscale(image, width, height) : drawResize(image, image.width, image.height, width, height, params.algorithm);
-}
-
-export function resolveUpscaleSize(width: number, height: number, targetLongEdge: number) {
-    const longEdge = Math.max(1, width, height);
-    const target = Math.min(MAX_UPSCALE_LONG_EDGE, Math.max(1, Math.round(targetLongEdge)));
-    const scale = target / longEdge;
-    return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
-}
-
-function drawCrop(image: HTMLImageElement, sx: number, sy: number, sw: number, sh: number) {
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, sw);
-    canvas.height = Math.max(1, sh);
-    const context = canvas.getContext("2d");
-    if (!context) return image.src;
-    context.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/png");
-}
-
-function drawStepUpscale(image: HTMLImageElement, width: number, height: number) {
-    let source: CanvasImageSource = image;
-    let sourceWidth = image.width;
-    let sourceHeight = image.height;
-
-    while (sourceWidth * 2 < width && sourceHeight * 2 < height) {
-        const nextWidth = sourceWidth * 2;
-        const nextHeight = sourceHeight * 2;
-        const next = drawResizeCanvas(source, sourceWidth, sourceHeight, nextWidth, nextHeight, "high");
-        source = next;
-        sourceWidth = nextWidth;
-        sourceHeight = nextHeight;
-    }
-
-    return drawResize(source, sourceWidth, sourceHeight, width, height, "high");
-}
-
-function drawResize(source: CanvasImageSource, sourceWidth: number, sourceHeight: number, width: number, height: number, algorithm: ImageUpscaleAlgorithm) {
-    return drawResizeCanvas(source, sourceWidth, sourceHeight, width, height, algorithm).toDataURL("image/png");
-}
-
-function drawResizeCanvas(source: CanvasImageSource, sourceWidth: number, sourceHeight: number, width: number, height: number, algorithm: ImageUpscaleAlgorithm) {
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext("2d");
-    if (!context) return canvas;
-    context.imageSmoothingEnabled = algorithm !== "nearest";
-    context.imageSmoothingQuality = algorithm === "bilinear" ? "medium" : "high";
-    context.drawImage(source, 0, 0, sourceWidth, sourceHeight, 0, 0, width, height);
-    return canvas;
-}
-
-function loadImage(dataUrl: string) {
-    return new Promise<HTMLImageElement>((resolve) => {
-        const image = new Image();
-        // 私有媒体会重定向至 OSS，画布读取像素必须按 CORS 方式加载。
-        if (dataUrl.startsWith('/media/') || dataUrl.startsWith(`${window.location.origin}/media/`)) image.crossOrigin = 'anonymous';
-        image.onload = () => resolve(image);
-        image.src = dataUrl;
-    });
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/canvas-import.ts
-LINES: 1-35
-========================================================================
-import { readZip } from "@/lib/zip";
-import { importMediaFiles } from "@/lib/imported-media";
-import { collectCanvasPackageMedia, remapCanvasPackageIdentities, remapCanvasPackageMedia } from './canvas-package';
-import { parseProduction } from '../../../../shared/production';
-import { currentMediaOwner } from "@/services/cloud-media";
-import { captureAccountSession } from "@/lib/account-session";
-import type { CanvasExportFile } from "@/types/canvas-export";
-
-export async function readCanvasPackage(file: Blob) {
-    const session = captureAccountSession();
-    const owner = session.owner;
-    if (!owner) throw new Error("请先登录");
-    const zip = await readZip(file);
-    session.check();
-    const projectFile = zip.get("projects.json");
-    if (!projectFile) throw new Error("missing projects.json");
-    const data = JSON.parse(await projectFile.text()) as CanvasExportFile;
-    session.check();
-    if (data.app !== "sundas" || ![3, 4].includes(data.version) || !Array.isArray(data.projects)) throw new Error("不支持的画布文件");
-    for (const item of data.projects) {
-        if (!item?.project || !Array.isArray(item.files) || !Array.isArray(item.project.nodes) || !Array.isArray(item.project.connections)) throw new Error('工程结构不完整');
-        const ids = new Set(item.project.nodes.map(node => node.id));
-        if (ids.size !== item.project.nodes.length || item.project.nodes.some(node => typeof node.id !== 'string' || !node.id) || item.project.connections.some(edge => !ids.has(edge.fromNodeId) || !ids.has(edge.toNodeId))) throw new Error('工程节点或连线身份无效');
-        if (item.project.production) parseProduction(item.project.production);
-        if (item.project.production?.shots.some(shot => shot.nodeId && !ids.has(shot.nodeId))) throw new Error('制作镜头绑定的节点缺失');
-        if (item.files.some(file => typeof file.storageKey !== 'string' || typeof file.path !== 'string' || typeof file.mimeType !== 'string' || !zip.has(file.path))) throw new Error('工程素材清单或文件不完整');
-        const files = new Set(item.files.map(file => file.storageKey));
-        if (collectCanvasPackageMedia(item.project).some(key => !files.has(key))) throw new Error('工程备份缺少引用素材，请重新完整导出');
-    }
-    const media = await importMediaFiles(zip, data.projects.flatMap((project) => project.files), owner, session.check);
-    const projects = data.projects.map((item) => remapCanvasPackageIdentities(remapCanvasPackageMedia(item.project, media), () => crypto.randomUUID()));
-    session.check();
-    if (currentMediaOwner() !== owner) throw new Error("登录账户已变化，请重新导入");
-    return projects;
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/canvas-media-playback.ts
-LINES: 1-20
-========================================================================
-let playingIds: ReadonlySet<string> = new Set();
-const listeners = new Set<() => void>();
-
-export function getPlayingCanvasNodeIds() { return playingIds; }
-export function subscribeCanvasPlayback(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
-
-/** Active playback remains mounted when panned offscreen; paused offscreen players can be released. */
-export function setCanvasNodePlaying(id: string, playing: boolean) {
-    if (playingIds.has(id) === playing) return;
-    const next = new Set(playingIds);
-    if (playing) next.add(id); else next.delete(id);
-    playingIds = next;
-    listeners.forEach((listener) => listener());
-}
-
-export function releaseCanvasMedia(media: HTMLMediaElement) {
-    media.pause();
-    media.removeAttribute("src");
-    media.load();
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/canvas-node-factory.ts
-LINES: 1-71
-========================================================================
-import { getNodeSpec, NODE_DEFAULT_SIZE } from "@/constant/canvas";
-import { nodeSizeFromRatio } from "@/lib/canvas/canvas-node-size";
-import type { AiConfig } from "@/stores/use-config-store";
-import type { UploadedImage } from "@/services/image-storage";
-import type { UploadedFile } from "@/services/file-storage";
-import type { ReferenceImage } from "@/types/image";
-import { CanvasNodeType, type CanvasImageGenerationType, type CanvasNodeData, type CanvasNodeMetadata, type CanvasNodeTypeId, type Position } from "@/types/canvas";
-
-export function createCanvasNode(type: CanvasNodeTypeId, position: Position, metadata?: CanvasNodeMetadata): CanvasNodeData {
-    const spec = getNodeSpec(type);
-    const id = `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-
-    return {
-        id,
-        type,
-        title: spec.title,
-        position: {
-            x: position.x - spec.width / 2,
-            y: position.y - spec.height / 2,
-        },
-        width: spec.width,
-        height: spec.height,
-        metadata: { ...spec.metadata, ...metadata },
-    };
-}
-
-export function imageMetadata(image: UploadedImage): CanvasNodeMetadata {
-    return { content: image.url, storageKey: image.storageKey, status: "success", naturalWidth: image.width, naturalHeight: image.height, bytes: image.bytes, mimeType: image.mimeType };
-}
-
-export function videoMetadata(video: UploadedFile): CanvasNodeMetadata {
-    return { content: video.url, storageKey: video.storageKey, status: "success", naturalWidth: video.width, naturalHeight: video.height, bytes: video.bytes, mimeType: video.mimeType || "video/mp4", durationMs: video.durationMs };
-}
-
-export function audioMetadata(audio: UploadedFile): CanvasNodeMetadata {
-    return { audioMediaId: audio.mediaId, audioTaskId: audio.taskId, content: audio.url, storageKey: audio.storageKey, status: "success", bytes: audio.bytes, mimeType: audio.mimeType || "audio/mpeg", durationMs: audio.durationMs };
-}
-
-export function referenceUrl(image: ReferenceImage) {
-    return image.storageKey || image.url || (!image.dataUrl.startsWith("data:") ? image.dataUrl : undefined);
-}
-
-export function buildImageGenerationMetadata(type: CanvasImageGenerationType, config: AiConfig, count: number, references: ReferenceImage[]): CanvasNodeMetadata {
-    return {
-        generationType: type,
-        model: config.model,
-        size: config.size,
-        quality: config.quality,
-        ...(config.background ? { background: config.background } : {}),
-        count,
-        references: references.map(referenceUrl).filter((url): url is string => Boolean(url)),
-    };
-}
-
-export function buildAudioGenerationMetadata(config: AiConfig): CanvasNodeMetadata {
-    return {
-        model: config.model,
-        audioVoice: config.audioVoice,
-        audioFormat: config.audioFormat,
-        audioSpeed: config.audioSpeed,
-        audioInstructions: config.audioInstructions,
-    };
-}
-
-export function applyNodeConfigPatch(node: CanvasNodeData, patch: Partial<CanvasNodeData["metadata"]>) {
-    const safePatch = patch || {};
-    const next = { ...node, metadata: { ...node.metadata, ...safePatch } };
-    const spec = node.type === CanvasNodeType.Video ? NODE_DEFAULT_SIZE[CanvasNodeType.Video] : NODE_DEFAULT_SIZE[CanvasNodeType.Image];
-    const size = typeof safePatch.size === "string" && !node.metadata?.content ? nodeSizeFromRatio(safePatch.size, spec.width, spec.height) : null;
-    return size && (node.type === CanvasNodeType.Image || node.type === CanvasNodeType.Video) ? { ...next, ...size, position: { x: node.position.x + node.width / 2 - size.width / 2, y: node.position.y + node.height / 2 - size.height / 2 } } : next;
 }
 

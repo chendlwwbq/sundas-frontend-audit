@@ -1,21 +1,10 @@
 import { ChatLayout, ChatMessageList } from "@astryxdesign/core/Chat";
 import { InternationalizationProvider } from "@astryxdesign/core/i18n";
 import zhCN from "@astryxdesign/core/locales/zh-CN.generated.js";
-import coreCss from "@astryxdesign/core/astryx.css?inline";
-import themeCss from "@astryxdesign/theme-neutral/theme.css?inline";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useThemeStore } from "@/stores/use-theme-store";
-
-// Keep Astryx's base tokens and atomic styles inside the workbench. Its normal
-// Theme provider also changes <html>; this scope keeps the canvas independent.
-const scopedCss = `@scope (.creation-stream) {\n${`${coreCss}\n${themeCss}`.replaceAll(":root", ":scope")}\n}
-    .creation-stream .astryx-chat-composer div:has(> .creation-actions) { min-width: 0; flex: 1; }
-    @media (max-width: 640px) {
-        .creation-stream .astryx-chat-composer div:has(> div > .creation-actions) { flex-wrap: wrap; }
-        .creation-stream .astryx-chat-composer div:has(> .creation-actions) { flex-basis: 100%; }
-    }`;
 
 export function CreationStream({ children, composer, onScrollTop, tasks = [] }: { children: ReactNode; composer: ReactNode; onScrollTop?: () => void; tasks?: { id: string; status: string }[] }) {
     const theme = useThemeStore((state) => state.theme);
@@ -32,12 +21,6 @@ export function CreationStream({ children, composer, onScrollTop, tasks = [] }: 
     const upwardIntent = useRef(false);
     const touchY = useRef<number | null>(null);
     const { i18n } = useTranslation();
-    useEffect(() => {
-        const style = document.createElement("style");
-        style.textContent = scopedCss;
-        document.head.appendChild(style);
-        return () => { style.remove(); };
-    }, []);
     return (
         <InternationalizationProvider locale={i18n.resolvedLanguage === "en" ? "en" : "zh-CN"} messages={{ "zh-CN": zhCN }}>
             <div className="creation-stream flex min-h-0 flex-1 flex-col" data-astryx-theme="neutral" style={{ colorScheme: theme }}>

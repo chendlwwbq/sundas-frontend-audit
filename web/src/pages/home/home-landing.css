@@ -9,8 +9,8 @@
 .home-landing .landing-switch > button { flex: 1; display: flex; align-items: center; justify-content: center; height: 36px; border: 0; border-radius: 999px; padding: 0 16px; background: transparent; font: inherit; font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.6); cursor: pointer; transition: background-color .16s cubic-bezier(.4,0,.2,1), color .16s cubic-bezier(.4,0,.2,1); }
 .home-landing .landing-switch > a:hover,
 .home-landing .landing-switch > button:hover { color: rgba(255, 255, 255, 0.9); }
-.home-landing .landing-switch .is-active { color: #121212; background: linear-gradient(90deg, #fceae0 0%, #fcf6f2 38%, #eaf7fd 70%, #d8f1fe 100%); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6); }
-.home-landing .landing-switch .is-active:hover { color: #121212; }
+.home-landing .landing-switch .is-active { background: rgba(216, 255, 62, 0.14); color: #d8ff3e; box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.32); }
+.home-landing .landing-switch .is-active:hover { color: #d8ff3e; }
 .home-landing .home-composer { max-width: 1040px; margin: 0 auto; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; background: #1a1a1a; box-shadow: none; }
 .home-landing .home-composer::before { display: none; }
 .home-landing .home-prompt { min-height: 88px; }

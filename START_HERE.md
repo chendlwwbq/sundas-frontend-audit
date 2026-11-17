@@ -12,31 +12,31 @@
 
 每段不超过约 180 KB，保留原始文件路径和行号范围；按顺序读取即可覆盖全部提取源码。
 
-- [part-01.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-01.txt)（175,958 字节）
-- [part-02.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-02.txt)（166,409 字节）
-- [part-03.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-03.txt)（171,860 字节）
-- [part-04.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-04.txt)（151,734 字节）
-- [part-05.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-05.txt)（129,485 字节）
-- [part-06.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-06.txt)（169,012 字节）
-- [part-07.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-07.txt)（131,481 字节）
-- [part-08.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-08.txt)（178,058 字节）
-- [part-09.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-09.txt)（177,740 字节）
-- [part-10.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-10.txt)（178,283 字节）
-- [part-11.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-11.txt)（172,032 字节）
-- [part-12.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-12.txt)（169,680 字节）
-- [part-13.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-13.txt)（179,161 字节）
-- [part-14.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-14.txt)（174,530 字节）
-- [part-15.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-15.txt)（174,704 字节）
-- [part-16.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-16.txt)（157,488 字节）
-- [part-17.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-17.txt)（169,133 字节）
-- [part-18.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-18.txt)（120,069 字节）
-- [part-19.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-19.txt)（120,659 字节）
-- [part-20.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-20.txt)（178,591 字节）
-- [part-21.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-21.txt)（176,539 字节）
-- [part-22.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-22.txt)（179,269 字节）
-- [part-23.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-23.txt)（172,675 字节）
-- [part-24.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-24.txt)（127,884 字节）
-- [part-25.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-25.txt)（157,857 字节）
+- [part-01.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-01.txt)（176,929 字节）
+- [part-02.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-02.txt)（166,059 字节）
+- [part-03.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-03.txt)（171,756 字节）
+- [part-04.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-04.txt)（151,510 字节）
+- [part-05.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-05.txt)（69,131 字节）
+- [part-06.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-06.txt)（170,092 字节）
+- [part-07.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-07.txt)（174,473 字节）
+- [part-08.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-08.txt)（177,827 字节）
+- [part-09.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-09.txt)（170,545 字节）
+- [part-10.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-10.txt)（178,535 字节）
+- [part-11.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-11.txt)（124,552 字节）
+- [part-12.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-12.txt)（173,665 字节）
+- [part-13.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-13.txt)（176,634 字节）
+- [part-14.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-14.txt)（175,708 字节）
+- [part-15.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-15.txt)（174,944 字节）
+- [part-16.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-16.txt)（170,482 字节）
+- [part-17.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-17.txt)（166,756 字节）
+- [part-18.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-18.txt)（168,623 字节）
+- [part-19.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-19.txt)（170,194 字节）
+- [part-20.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-20.txt)（171,817 字节）
+- [part-21.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-21.txt)（172,114 字节）
+- [part-22.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-22.txt)（144,652 字节）
+- [part-23.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-23.txt)（178,757 字节）
+- [part-24.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-24.txt)（175,197 字节）
+- [part-25.txt](https://raw.githubusercontent.com/chendlwwbq/sundas-frontend-audit/main/audit-plaintext/part-25.txt)（75,982 字节）
 
 ## 复制给审计工具
 

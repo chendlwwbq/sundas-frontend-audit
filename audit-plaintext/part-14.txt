@@ -1,7 +1,1224 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-diagnostics.ts
+LINES: 1-181
+========================================================================
+/**
+ * 导演台诊断领域：稳定白名单 code + 安全结构化字段。
+ *
+ * 调用边界的硬约束（安全边界，不是风格偏好）：
+ * - 绝不接收 Error / stack / componentStack / URL / Cookie / Authorization / token / 密钥；
+ * - 绝不接收 scene 名称、素材正文、prompt 等业务文本；
+ * - message 只能来自本模块的固定常量表，调用方不能自带文案；
+ * - 字段只允许「白名单枚举 | 布尔 | 有限数值 | 通过 safe-id 校验的 id」；
+ * - 未知 code 与未知字段一律丢弃，不透传。
+ */
+
+/** 故障与恢复代码白名单。新增代码必须同时补 message 与测试。 */
+export const DIRECTOR_DIAGNOSTIC_CODES = [
+    "DIRECTOR_VIEWPORT_RENDER_FAILED",
+    "DIRECTOR_VIEWPORT_CONTEXT_LOST",
+    "DIRECTOR_VIEWPORT_CONTEXT_RESTORED",
+    "DIRECTOR_MODEL_LOAD_FAILED",
+    "DIRECTOR_MODEL_LOAD_RETRY",
+    "DIRECTOR_MODEL_ADOPT_FAILED",
+    "DIRECTOR_SAVE_FLUSH_FAILED",
+    "DIRECTOR_SAVE_RETRY_FAILED",
+    "DIRECTOR_SAVE_RETRY_RECOVERED",
+    "DIRECTOR_SAVE_DRAFT_UNAVAILABLE",
+    "DIRECTOR_CLOSE_BLOCKED",
+] as const;
+
+export type DirectorDiagnosticCode = (typeof DIRECTOR_DIAGNOSTIC_CODES)[number];
+
+const CODE_SET: ReadonlySet<string> = new Set(DIRECTOR_DIAGNOSTIC_CODES);
+
+/** 固定文案：调用方不得传入任意字符串，避免业务正文经 message 泄漏。 */
+const MESSAGES: Record<DirectorDiagnosticCode, string> = {
+    DIRECTOR_VIEWPORT_RENDER_FAILED: "导演台 3D 视口渲染失败",
+    DIRECTOR_VIEWPORT_CONTEXT_LOST: "导演台 WebGL 上下文丢失",
+    DIRECTOR_VIEWPORT_CONTEXT_RESTORED: "导演台 WebGL 上下文已恢复",
+    DIRECTOR_MODEL_LOAD_FAILED: "导演台 3D 模型加载失败",
+    DIRECTOR_MODEL_LOAD_RETRY: "导演台 3D 模型重试加载",
+    DIRECTOR_MODEL_ADOPT_FAILED: "导演台 3D 模型采纳失败",
+    DIRECTOR_SAVE_FLUSH_FAILED: "导演台场景保存失败",
+    DIRECTOR_SAVE_RETRY_FAILED: "导演台场景重试保存仍失败",
+    DIRECTOR_SAVE_RETRY_RECOVERED: "导演台场景重试保存成功",
+    DIRECTOR_SAVE_DRAFT_UNAVAILABLE: "导演台本地草稿不可用",
+    DIRECTOR_CLOSE_BLOCKED: "导演台关闭被阻止",
+};
+
+const LEVELS: Record<DirectorDiagnosticCode, "info" | "warning" | "error"> = {
+    DIRECTOR_VIEWPORT_RENDER_FAILED: "error",
+    DIRECTOR_VIEWPORT_CONTEXT_LOST: "warning",
+    DIRECTOR_VIEWPORT_CONTEXT_RESTORED: "info",
+    DIRECTOR_MODEL_LOAD_FAILED: "warning",
+    DIRECTOR_MODEL_LOAD_RETRY: "info",
+    DIRECTOR_MODEL_ADOPT_FAILED: "error",
+    DIRECTOR_SAVE_FLUSH_FAILED: "error",
+    DIRECTOR_SAVE_RETRY_FAILED: "error",
+    DIRECTOR_SAVE_RETRY_RECOVERED: "info",
+    DIRECTOR_SAVE_DRAFT_UNAVAILABLE: "error",
+    DIRECTOR_CLOSE_BLOCKED: "warning",
+};
+
+/** 对象种类枚举：只表达形态，绝不表达名称或素材来源。 */
+export const DIRECTOR_OBJECT_KINDS = ["actor", "model", "billboard", "primitive", "unknown"] as const;
+export type DirectorDiagnosticObjectKind = (typeof DIRECTOR_OBJECT_KINDS)[number];
+const OBJECT_KIND_SET: ReadonlySet<string> = new Set(DIRECTOR_OBJECT_KINDS);
+
+/** 保存决策枚举：与 coordinator 的关闭决策同构，但不携带任何场景内容。 */
+export const DIRECTOR_SAVE_OUTCOMES = ["close", "offer-draft-exit", "stay"] as const;
+export type DirectorDiagnosticSaveOutcome = (typeof DIRECTOR_SAVE_OUTCOMES)[number];
+const SAVE_OUTCOME_SET: ReadonlySet<string> = new Set(DIRECTOR_SAVE_OUTCOMES);
+
+/**
+ * 允许的结构化字段。全部可选，且每个字段都有独立的校验规则。
+ * 这里故意不提供任何自由文本字段。
+ */
+export type DirectorDiagnosticFields = {
+    /** 对象 id：safe-id 校验；不通过则丢弃。 */
+    objectId?: string;
+    /** 场景 id：safe-id 校验。绝不接收 scene 名称。 */
+    sceneId?: string;
+    objectKind?: DirectorDiagnosticObjectKind;
+    saveOutcome?: DirectorDiagnosticSaveOutcome;
+    /** 加载/保存重试次数。 */
+    attempt?: number;
+    /** 修订号。 */
+    revision?: number;
+    /** 本地草稿是否可用。 */
+    draftStored?: boolean;
+    /** 是否由用户显式触发（区分自动重试与手动重试）。 */
+    userInitiated?: boolean;
+};
+
+export type DirectorDiagnosticEvent = {
+    code: DirectorDiagnosticCode;
+    level: "info" | "warning" | "error";
+    message: string;
+    fields: DirectorDiagnosticFields;
+};
+
+const SAFE_ID = /^[A-Za-z0-9._:-]{1,96}$/;
+
+export function isDirectorDiagnosticCode(value: unknown): value is DirectorDiagnosticCode {
+    return typeof value === "string" && CODE_SET.has(value);
+}
+
+/** id 白名单校验：任何含 URL、query、路径分隔、空格、凭证形态的输入都不合法。 */
+function safeDirectorId(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return SAFE_ID.test(trimmed) ? trimmed : undefined;
+}
+
+function boundedInteger(value: unknown, min: number, max: number): number | undefined {
+    if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+    const rounded = Math.round(value);
+    if (rounded < min || rounded > max) return undefined;
+    return rounded;
+}
+
+/**
+ * 纯投影：把任意输入收敛成安全事件。未知 code 返回 null，调用方据此丢弃。
+ * 未知字段、非法 id、越界数值、非布尔值一律不出现在输出里。
+ */
+export function projectDirectorDiagnostic(code: unknown, fields: unknown): DirectorDiagnosticEvent | null {
+    if (!isDirectorDiagnosticCode(code)) return null;
+
+    const source: Record<string, unknown> = fields && typeof fields === "object" && !Array.isArray(fields) ? (fields as Record<string, unknown>) : {};
+    const safe: DirectorDiagnosticFields = {};
+
+    const objectId = safeDirectorId(source.objectId);
+    if (objectId) safe.objectId = objectId;
+
+    const sceneId = safeDirectorId(source.sceneId);
+    if (sceneId) safe.sceneId = sceneId;
+
+    if (typeof source.objectKind === "string" && OBJECT_KIND_SET.has(source.objectKind)) {
+        safe.objectKind = source.objectKind as DirectorDiagnosticObjectKind;
+    }
+    if (typeof source.saveOutcome === "string" && SAVE_OUTCOME_SET.has(source.saveOutcome)) {
+        safe.saveOutcome = source.saveOutcome as DirectorDiagnosticSaveOutcome;
+    }
+
+    const attempt = boundedInteger(source.attempt, 0, 999);
+    if (attempt !== undefined) safe.attempt = attempt;
+
+    const revision = boundedInteger(source.revision, 0, Number.MAX_SAFE_INTEGER);
+    if (revision !== undefined) safe.revision = revision;
+
+    if (typeof source.draftStored === "boolean") safe.draftStored = source.draftStored;
+    if (typeof source.userInitiated === "boolean") safe.userInitiated = source.userInitiated;
+
+    return { code, level: LEVELS[code], message: MESSAGES[code], fields: safe };
+}
+
+/**
+ * 把安全字段压成 code 后缀，便于在统一诊断流里检索而无需自由文本。
+ *
+ * scene/object 走 safe-id 投影后的值（非法 id 在投影阶段已被丢弃，不会到这里），
+ * 因此后缀里只可能出现受限字符集。完整签名同时用于去重：
+ * 不同 objectId / sceneId 必须是不同事件，不能在去重窗口内互相吞掉。
+ */
+export function formatDirectorDiagnosticCode(event: DirectorDiagnosticEvent): string {
+    const parts: string[] = [event.code];
+    if (event.fields.sceneId) parts.push("scene=" + event.fields.sceneId);
+    if (event.fields.objectId) parts.push("object=" + event.fields.objectId);
+    if (event.fields.objectKind) parts.push("kind=" + event.fields.objectKind);
+    if (event.fields.saveOutcome) parts.push("outcome=" + event.fields.saveOutcome);
+    if (event.fields.attempt !== undefined) parts.push("attempt=" + event.fields.attempt);
+    if (event.fields.revision !== undefined) parts.push("revision=" + event.fields.revision);
+    if (event.fields.draftStored !== undefined) parts.push("draft=" + (event.fields.draftStored ? "1" : "0"));
+    if (event.fields.userInitiated !== undefined) parts.push("user=" + (event.fields.userInitiated ? "1" : "0"));
+    return parts.join(" ");
+}
+
+/** 从 DirectorObject 的形态推导枚举，不读取 name / url / storageKey。 */
+export function directorDiagnosticObjectKind(object: { kind?: string; primitive?: string } | null | undefined): DirectorDiagnosticObjectKind {
+    if (!object) return "unknown";
+    if (object.kind === "actor") return "actor";
+    if (object.kind === "model") return "model";
+    if (object.kind === "billboard") return "billboard";
+    if (typeof object.primitive === "string" && object.primitive) return "primitive";
+    return "unknown";
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-editor-overlays.ts
+LINES: 1-32
+========================================================================
+import { SkeletonHelper, type Object3D } from "three";
+
+/** Mounted beside the model, inside the same actor transform group. */
+export class DirectorSkeletonHelper extends SkeletonHelper {
+    constructor(model: Object3D) {
+        super(model);
+        // SkeletonHelper 默认绑定世界矩阵；作为模型兄弟节点时须使用局部矩阵，
+        // 否则角色父组的位移、旋转与缩放会被重复应用。
+        this.matrix = model.matrix;
+    }
+
+    override updateMatrixWorld(force?: boolean) {
+        // 姿态 effect 可先于渲染器遍历触发，先更新完整骨架再采样线段端点。
+        this.root.updateWorldMatrix(true, true);
+        super.updateMatrixWorld(force);
+    }
+}
+
+/** Editor aids are visible in the workbench, never in captured frames or video. */
+export function suspendDirectorEditorOverlays(scene: Object3D): () => void {
+    const previous: Array<{ object: Object3D; visible: boolean }> = [];
+    scene.traverse((object) => {
+        // drei mounts the TransformControls Object3D separately from its JSX group.
+        // Its `isTransformControls` flag is therefore the reliable capture-time marker.
+        if (object.userData.directorEditorOnly !== true && (object as Object3D & { isTransformControls?: boolean }).isTransformControls !== true) return;
+        previous.push({ object, visible: object.visible });
+        object.visible = false;
+    });
+    return () => {
+        for (const item of previous) item.object.visible = item.visible;
+    };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-focus.ts
+LINES: 1-32
+========================================================================
+import type { DirectorVec3 } from "@/types/director";
+
+export type DirectorFocusFrameInput = {
+    cameraPosition: DirectorVec3;
+    cameraTarget: DirectorVec3;
+    focusTarget: DirectorVec3;
+    radius: number;
+    fov: number;
+};
+
+export type DirectorFocusFrame = { position: DirectorVec3; target: DirectorVec3 };
+
+/** Reframe the free editor camera around one scene asset without changing scene data or history. */
+export function resolveDirectorFocusFrame(input: DirectorFocusFrameInput): DirectorFocusFrame | null {
+    const values = [...input.cameraPosition, ...input.cameraTarget, ...input.focusTarget];
+    if (!values.every(Number.isFinite) || !Number.isFinite(input.radius)) return null;
+
+    let direction = input.cameraPosition.map((value, index) => value - input.cameraTarget[index]) as DirectorVec3;
+    let distance = Math.hypot(...direction);
+    if (distance < 1e-5) {
+        direction = [0, 0, 1];
+        distance = 1;
+    }
+    direction = direction.map((value) => value / distance) as DirectorVec3;
+
+    const fov = Math.min(120, Math.max(10, Number.isFinite(input.fov) ? input.fov : 50)) * Math.PI / 180;
+    const radius = Math.min(1000, Math.max(0.1, Math.abs(input.radius)));
+    const framedDistance = Math.min(80, Math.max(1.25, radius / Math.sin(fov / 2) * 1.15));
+    const target = [...input.focusTarget] as DirectorVec3;
+    const position = target.map((value, index) => value + direction[index] * framedDistance) as DirectorVec3;
+    return { position, target };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-geometry-presets.ts
+LINES: 1-19
+========================================================================
+import { createDirectorObject } from "@/lib/canvas/director/director-scene";
+import type { DirectorObject, DirectorPrimitiveKind } from "@/types/director";
+
+export type DirectorGeometryPresetId = Exclude<DirectorPrimitiveKind, "plane" | "character">;
+
+export const DIRECTOR_GEOMETRY_PRESET_OPTIONS: ReadonlyArray<{ id: DirectorGeometryPresetId; label: string; primitive: DirectorPrimitiveKind }> = [
+    { id: "box", label: "立方体", primitive: "box" },
+    { id: "sphere", label: "球体", primitive: "sphere" },
+    { id: "cylinder", label: "圆柱体", primitive: "cylinder" },
+    { id: "torus", label: "环状体", primitive: "torus" },
+    { id: "cone", label: "圆锥", primitive: "cone" },
+    { id: "pyramid", label: "棱锥", primitive: "pyramid" },
+    { id: "empty", label: "添加空对象", primitive: "empty" },
+];
+
+export function createDirectorGeometricObject(preset: DirectorGeometryPresetId): DirectorObject {
+    const option = DIRECTOR_GEOMETRY_PRESET_OPTIONS.find((item) => item.id === preset)!;
+    return createDirectorObject(option.primitive, option.label);
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-gesture-transaction.ts
+LINES: 1-116
+========================================================================
+import { directorGestureIdle, reduceDirectorGesture } from "./director-animation-semantics";
+
+export type DirectorTransactionHooks<TSnapshot> = {
+    /** 读取当前值；返回 null 表示无法开始/结束事务。 */
+    read: () => TSnapshot | null;
+    /** 取消路径：把快照写回。 */
+    restore: (snapshot: TSnapshot) => void;
+    /** 成功路径：恰好调用一次。 */
+    commit: (from: TSnapshot, to: TSnapshot) => void;
+    /** 进入/退出手势；任何终态都会收到 false。 */
+    setActive: (active: boolean) => void;
+    /** 取消时结束第三方控件内部拖拽状态。 */
+    terminateDrag?: () => void;
+};
+
+export type DirectorTransaction<TSnapshot = unknown> = {
+    begin: () => void;
+    end: (outcome: "commit" | "cancel") => void;
+    active: () => boolean;
+    snapshot: () => TSnapshot | null;
+};
+
+/**
+ * 一次手势一个事务：begin 抓快照，end 恰好产生一个终态。
+ * 幂等——非活跃时的 end 是空操作，终态后可以重新 begin。
+ */
+export function createDirectorTransaction<TSnapshot>(hooks: DirectorTransactionHooks<TSnapshot>): DirectorTransaction<TSnapshot> {
+    let state = directorGestureIdle;
+    // 快照可能是任何值（含 0 / ""），所以用独立标记表示「有快照」，不能用真值判断。
+    let snapshot: TSnapshot | null = null;
+    let hasSnapshot = false;
+    return {
+        begin: () => {
+            if (state.active) return;
+            const current = hooks.read();
+            if (current === null || current === undefined) return;
+            snapshot = current;
+            hasSnapshot = true;
+            state = reduceDirectorGesture(state, "start");
+            hooks.setActive(true);
+        },
+        end: (outcome) => {
+            if (!state.active) return;
+            const base = snapshot;
+            const settled = reduceDirectorGesture(state, outcome);
+            const hadSnapshot = hasSnapshot;
+            snapshot = null;
+            hasSnapshot = false;
+            state = directorGestureIdle;
+            // 先进入终态再结束第三方拖拽：stdlib 在 domElement.ownerDocument 注册 pointerup，
+            // 其 pointerUp({button:0}) 会 dispatch mouseUp 后清 dragging=false / axis=null。
+            // 该回调会回到本事务，此时已非活跃，因此不会二次提交。
+            if (outcome === "cancel") hooks.terminateDrag?.();
+            if (!hadSnapshot || base === null || base === undefined) {
+                hooks.setActive(false);
+                return;
+            }
+            if (settled.committed) {
+                const current = hooks.read();
+                if (current !== null && current !== undefined) hooks.commit(base, current);
+            } else {
+                hooks.restore(base);
+            }
+            hooks.setActive(false);
+        },
+        active: () => state.active,
+        snapshot: () => hasSnapshot ? snapshot : null,
+    };
+}
+
+export type DirectorListenerTarget = {
+    addEventListener: (type: string, listener: (event: Event) => void) => void;
+    removeEventListener: (type: string, listener: (event: Event) => void) => void;
+};
+
+export type DirectorTerminalTargets = {
+    /** 承载 keydown / blur / pointercancel / pointerup 的目标（通常是 window）。 */
+    window: DirectorListenerTarget;
+    /** 承载 visibilitychange 的目标（通常是 document）。 */
+    document: DirectorListenerTarget;
+    /** 读取可见性；hidden 视为「离开」而非「放弃」。 */
+    isHidden: () => boolean;
+};
+
+/**
+ * 无条件安装终止监听，绝不以「当前是否有手势」为安装条件——
+ * 手势只 mutate 事务内部状态，不会重跑安装逻辑。
+ * 非活跃时 transaction.end 自身是空操作，因此常驻监听是安全的。
+ *
+ * 终态语义（#305 验收）：
+ * - pointerup / window blur / document hidden → commit 当前可见值。
+ *   失焦或切页只是「离开」，用户已经把对象拖到那里了，不能把它弹回原位。
+ * - Escape / pointercancel → cancel 并恢复快照，这是用户明确表达的放弃。
+ */
+export function installDirectorTerminalListeners(transaction: DirectorTransaction, targets: DirectorTerminalTargets) {
+    const cancel = () => transaction.end("cancel");
+    const commit = () => transaction.end("commit");
+    const onKeyDown = (event: Event) => {
+        if ((event as KeyboardEvent).key === "Escape") cancel();
+    };
+    const onVisibility = () => {
+        if (targets.isHidden()) commit();
+    };
+    targets.window.addEventListener("keydown", onKeyDown);
+    targets.window.addEventListener("blur", commit);
+    targets.window.addEventListener("pointercancel", cancel);
+    targets.window.addEventListener("pointerup", commit);
+    targets.document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+        targets.window.removeEventListener("keydown", onKeyDown);
+        targets.window.removeEventListener("blur", commit);
+        targets.window.removeEventListener("pointercancel", cancel);
+        targets.window.removeEventListener("pointerup", commit);
+        targets.document.removeEventListener("visibilitychange", onVisibility);
+    };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-ground-clamp.ts
+LINES: 1-12
+========================================================================
+import type { DirectorScene } from "@/types/director";
+import { directorGroundSettings } from "./director-ground";
+import { directorStagePoint, directorStageTransform } from "./director-stage-transform";
+export * from "../../../../../shared/director-ground-clamp";
+
+/** 地面在世界坐标里的高度：舞台有平移/旋转/缩放时，本地 ground.height 不能直接拿来比。 */
+export function directorGroundWorldY(scene: Pick<DirectorScene, "ground" | "stageTransform">): number {
+    const { height } = directorGroundSettings(scene);
+    const stage = directorStageTransform(scene);
+    if (stage.scale === 1 && stage.position.every((value) => value === 0) && stage.rotation.every((value) => value === 0)) return height;
+    return directorStagePoint(stage, [0, height, 0])[1];
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-ground.ts
+LINES: 1-1
+========================================================================
+export * from "../../../../../shared/director-ground";
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-image-layout.ts
+LINES: 1-18
+========================================================================
+export type DirectorImageLayoutElement = { name: string; type: "person" | "object"; x: number; depth: number };
+
+/** Parse untrusted model output into bounded canvas coordinates; image text is never treated as instructions. */
+export function parseDirectorImageLayout(raw: string): DirectorImageLayoutElement[] {
+    const candidate = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    let value: unknown;
+    try { value = JSON.parse(candidate); } catch { throw new Error("识图结果格式无效"); }
+    if (!value || typeof value !== "object" || !Array.isArray((value as { elements?: unknown }).elements)) throw new Error("识图结果格式无效");
+    const result: DirectorImageLayoutElement[] = [];
+    for (const item of (value as { elements: unknown[] }).elements.slice(0, 16)) {
+        if (!item || typeof item !== "object") continue;
+        const row = item as Record<string, unknown>;
+        if (typeof row.name !== "string" || !row.name.trim() || (row.type !== "person" && row.type !== "object") || typeof row.x !== "number" || !Number.isFinite(row.x) || typeof row.depth !== "number" || !Number.isFinite(row.depth)) continue;
+        result.push({ name: row.name.trim().slice(0, 64), type: row.type, x: Math.max(0, Math.min(1, row.x)), depth: Math.max(0, Math.min(1, row.depth)) });
+    }
+    if (!result.length) throw new Error("未识别到可用的人物或物体");
+    return result;
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-library-persist.ts
+LINES: 1-109
+========================================================================
+import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
+import { uploadImage, type UploadedImage } from "@/services/image-storage";
+import { useAssetStore, type Asset } from "@/stores/use-asset-store";
+
+export type DirectorCanvasImageHandoff = {
+    assetId?: string;
+    persisted?: boolean;
+};
+
+export type DirectorLibraryPersistResult = {
+    assetId: string;
+    created: boolean;
+    confirmed: boolean;
+};
+
+/** 素材草稿：与 useAssetStore.addAsset 的入参一致。 */
+type NewAsset = Omit<Asset, "id" | "createdAt" | "updatedAt">;
+
+function throwIfAborted(signal?: AbortSignal) {
+    if (signal?.aborted) throw new DOMException("导演台会话已结束", "AbortError");
+}
+
+function storageKeyOf(asset: NewAsset) {
+    return "storageKey" in asset.data ? asset.data.storageKey : undefined;
+}
+
+/**
+ * BeefTV 这一层是「浏览器本地 IndexedDB + 桌面/托管工作区远端」双写；
+ * sundas 的素材库本身就是 localforage 单机存储，因此这里以本地写入为权威：
+ * 有 storageKey 视为已落盘（confirmed），没有则保持未确认，调用方照常提示。
+ */
+export function isDirectorCanonicalPersistSource(input: { storageKey?: string; pendingRemoteUpload?: boolean }) {
+    return Boolean(input.storageKey) && !input.pendingRemoteUpload;
+}
+
+export function findWorkspaceAssetIdByStorageKey(storageKey?: string) {
+    const key = storageKey?.trim();
+    if (!key) return undefined;
+    return useAssetStore.getState().assets.find((asset) => "storageKey" in asset.data && asset.data.storageKey === key)?.id;
+}
+
+export async function persistDirectorLibraryAsset(input: {
+    asset: NewAsset;
+    signal?: AbortSignal;
+    existingAssetId?: string;
+    existingPersisted?: boolean;
+    /** BeefTV 的远端待上传标记；sundas 全部本地落盘，保留参数只为调用方零改动。 */
+    pendingRemoteUpload?: boolean;
+}): Promise<DirectorLibraryPersistResult> {
+    const { signal } = input;
+    throwIfAborted(signal);
+
+    const existingId = input.existingAssetId?.trim();
+    if (existingId) {
+        const live = useAssetStore.getState().assets.find((item) => item.id === existingId);
+        if (live) {
+            throwIfAborted(signal);
+            return { assetId: live.id, created: false, confirmed: isDirectorCanonicalPersistSource({ storageKey: storageKeyOf(input.asset) }) };
+        }
+    }
+
+    const assetId = useAssetStore.getState().addAsset(input.asset);
+    const asset = useAssetStore.getState().assets.find((item) => item.id === assetId);
+    if (!asset) throw new Error("素材写入本地失败");
+    throwIfAborted(signal);
+    return { assetId, created: true, confirmed: isDirectorCanonicalPersistSource({ storageKey: storageKeyOf(input.asset) }) };
+}
+
+/** 先上传，再落素材库。 */
+export async function persistDirectorImageUpload(input: {
+    source: string | Blob;
+    signal?: AbortSignal;
+    toAsset: (uploaded: UploadedImage) => NewAsset;
+    existingAssetId?: string;
+    existingPersisted?: boolean;
+    onProgress?: (uploadedBytes: number, totalBytes: number) => void;
+}): Promise<{ uploaded: UploadedImage; persist: DirectorLibraryPersistResult }> {
+    throwIfAborted(input.signal);
+    const uploaded = await uploadImage(input.source, { signal: input.signal });
+    throwIfAborted(input.signal);
+    const persist = await persistDirectorLibraryAsset({
+        asset: input.toAsset(uploaded),
+        signal: input.signal,
+        existingAssetId: input.existingAssetId,
+        existingPersisted: input.existingPersisted,
+    });
+    return { uploaded, persist };
+}
+
+export async function persistDirectorMediaUpload(input: {
+    source: Blob;
+    prefix: string;
+    signal?: AbortSignal;
+    toAsset: (uploaded: UploadedFile) => NewAsset;
+    existingAssetId?: string;
+    existingPersisted?: boolean;
+    onProgress?: (uploadedBytes: number, totalBytes: number) => void;
+}): Promise<{ uploaded: UploadedFile; persist: DirectorLibraryPersistResult }> {
+    throwIfAborted(input.signal);
+    const uploaded = await uploadMediaFile(input.source, input.prefix, { signal: input.signal });
+    throwIfAborted(input.signal);
+    const persist = await persistDirectorLibraryAsset({
+        asset: input.toAsset(uploaded),
+        signal: input.signal,
+        existingAssetId: input.existingAssetId,
+        existingPersisted: input.existingPersisted,
+    });
+    return { uploaded, persist };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-modes.ts
+LINES: 1-76
+========================================================================
+import type { DirectorRenderMode } from "@/types/director";
+
+/**
+ * 导演台一级模式。
+ *
+ * mode 是工作台 UI 状态，绝不写入 DirectorScene —— 场景是内容，模式是当前怎么看内容。
+ * 这里只做纯粹的「模式 -> 能力」映射与切换清理，组件层照着 capabilities 决定显示什么。
+ */
+
+export type DirectorMode = "layout" | "pose" | "animate" | "camera";
+
+export type DirectorModeCapabilities = {
+    /** 时间轴是否显示。只有动画模式显示。 */
+    timeline: boolean;
+    /** 是否允许记录/删除关键帧与 Auto Key。只有动画模式允许。 */
+    keyframes: boolean;
+    /** 是否开放骨骼视图与多选骨骼编辑。单个演员的姿势检查器不受此能力限制。 */
+    bones: boolean;
+    /** 是否突出 shot/camera 检查器与运镜入口。摄影机模式突出。 */
+    cameraTools: boolean;
+    /** 该模式允许的渲染视图。摆场不给深度/法线这类高级视图。 */
+    renderModes: DirectorRenderMode[];
+};
+
+const CAPABILITIES: Record<DirectorMode, DirectorModeCapabilities> = {
+    // 摆场：先把人和物放对位置，隐藏骨骼叠加视图/多选骨骼编辑、关键帧、Auto Key、深度/法线。
+    layout: { timeline: false, keyframes: false, bones: false, cameraTools: false, renderModes: ["beauty", "clay"] },
+    // 姿态：调骨骼与姿势，但不默认制造关键帧。
+    pose: { timeline: false, keyframes: false, bones: true, cameraTools: false, renderModes: ["beauty", "clay", "pose"] },
+    // 动画：唯一显示时间轴、允许 Auto Key 与录制关键帧的模式。
+    animate: { timeline: true, keyframes: true, bones: true, cameraTools: false, renderModes: ["beauty", "clay", "pose"] },
+    // 摄影机：突出机位、对齐视图与运镜；深度/法线在这里才有意义。
+    camera: { timeline: false, keyframes: false, bones: false, cameraTools: true, renderModes: ["beauty", "clay", "depth", "normal"] },
+};
+
+export const DIRECTOR_MODES: Array<{ mode: DirectorMode; label: string; hint: string }> = [
+    { mode: "layout", label: "摆场", hint: "摆放演员、道具与灯光" },
+    { mode: "pose", label: "姿态", hint: "调整选中演员的骨骼与姿势" },
+    { mode: "animate", label: "动画", hint: "时间轴、关键帧与 Auto Key" },
+    { mode: "camera", label: "摄影机", hint: "机位、对齐视图与运镜" },
+];
+
+export const DIRECTOR_DEFAULT_MODE: DirectorMode = "layout";
+
+/** 入口先是摆场；左侧机位预设列表只是导航，不应强制切换右侧检查器。 */
+export const DIRECTOR_ENTRY_MODE: DirectorMode = "layout";
+
+export function directorModeCapabilities(mode: DirectorMode): DirectorModeCapabilities {
+    return CAPABILITIES[mode] ?? CAPABILITIES[DIRECTOR_DEFAULT_MODE];
+}
+
+export type DirectorModeTransition = {
+    mode: DirectorMode;
+    playing: boolean;
+    autoKey: boolean;
+    renderMode: DirectorRenderMode;
+};
+
+/**
+ * 切换模式时必须一起收敛的运行时状态。
+ *
+ * 关键安全边界：离开动画模式一定停播 + 关 Auto Key。
+ * 否则播放循环仍在推进 playhead，而 Auto Key 会在用户以为只是「换了个模式」时
+ * 继续往场景里写关键帧 —— 那是后台偷偷改内容。
+ *
+ * renderMode 同时被夹回目标模式允许的集合：不能带着深度视图退回摆场。
+ */
+export function resolveDirectorModeTransition(input: { mode: DirectorMode; playing: boolean; autoKey: boolean; renderMode: DirectorRenderMode }): DirectorModeTransition {
+    const capabilities = directorModeCapabilities(input.mode);
+    return {
+        mode: input.mode,
+        playing: capabilities.timeline ? input.playing : false,
+        autoKey: capabilities.keyframes ? input.autoKey : false,
+        renderMode: capabilities.renderModes.includes(input.renderMode) ? input.renderMode : "beauty",
+    };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-node-migration.ts
+LINES: 1-56
+========================================================================
+import { type CanvasNodeData } from "@/types/canvas";
+
+/** 导演台节点类型标识：sundas 的 CanvasNodeType 不新增成员，这里用开放字符串。 */
+const DIRECTOR_NODE_TYPE = "director";
+import type { DirectorScene } from "@/types/director";
+
+/** Move legacy prose and clear its old fields in the same project update. */
+export function migrateDirectorCanvas(nodes: CanvasNodeData[], scenes: DirectorScene[]) {
+    let directorScenes = scenes;
+    const migrated = nodes.map((node) => {
+        const scene = directorScenes.find((entry) => entry.id === node.metadata?.directorSceneId);
+        const shot = scene?.shots.find((entry) => entry.id === node.metadata?.directorShotId) ?? (!node.metadata?.directorShotId ? scene?.shots.find((entry) => entry.id === scene.activeShotId) ?? scene?.shots[0] : undefined);
+        const legacy = [node.metadata?.composerContent, node.metadata?.prompt].filter((value): value is string => typeof value === "string" && Boolean(value.trim()));
+        if (scene && shot && legacy.length) {
+            const values = [shot.prompt, ...legacy].filter((value) => Boolean(value?.trim()));
+            const seen = new Set<string>();
+            const prompt = values.filter((value) => {
+                const key = value.trim();
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            }).join("\n\n");
+            if (prompt !== shot.prompt) directorScenes = directorScenes.map((entry) => entry.id === scene.id ? { ...entry, shots: entry.shots.map((item) => item.id === shot.id ? { ...item, prompt } : item) } : entry);
+        }
+        return normalizeDirectorCanvasNode(node, Boolean(shot));
+    });
+    return { nodes: migrated, directorScenes };
+}
+
+/** Reclassifies legacy director cards that were persisted as video generators. */
+export function normalizeDirectorCanvasNode(node: CanvasNodeData, proseTransferred = false): CanvasNodeData {
+    if (!node.metadata?.directorSceneId) return node;
+
+    const needsCleanup = node.metadata.generationMode !== undefined
+        || node.metadata.videoEditOperation !== undefined
+        || (proseTransferred && (node.metadata.composerContent !== undefined || node.metadata.prompt !== undefined));
+    const hasLegacyDefaultSize = node.type === DIRECTOR_NODE_TYPE && node.width === 560 && node.height === 560;
+    if (node.type === DIRECTOR_NODE_TYPE && !needsCleanup && !hasLegacyDefaultSize) return node;
+
+    const metadata = { ...node.metadata };
+    delete metadata.generationMode;
+    delete metadata.videoEditOperation;
+    if (proseTransferred) {
+        delete metadata.composerContent;
+        delete metadata.prompt;
+    }
+
+    return {
+        ...node,
+        type: DIRECTOR_NODE_TYPE,
+        title: node.type === DIRECTOR_NODE_TYPE ? node.title : "导演台",
+        width: hasLegacyDefaultSize ? 640 : node.width,
+        height: hasLegacyDefaultSize ? 640 : node.height,
+        metadata,
+    };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-node-naming.ts
+LINES: 1-18
+========================================================================
+import { type CanvasNodeData } from "@/types/canvas";
+
+/** 导演台节点类型标识：sundas 的 CanvasNodeType 不新增成员，这里用开放字符串。 */
+const DIRECTOR_NODE_TYPE = "director";
+
+/** Returns the first available positive index for a new director card. */
+export function nextDirectorNodeIndex(nodes: CanvasNodeData[]): number {
+    const used = new Set<number>();
+    for (const node of nodes) {
+        if (node.type !== DIRECTOR_NODE_TYPE && !node.metadata?.directorSceneId) continue;
+        const titleIndex = /^导演台(?:\s+(\d+))?$/.exec(node.title)?.[1];
+        const index = Number(titleIndex || node.metadata?.shotIndex || 1);
+        if (Number.isSafeInteger(index) && index > 0) used.add(index);
+    }
+    let candidate = 1;
+    while (used.has(candidate)) candidate += 1;
+    return candidate;
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-onboarding.ts
+LINES: 1-245
+========================================================================
+import { localForageStorageForScope } from "@/lib/localforage-storage";
+import type { DirectorMode } from "@/lib/canvas/director/director-modes";
+
+/**
+ * 导演台首次上手引导。
+ *
+ * 为什么存在：导演台把模板、四个一级模式、对象操作、保存/导出堆在同一个工作台里，
+ * 第一次进来的人没有任何线索该先做什么。引导给出一条确定的最短路径。
+ *
+ * 硬约束：
+ * - 纯状态机 + 持久化，绝不触碰 DirectorScene，也不写 undo/redo 历史：
+ *   引导是「用户看到什么提示」，不是场景内容。
+ * - 进度按用户隔离。所有导出 API 必须显式收到非空 scope，禁止内部兜底成 guest ——
+ *   默认 scope 会让 A 账号的引导状态泄漏给 B 账号。
+ * - 只用 localforage（走 localForageStorageForScope），不用 localStorage：
+ *   与项目里其他用户态持久化保持同一条通道。
+ * - 缺失、损坏、版本不符的持久数据一律回落到初始进度；只有存储层本身失败才向上抛。
+ */
+
+export type DirectorOnboardingStepId = "actor" | "move" | "pose" | "path" | "camera" | "apply";
+
+/** active 才展示。dismissed（用户跳过）与 completed（走完）都不再展示，且不可被 next/back 唤醒。 */
+export type DirectorOnboardingStatus = "active" | "dismissed" | "completed";
+
+/**
+ * 进度 schema 版本。
+ * 步骤集合发生语义变化（增删步骤、改变顺序）时必须 +1：
+ * 旧进度里的 stepId 在新步骤表里可能不存在，继续沿用会把用户卡在不存在的步骤上。
+ */
+export const DIRECTOR_ONBOARDING_VERSION = 2;
+
+/** localforage 键名。真实键由 localForageStorageForScope 追加 `:user:<scope>`。 */
+export const DIRECTOR_ONBOARDING_KEY = "director-onboarding-v2";
+
+export type DirectorOnboardingStep = {
+    id: DirectorOnboardingStepId;
+    title: string;
+    /** 一句话说清「在哪儿点什么」，不解释概念。 */
+    detail: string;
+    /**
+     * 该步骤应该在哪个一级模式里完成。
+     * 模式巡览步骤本身没有单一归属，故为 undefined —— 由 UI 决定是否代为切换模式。
+     */
+    mode?: DirectorMode;
+};
+
+/** 引导步骤按首次使用的最短操作路径排列：添加演员 → 移动 → 调姿 → 轨迹 → CAM → 应用。 */
+export const DIRECTOR_ONBOARDING_STEPS: DirectorOnboardingStep[] = [
+    { id: "actor", title: "添加并选中演员", detail: "在左侧「快速添加」点演员；模板已有演员时，直接在场景树或视口选中它。", mode: "layout" },
+    { id: "move", title: "把演员移动到表演位置", detail: "保持摆场模式，在底部 dock 选移动工具（W），拖动轴手柄；右栏可输入精确坐标。", mode: "layout" },
+    { id: "pose", title: "调整演员姿态", detail: "切到姿态模式，在右侧选择姿势预设；模型有骨骼时还可选择手臂、腿和躯干微调。", mode: "pose" },
+    { id: "path", title: "记录一段走位", detail: "切到动画模式，在起点和终点分别移动播放头、摆放演员并记录 Transform 关键帧，再播放预览。", mode: "animate" },
+    { id: "camera", title: "用 CAM 检查构图", detail: "切到摄影机模式，再点视口工具栏 CAM；调整焦距、焦点和机位，确认安全框内的画面。", mode: "camera" },
+    { id: "apply", title: "应用到镜头", detail: "确认场景、姿态、走位和 CAM 构图后，点顶栏「应用到镜头」生成静帧并回写画布。", mode: "camera" },
+];
+
+export type DirectorOnboardingProgress = {
+    version: number;
+    status: DirectorOnboardingStatus;
+    stepId: DirectorOnboardingStepId;
+};
+
+export const directorOnboardingInitial: DirectorOnboardingProgress = {
+    version: DIRECTOR_ONBOARDING_VERSION,
+    status: "active",
+    stepId: DIRECTOR_ONBOARDING_STEPS[0].id,
+};
+
+export type DirectorOnboardingAction = "next" | "back" | "dismiss" | "complete" | "reset";
+
+/**
+ * 引导状态机。
+ *
+ * 关键不变量：
+ * - 只有 reset 能让已 dismissed/completed 的引导重新活过来。next/back/dismiss/complete
+ *   在非 active 状态下是恒等变换，否则「跳过引导」会被后续任何一次误触重新拉起来。
+ * - 在最后一步 next 等于完成：完成必须是终态，而不是停在最后一步继续可 next。
+ * - 首步 back 保持不动，不越界，也不隐式关闭引导。
+ * - 当前 stepId 不在步骤表里（旧数据、被外部改写）时回到初始进度，而不是把 -1 当下标继续算。
+ */
+export function reduceDirectorOnboarding(progress: DirectorOnboardingProgress, action: DirectorOnboardingAction): DirectorOnboardingProgress {
+    if (action === "reset") return directorOnboardingInitial;
+    if (progress.status !== "active") return progress;
+    if (action === "dismiss") return { ...progress, status: "dismissed" };
+    if (action === "complete") return { ...progress, status: "completed" };
+
+    const index = DIRECTOR_ONBOARDING_STEPS.findIndex((step) => step.id === progress.stepId);
+    if (index < 0) return directorOnboardingInitial;
+
+    if (action === "back") {
+        if (index === 0) return progress;
+        return { ...progress, stepId: DIRECTOR_ONBOARDING_STEPS[index - 1].id };
+    }
+
+    const next = DIRECTOR_ONBOARDING_STEPS[index + 1];
+    if (!next) return { ...progress, status: "completed" };
+    return { ...progress, stepId: next.id };
+}
+
+export type DirectorOnboardingView = {
+    step: DirectorOnboardingStep;
+    /** 1 起数，直接用于「第 N 步 / 共 M 步」。 */
+    position: number;
+    total: number;
+    isFirst: boolean;
+    isLast: boolean;
+};
+
+/**
+ * 展示态。返回 null 表示不该显示引导 —— 组件层只看这一个判据，
+ * 不自己再拼 status 与步骤下标，避免出现第二套可见性规则。
+ */
+export function resolveDirectorOnboardingView(progress: DirectorOnboardingProgress): DirectorOnboardingView | null {
+    if (progress.status !== "active") return null;
+    const index = DIRECTOR_ONBOARDING_STEPS.findIndex((step) => step.id === progress.stepId);
+    if (index < 0) return null;
+    return {
+        step: DIRECTOR_ONBOARDING_STEPS[index],
+        position: index + 1,
+        total: DIRECTOR_ONBOARDING_STEPS.length,
+        isFirst: index === 0,
+        isLast: index === DIRECTOR_ONBOARDING_STEPS.length - 1,
+    };
+}
+
+function isStepId(value: unknown): value is DirectorOnboardingStepId {
+    return typeof value === "string" && DIRECTOR_ONBOARDING_STEPS.some((step) => step.id === value);
+}
+
+function isStatus(value: unknown): value is DirectorOnboardingStatus {
+    return value === "active" || value === "dismissed" || value === "completed";
+}
+
+/**
+ * 解析持久进度。
+ *
+ * 引导是提示，不是内容：任何无法确信的持久值都当成「没有进度」，宁可再引导一次，
+ * 也不要把用户卡在一个无法解释的状态里。覆盖：非 JSON、非对象、数组、版本不符、
+ * status/stepId 不在枚举内。
+ */
+export function parseDirectorOnboardingProgress(raw: string | null | undefined): DirectorOnboardingProgress {
+    if (!raw) return directorOnboardingInitial;
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return directorOnboardingInitial;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return directorOnboardingInitial;
+    const candidate = parsed as Partial<DirectorOnboardingProgress>;
+    if (candidate.version !== DIRECTOR_ONBOARDING_VERSION) return directorOnboardingInitial;
+    if (!isStatus(candidate.status) || !isStepId(candidate.stepId)) return directorOnboardingInitial;
+    return { version: DIRECTOR_ONBOARDING_VERSION, status: candidate.status, stepId: candidate.stepId };
+}
+
+/** 只要求读写能力：既是测试注入内存实现的接缝，也避免依赖 zustand StateStorage 的全量接口。 */
+export type DirectorOnboardingStorage = {
+    getItem: (name: string) => string | null | Promise<string | null>;
+    setItem: (name: string, value: string) => void | Promise<void>;
+};
+
+/**
+ * scope 归一化 + 守卫。前后空白裁掉后再校验/使用，这样 " user-a " 与 "user-a"
+ * 落到同一把生产键上，不会分裂成两份互不可见的进度。
+ *
+ * 必须在每个导出的持久化函数入口无条件调用 —— 包括调用方已经注入自定义 storage 的分支。
+ * 之前的实现写成 `storage ?? localForageStorageForScope(requireScope(scope))`，
+ * `??` 短路导致「传了 storage」时 requireScope 根本不会执行，空 scope 就此绕过校验。
+ */
+function requireScope(scope: string) {
+    const normalized = scope.trim();
+    if (!normalized) throw new Error("缺少导演台引导的用户 scope");
+    return normalized;
+}
+
+/**
+ * 读取进度。
+ * 数据脏 -> 初始进度；存储层（IndexedDB）失败 -> 向上抛，由调用方决定是否隐藏引导，
+ * 不在这里 catch 成默认值假装读到了。
+ */
+export async function loadDirectorOnboardingProgress(scope: string, storage?: DirectorOnboardingStorage): Promise<DirectorOnboardingProgress> {
+    const normalizedScope = requireScope(scope);
+    const target = storage ?? localForageStorageForScope(normalizedScope);
+    return parseDirectorOnboardingProgress(await target.getItem(DIRECTOR_ONBOARDING_KEY));
+}
+
+export async function saveDirectorOnboardingProgress(scope: string, progress: DirectorOnboardingProgress, storage?: DirectorOnboardingStorage): Promise<void> {
+    const normalizedScope = requireScope(scope);
+    const target = storage ?? localForageStorageForScope(normalizedScope);
+    await target.setItem(DIRECTOR_ONBOARDING_KEY, JSON.stringify({ version: DIRECTOR_ONBOARDING_VERSION, status: progress.status, stepId: progress.stepId }));
+}
+
+/**
+ * 推进并持久化。返回新进度；写失败向上抛，调用方拿到的进度与已落盘的进度保持一致，
+ * 不存在「界面前进了但磁盘没动」这种静默分叉。
+ *
+ * scope 校验必须在「无变化动作提前返回」之前完成：否则对已 dismissed/completed 账号
+ * 调用 next 之类的恒等动作会在校验之前就 return progress，空 scope 也能悄悄跑过去。
+ * 无变化的动作仍然不写盘。
+ */
+export async function advanceDirectorOnboarding(scope: string, progress: DirectorOnboardingProgress, action: DirectorOnboardingAction, storage?: DirectorOnboardingStorage): Promise<DirectorOnboardingProgress> {
+    const normalizedScope = requireScope(scope);
+    const next = reduceDirectorOnboarding(progress, action);
+    if (next === progress) return progress;
+    await saveDirectorOnboardingProgress(normalizedScope, next, storage);
+    return next;
+}
+
+/**
+ * 独立的重启 API。不依赖调用方持有当前内存进度；设置页的「重新开始引导」
+ * 按钮可以直接落盘初始状态，对已 dismissed/completed 的账号同样生效。
+ */
+export async function resetDirectorOnboardingProgress(scope: string, storage?: DirectorOnboardingStorage): Promise<DirectorOnboardingProgress> {
+    const normalizedScope = requireScope(scope);
+    await saveDirectorOnboardingProgress(normalizedScope, directorOnboardingInitial, storage);
+    return directorOnboardingInitial;
+}
+
+export type DirectorOnboardingGate = {
+    /** 尝试进入互斥区；已有一次未完成的调用时返回 false，调用方必须放弃本次动作。 */
+    tryEnter: () => boolean;
+    /** 释放互斥区。scope/enabled 变化（换账号）时也要调用，否则旧账号的占用会永久卡死新账号。 */
+    release: () => void;
+};
+
+/**
+ * 创建一次性写锁：保证同一 tick 内的重复调用（双击、程序化连点）只有一个能真正发起写入。
+ *
+ * 用同步闭包变量而不是 React state 做门禁：state 更新要等到下一次渲染才对外可见，
+ * 两次点击完全可能发生在同一次渲染之间，仅靠 busy state 挡不住这种同步重入。
+ * release 是幂等的：未锁定时调用不抛错，方便在 effect 里无条件清理。
+ */
+export function createDirectorOnboardingGate(): DirectorOnboardingGate {
+    let locked = false;
+    return {
+        tryEnter: () => {
+            if (locked) return false;
+            locked = true;
+            return true;
+        },
+        release: () => {
+            locked = false;
+        },
+    };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-orientation-gizmo.ts
+LINES: 1-34
+========================================================================
+import { Matrix4, Quaternion, Vector3 } from "three";
+import type { DirectorViewMode } from "@/lib/canvas/director/director-view-modes";
+
+export type DirectorOrientation = [number, number, number, number];
+export type DirectorAxisHead = { id: string; label: string; mode?: DirectorViewMode; x: number; y: number; depth: number };
+
+const axes: Array<{ id: string; label: string; mode?: DirectorViewMode; direction: [number, number, number] }> = [
+    { id: "x+", label: "右视", mode: "right", direction: [1, 0, 0] },
+    { id: "x-", label: "左视", mode: "left", direction: [-1, 0, 0] },
+    { id: "y+", label: "俯视", mode: "top", direction: [0, 1, 0] },
+    { id: "y-", label: "下方", direction: [0, -1, 0] },
+    { id: "z+", label: "正视", mode: "front", direction: [0, 0, 1] },
+    { id: "z-", label: "背视", mode: "back", direction: [0, 0, -1] },
+];
+
+/** Project world axes into the active camera's screen plane. */
+export function directorAxisHeads(orientation: DirectorOrientation): DirectorAxisHead[] {
+    const inverse = new Quaternion(...orientation).invert();
+    return axes.map(({ id, label, mode, direction }) => {
+        const projected = new Vector3(...direction).applyQuaternion(inverse);
+        return { id, label, mode, x: 36 + projected.x * 24, y: 36 - projected.y * 24, depth: projected.z };
+    }).sort((a, b) => a.depth - b.depth);
+}
+
+export function directorOrientationForMode(mode: DirectorViewMode, free: DirectorOrientation): DirectorOrientation {
+    const eye: Partial<Record<DirectorViewMode, [number, number, number]>> = {
+        top: [0, 10, 0], front: [0, 0, 10], back: [0, 0, -10], left: [-10, 0, 0], right: [10, 0, 0],
+    };
+    const position = eye[mode];
+    if (!position) return free;
+    const up = mode === "top" ? new Vector3(0, 0, -1) : new Vector3(0, 1, 0);
+    const q = new Quaternion().setFromRotationMatrix(new Matrix4().lookAt(new Vector3(...position), new Vector3(), up));
+    return [q.x, q.y, q.z, q.w];
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-output-camera.ts
+LINES: 1-30
+========================================================================
+/** Release borrowed playback state synchronously on abort, before another session takes over. */
+export function restoreDirectorPlaybackOnEnd(signal: AbortSignal, restore: () => void) {
+    let restored = false;
+    const end = () => {
+        if (restored) return;
+        restored = true;
+        signal.removeEventListener("abort", end);
+        restore();
+    };
+    signal.addEventListener("abort", end, { once: true });
+    if (signal.aborted) end();
+    return end;
+}
+
+/** Wait for React/R3F to swap from the free camera before recording the canvas. */
+export async function waitForDirectorCaptureCamera(
+    readCamera: () => "free" | "camera" | "orthographic" | null,
+    nextFrame: () => Promise<void> = () => new Promise((resolve) => requestAnimationFrame(() => resolve())),
+    maxFrames = 60,
+): Promise<void> {
+    for (let frame = 0; frame < maxFrames; frame += 1) {
+        if (readCamera() === "camera") {
+            await nextFrame();
+            if (readCamera() === "camera") return;
+        } else {
+            await nextFrame();
+        }
+    }
+    throw new Error("当前场景没有可用机位，无法生成参考视频");
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-output-layout.ts
+LINES: 1-41
+========================================================================
+import type { CanvasConnection, Position } from "@/types/canvas";
+
+export function resolveDirectorOutputPositions(input: {
+    source: { position: Position; width: number };
+    previewSize: { width: number; height: number };
+    existingPreviewPosition?: Position;
+    existingVideoPosition?: Position;
+}) {
+    const gap = 48;
+    const rightX = input.source.position.x + input.source.width + gap;
+    const previewPosition = input.existingPreviewPosition && input.existingPreviewPosition.x >= rightX
+        ? input.existingPreviewPosition
+        : { x: rightX, y: input.source.position.y };
+    const videoPosition = input.existingVideoPosition && input.existingVideoPosition.x >= rightX
+        ? input.existingVideoPosition
+        : { x: rightX, y: previewPosition.y + input.previewSize.height + gap };
+    return { previewPosition, videoPosition };
+}
+
+export function ensureDirectorOutputConnections(connections: CanvasConnection[], sourceId: string, outputIds: string[], createId: () => string) {
+    const outputs = new Set(outputIds.filter((id) => id && id !== sourceId));
+    const retained: CanvasConnection[] = [];
+    const connected = new Set<string>();
+
+    for (const connection of connections) {
+        const isOutputTarget = connection.fromNodeId === sourceId && outputs.has(connection.toNodeId);
+        const isLegacyReverseOutput = outputs.has(connection.fromNodeId) && connection.toNodeId === sourceId;
+        if (isLegacyReverseOutput) continue;
+        if (isOutputTarget) {
+            if (connected.has(connection.toNodeId)) continue;
+            connected.add(connection.toNodeId);
+        }
+        retained.push(connection);
+    }
+
+    for (const outputId of outputs) {
+        if (connected.has(outputId)) continue;
+        retained.push({ id: createId(), fromNodeId: sourceId, toNodeId: outputId });
+    }
+    return retained;
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-panorama-generation.ts
+LINES: 1-100
+========================================================================
+import { nanoid } from "nanoid";
+
+import { requestEdit } from "@/services/api/image";
+import { uploadImage, type UploadedImage } from "@/services/image-storage";
+import { useAssetStore } from "@/stores/use-asset-store";
+import type { AiConfig } from "@/stores/use-config-store";
+import type { ReferenceImage } from "@/types/image";
+
+export const DIRECTOR_PANORAMA_PROMPT =
+    "以参考图中的主体、材质和光影为基础，将环境扩展成完整的 360 度等距柱状全景图。输出 2:1 比例的连续单幅画面，左右边缘自然无缝衔接，保持真实空间尺度；不要拼贴、边框、文字、水印或拍摄设备。";
+
+type DirectorPanoramaGenerationInput = {
+    file: File;
+    config: AiConfig;
+    sceneId: string;
+    projectId?: string;
+    signal?: AbortSignal;
+    onTaskUpdate?: (task: { progress?: number }) => void;
+};
+
+export type DirectorPanoramaResult = { id: string; name: string; url: string; storageKey: string; width: number; height: number };
+
+/** 全景图固定按 2:1 出图；这里只挑一个可用的图片模型，不做尺寸回落。 */
+export function selectDirectorPanoramaModel(config: AiConfig): string {
+    return config.imageModel || config.model || "";
+}
+
+function readImageSize(dataUrl: string): Promise<{ width: number; height: number }> {
+    return new Promise((resolve) => {
+        const image = new Image();
+        image.onload = () => resolve({ width: image.naturalWidth || 0, height: image.naturalHeight || 0 });
+        image.onerror = () => resolve({ width: 0, height: 0 });
+        image.src = dataUrl;
+    });
+}
+
+/**
+ * AI 全景图（sundas 版）。
+ *
+ * BeefTV 走的是自己的「后台生成任务 + 任务中心 + 资产物化」三段式；
+ * sundas 的图片链路是同步的 `requestEdit`（内部已处理渠道、插件脚本、计费钱包），
+ * 所以这里收敛成一次图生图：上传参考图 → requestEdit(2:1) → 写入素材库。
+ */
+export async function generateDirectorPanorama(input: DirectorPanoramaGenerationInput): Promise<DirectorPanoramaResult> {
+    const { file, config, sceneId, signal, onTaskUpdate } = input;
+    const assertCurrent = () => {
+        if (signal?.aborted) throw new DOMException("生成会话已结束", "AbortError");
+    };
+
+    assertCurrent();
+    if (!file.type.startsWith("image/")) throw new Error("请选择图片文件");
+    const model = selectDirectorPanoramaModel(config);
+    if (!model) throw new Error("请先在模型设置中选择可用的图片模型");
+
+    const source: UploadedImage = await uploadImage(file, { signal });
+    assertCurrent();
+
+    const reference: ReferenceImage = {
+        id: nanoid(),
+        name: file.name,
+        type: source.mimeType,
+        dataUrl: source.url,
+        storageKey: source.storageKey,
+        width: source.width,
+        height: source.height,
+        bytes: source.bytes,
+    };
+
+    onTaskUpdate?.({ progress: undefined });
+    const images = await requestEdit({ ...config, model, size: "2:1", count: "1" }, DIRECTOR_PANORAMA_PROMPT, [reference], { signal });
+    assertCurrent();
+
+    const first = images[0];
+    if (!first?.dataUrl) throw new Error("图片任务完成，但没有返回全景图");
+    const { width, height } = await readImageSize(first.dataUrl);
+    assertCurrent();
+
+    const name = `AI 全景图 · ${file.name}`;
+    const id = useAssetStore.getState().addAsset({
+        kind: "image",
+        title: name,
+        coverUrl: first.dataUrl,
+        tags: ["全景图", "AI生成"],
+        source: "导演台",
+        data: { dataUrl: first.dataUrl, width, height, bytes: Math.round(first.dataUrl.length * 0.75), mimeType: "image/png" },
+        metadata: { source: "director-panorama-ai", sceneId },
+    });
+
+    return { id, name, url: first.dataUrl, storageKey: "", width, height };
+}
+
+/**
+ * 刷新后恢复未完成的全景图任务。
+ *
+ * BeefTV 用任务中心回捞；sundas 的生成是同步请求，页面刷新即中断，
+ * 结果也已经落进素材库，因此没有需要恢复的远端任务，这里保持空实现以维持调用契约。
+ */
+export async function recoverDirectorPanoramaTasks(_projectId: string, _sceneId: string, _signal?: AbortSignal): Promise<number> {
+    return 0;
+}
 
 
 ========================================================================
@@ -2435,984 +3652,5 @@ export function resolveDirectorSceneSelection(order: string[], current: string[]
     const anchorIndex = anchor ? order.indexOf(anchor) : -1;
     if (!shift || anchorIndex < 0) return [target];
     return order.slice(Math.min(anchorIndex, targetIndex), Math.max(anchorIndex, targetIndex) + 1);
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-scene.ts
-LINES: 1-483
-========================================================================
-import { nanoid } from "nanoid";
-import { Color, Euler, Quaternion } from "three";
-
-import type { DirectorBoneKeyframe, DirectorBoneTrack, DirectorCamera, DirectorGroup, DirectorHumanoidBone, DirectorKeyframe, DirectorKeyframeDeleteTarget, DirectorKeyframeEasing, DirectorLight, DirectorObject, DirectorPose, DirectorQuat, DirectorScene, DirectorTransform, DirectorVec3 } from "@/types/director";
-import { DIRECTOR_DEFAULT_GROUND } from "@/lib/canvas/director/director-ground";
-import { DIRECTOR_QUATERNIUS_MALE_URL } from "@/lib/canvas/director/director-actor-assets";
-import { DIRECTOR_DEFAULT_STAGE_TRANSFORM } from "@/lib/canvas/director/director-stage-transform";
-
-export { directorPoseChainBones, resolveDirectorPoseTargets, resolveDirectorTwoBoneJoint } from "@/lib/canvas/director/director-pose-solving";
-
-export const DIRECTOR_DEFAULT_ACTOR_URL = DIRECTOR_QUATERNIUS_MALE_URL;
-export const DIRECTOR_ACTOR_COLORS = ["#4f8ef7", "#202329", "#2f7de1", "#d84949", "#dfae3f", "#34a276"] as const;
-
-export const directorIdentityTransform = (position: DirectorVec3 = [0, 0, 0]): DirectorTransform => ({ position, rotation: [0, 0, 0], scale: [1, 1, 1] });
-
-export function createDirectorScene(title = "未命名场景"): DirectorScene {
-    const now = new Date().toISOString();
-    const camera = createDirectorCamera();
-    const shotId = nanoid();
-    return {
-        id: nanoid(),
-        version: 1,
-        title,
-        background: "#060608",
-        environmentIntensity: 0.7,
-        gridVisible: true,
-        gridSnap: false,
-        panoramaRotation: 0,
-        panoramaRadius: 60,
-        ground: { ...DIRECTOR_DEFAULT_GROUND },
-        stageTransform: { ...DIRECTOR_DEFAULT_STAGE_TRANSFORM, position: [...DIRECTOR_DEFAULT_STAGE_TRANSFORM.position], rotation: [...DIRECTOR_DEFAULT_STAGE_TRANSFORM.rotation] },
-        labelsVisible: true,
-        aspectRatio: "adaptive",
-        objects: [createDirectorActor("演员 1", [0, 0, 0])],
-        cameras: [camera],
-        lights: [createDirectorLight("directional", "主光", [4, 6, 4], 2.4), createDirectorLight("directional", "轮廓光", [-4, 3, -2], 1.1), createDirectorLight("ambient", "环境光", [0, 0, 0], 0.65)],
-        shots: [{ id: shotId, name: "镜头 1", cameraId: camera.id, duration: 5, fps: 24, shotSize: "medium", cameraMove: "static", prompt: "" }],
-        activeShotId: shotId,
-        createdAt: now,
-        updatedAt: now,
-    };
-}
-
-export function toggleDirectorObjectVisibility(scene: DirectorScene, id: string): DirectorScene {
-    if (!scene.objects.some((object) => object.id === id)) return scene;
-    return { ...scene, objects: scene.objects.map((object) => object.id === id ? { ...object, visible: !object.visible } : object) };
-}
-
-export function toggleDirectorObjectLock(scene: DirectorScene, id: string): DirectorScene {
-    if (!scene.objects.some((object) => object.id === id)) return scene;
-    return { ...scene, objects: scene.objects.map((object) => object.id === id ? { ...object, locked: !object.locked } : object) };
-}
-
-export function visibleDirectorCameras(scene: DirectorScene): DirectorCamera[] {
-    return scene.cameras.filter((camera) => camera.visible !== false);
-}
-
-export function toggleDirectorCameraVisibility(scene: DirectorScene, id: string): DirectorScene {
-    if (!scene.cameras.some((camera) => camera.id === id)) return scene;
-    return { ...scene, cameras: scene.cameras.map((camera) => camera.id === id ? { ...camera, visible: camera.visible === false } : camera) };
-}
-
-export function toggleDirectorCameraLock(scene: DirectorScene, id: string): DirectorScene {
-    if (!scene.cameras.some((camera) => camera.id === id)) return scene;
-    return { ...scene, cameras: scene.cameras.map((camera) => camera.id === id ? { ...camera, locked: !camera.locked } : camera) };
-}
-
-/** 副本保留媒体与动画内容，但所有可编辑记录均有独立标识与引用。 */
-export function duplicateDirectorObject(source: DirectorObject): DirectorObject {
-    const copy = structuredClone(source);
-    const ids = new Map(copy.keyframes.map((frame) => [frame.id, nanoid()]));
-    return {
-        ...copy,
-        id: nanoid(),
-        name: `${source.name}副本`,
-        keyframes: copy.keyframes.map((frame) => ({ ...frame, id: ids.get(frame.id)! })),
-        motionPath: copy.motionPath && { ...copy.motionPath, controlKeyframeIds: copy.motionPath.controlKeyframeIds?.flatMap((id) => ids.has(id) ? [ids.get(id)!] : []), originalKeyframes: copy.motionPath.originalKeyframes.map((frame) => ({ ...frame, id: nanoid() })) },
-        boneTracks: copy.boneTracks?.map((track) => ({ ...track, keyframes: track.keyframes.map((frame) => ({ ...frame, id: nanoid() })) })),
-    };
-}
-
-export function duplicateDirectorCamera(source: DirectorCamera): DirectorCamera {
-    const copy = structuredClone(source);
-    const ids = new Map(copy.keyframes.map((frame) => [frame.id, nanoid()]));
-    return { ...copy, id: nanoid(), name: `${source.name}副本`, keyframes: copy.keyframes.map((frame) => ({ ...frame, id: ids.get(frame.id)! })), drawnPath: copy.drawnPath && { ...copy.drawnPath, sampleKeyframeIds: copy.drawnPath.sampleKeyframeIds.flatMap((id) => ids.has(id) ? [ids.get(id)!] : []), originalKeyframes: copy.drawnPath.originalKeyframes?.map((frame) => ({ ...frame, id: nanoid() })) } };
-}
-
-export function groupDirectorObjects(scene: DirectorScene, ids: string[]): DirectorScene {
-    const selected = new Set(ids);
-    const members = scene.objects.filter((object) => selected.has(object.id));
-    if (members.length < 2) return scene;
-    const groups = scene.groups || [];
-    let index = 1;
-    while (groups.some((group) => group.name === `分组${index}`)) index += 1;
-    const group: DirectorGroup = { id: nanoid(), name: `分组${index}`, collapsed: false };
-    const objects = scene.objects.map((object) => selected.has(object.id) ? { ...object, groupId: group.id } : object);
-    const remainingGroups = groups.filter((entry) => objects.some((object) => object.groupId === entry.id));
-    return { ...scene, groups: [...remainingGroups, group], objects };
-}
-
-export function toggleDirectorGroupVisibility(scene: DirectorScene, id: string): DirectorScene {
-    const members = scene.objects.filter((object) => object.groupId === id);
-    if (!members.length) return scene;
-    const visible = members.some((object) => !object.visible);
-    return { ...scene, objects: scene.objects.map((object) => object.groupId === id ? { ...object, visible } : object) };
-}
-
-export function toggleDirectorGroupLock(scene: DirectorScene, id: string): DirectorScene {
-    const members = scene.objects.filter((object) => object.groupId === id);
-    if (!members.length) return scene;
-    const locked = members.some((object) => !object.locked);
-    return { ...scene, objects: scene.objects.map((object) => object.groupId === id ? { ...object, locked } : object) };
-}
-
-export function duplicateDirectorGroup(scene: DirectorScene, id: string): DirectorScene {
-    const group = scene.groups?.find((entry) => entry.id === id);
-    const members = scene.objects.filter((object) => object.groupId === id);
-    if (!group || members.length === 0) return scene;
-    const copyId = nanoid();
-    const duplicate: DirectorGroup = { id: copyId, name: `${group.name}副本`, collapsed: false };
-    const objects = members.map((object) => ({ ...duplicateDirectorObject(object), groupId: copyId }));
-    return { ...scene, groups: [...(scene.groups || []), duplicate], objects: [...scene.objects, ...objects] };
-}
-
-export function toggleDirectorGroupCollapsed(scene: DirectorScene, id: string): DirectorScene {
-    if (!scene.groups?.some((group) => group.id === id)) return scene;
-    return { ...scene, groups: scene.groups.map((group) => group.id === id ? { ...group, collapsed: !group.collapsed } : group) };
-}
-
-export function ungroupDirectorObjects(scene: DirectorScene, id: string): DirectorScene {
-    if (!scene.groups?.some((group) => group.id === id)) return scene;
-    const groups = scene.groups.filter((group) => group.id !== id);
-    return { ...scene, groups: groups.length ? groups : undefined, objects: scene.objects.map((object) => object.groupId === id ? { ...object, groupId: undefined } : object) };
-}
-
-export function createDirectorObject(primitive: DirectorObject["primitive"] = "box", name = "新对象", position: DirectorVec3 = [0, 0.5, 0], color = "#8795a5"): DirectorObject {
-    return {
-        id: nanoid(),
-        name,
-        kind: "primitive",
-        primitive,
-        transform: directorIdentityTransform(position),
-        color,
-        visible: true,
-        castShadow: true,
-        receiveShadow: true,
-        pose: primitive === "character" ? "stand" : undefined,
-        keyframes: [],
-    };
-}
-
-/** 统一倍率按比例作用于基础值和所有关键帧；轴向不等比缩放仍保留。 */
-export function applyDirectorUniformScale(object: DirectorObject, input: number): DirectorObject {
-    if (!Number.isFinite(input)) return object;
-    const next = Math.max(0.1, Math.min(10, input));
-    const previous = object.uniformScale && Number.isFinite(object.uniformScale) && object.uniformScale > 0 ? object.uniformScale : 1;
-    if (next === previous) return object;
-    const ratio = next / previous;
-    const scale = (values: DirectorVec3): DirectorVec3 => values.map((value) => value * ratio) as DirectorVec3;
-    return {
-        ...object,
-        uniformScale: next,
-        transform: { ...object.transform, scale: scale(object.transform.scale) },
-        keyframes: object.keyframes.map((frame) => ({ ...frame, transform: { ...frame.transform, scale: scale(frame.transform.scale) } })),
-    };
-}
-
-export function createDirectorActor(name = "演员", position: DirectorVec3 = [0, 0, 0], color: string = DIRECTOR_ACTOR_COLORS[0]): DirectorObject {
-    return {
-        ...createDirectorObject("box", name, position, color),
-        kind: "actor",
-        primitive: undefined,
-        actorPreset: "standard_male",
-        url: DIRECTOR_QUATERNIUS_MALE_URL,
-        mimeType: "model/gltf-binary",
-        pose: "stand",
-        rig: { status: "unmapped", boneMap: {}, animationNames: [] },
-        motionClips: [],
-        boneOverrides: {},
-        boneTracks: [],
-    };
-}
-
-export function createDirectorModel(input: Pick<DirectorObject, "name" | "storageKey" | "url" | "mimeType" | "assetId">): DirectorObject {
-    return { ...createDirectorObject("box", input.name, [0, 0, 0]), ...input, kind: "model", primitive: undefined };
-}
-
-export function createDirectorBillboard(name: string, url: string, storageKey?: string, sourceNodeId?: string): DirectorObject {
-    return { ...createDirectorObject("plane", name, [0, 1.1, 0], "#ffffff"), kind: "billboard", url, storageKey, sourceNodeId, transform: { position: [0, 1.1, 0], rotation: [0, 0, 0], scale: [1.6, 0.9, 1] } };
-}
-
-export function createDirectorCamera(name = "机位1"): DirectorCamera {
-    return { id: nanoid(), name, transform: directorIdentityTransform([0, 2.2, 10]), target: [0, 1.2, 0], focalLength: 35, fov: 50, aperture: 2.8, focusDistance: 5, near: 0.05, far: 500, keyframes: [] };
-}
-
-/** 35mm 全画幅水平视角换算。摄影机检查器与场景模板共用，避免两处各写一份光学。 */
-export function directorFocalLengthToFov(focalLength: number) {
-    return (2 * Math.atan(36 / (2 * Math.max(1, focalLength))) * 180) / Math.PI;
-}
-
-/** 与焦距编辑使用同一 35mm 全画幅模型，FOV 调整后两项保持同步。 */
-export function directorFovToFocalLength(fov: number) {
-    return 18 / Math.tan((Math.max(1, Math.min(179, fov)) * Math.PI) / 360);
-}
-
-export function createDirectorLight(type: DirectorLight["type"], name: string, position: DirectorVec3, intensity = 1): DirectorLight {
-    return { id: nanoid(), name, type, transform: directorIdentityTransform(position), color: "#ffffff", intensity, angle: Math.PI / 4, penumbra: 0.35, castShadow: type !== "ambient" };
-}
-
-export function touchDirectorScene(scene: DirectorScene): DirectorScene {
-    return { ...scene, updatedAt: new Date().toISOString() };
-}
-
-/** 关键帧命中容差：upsert 与 remove 必须同判据，否则会出现「记录能覆盖但删不掉」。 */
-export const DIRECTOR_KEYFRAME_EPSILON = 0.001;
-
-export function upsertDirectorKeyframe(keyframes: DirectorKeyframe[], time: number, transform: DirectorTransform) {
-    const current = keyframes.find((item) => Math.abs(item.time - time) < DIRECTOR_KEYFRAME_EPSILON);
-    const next = current ? keyframes.map((item) => (item.id === current.id ? { ...item, transform } : item)) : [...keyframes, { id: nanoid(), time, transform }];
-    return next.sort((a, b) => a.time - b.time);
-}
-
-export function upsertDirectorBoneKeyframe(tracks: DirectorBoneTrack[], bone: DirectorHumanoidBone, time: number, rotation: DirectorQuat) {
-    const track = tracks.find((item) => item.bone === bone);
-    const nextKeyframes = upsertBoneKeyframe(track?.keyframes || [], time, rotation);
-    return track ? tracks.map((item) => item.bone === bone ? { ...item, keyframes: nextKeyframes } : item) : [...tracks, { bone, keyframes: nextKeyframes }];
-}
-
-function upsertBoneKeyframe(keyframes: DirectorBoneKeyframe[], time: number, rotation: DirectorQuat) {
-    const current = keyframes.find((item) => Math.abs(item.time - time) < DIRECTOR_KEYFRAME_EPSILON);
-    const next = current ? keyframes.map((item) => item.id === current.id ? { ...item, rotation } : item) : [...keyframes, { id: nanoid(), time, rotation }];
-    return next.sort((a, b) => a.time - b.time);
-}
-
-/** 按 id 删除对象 transform 关键帧；id 不存在时返回原数组引用。 */
-export function removeDirectorKeyframe(keyframes: DirectorKeyframe[], keyframeId: string): DirectorKeyframe[] {
-    if (!keyframes.some((item) => item.id === keyframeId)) return keyframes;
-    return keyframes.filter((item) => item.id !== keyframeId);
-}
-
-/**
- * 按 id 删除某骨骼轨道上的关键帧。
- * 轨道被删空后整条移除，否则时间轴会留下永远为空的子轨道。
- */
-export function removeDirectorBoneKeyframe(tracks: DirectorBoneTrack[], bone: DirectorHumanoidBone, keyframeId: string): DirectorBoneTrack[] {
-    const track = tracks.find((item) => item.bone === bone);
-    if (!track?.keyframes.some((item) => item.id === keyframeId)) return tracks;
-
-    const nextKeyframes = track.keyframes.filter((item) => item.id !== keyframeId);
-    if (!nextKeyframes.length) return tracks.filter((item) => item.bone !== bone);
-    return tracks.map((item) => (item.bone === bone ? { ...item, keyframes: nextKeyframes } : item));
-}
-
-/**
- * 时间轴删除关键帧的唯一入口：按轨道类型分派到对应领域函数。
- *
- * 未命中（对象/摄影机/骨骼/关键帧任一不存在）时返回同一个 scene 引用，
- * 调用方据此跳过历史与保存，避免「点了没删掉却多一次修订」。
- */
-export function removeDirectorSceneKeyframe(scene: DirectorScene, target: DirectorKeyframeDeleteTarget): DirectorScene {
-    if (target.track === "camera") {
-        const camera = scene.cameras.find((item) => item.id === target.cameraId);
-        if (!camera) return scene;
-        const frame = camera.keyframes.find((item) => item.id === target.keyframeId);
-        if (!frame) return scene;
-        if (target.channel === "position" && (!frame || frame.positionKeyed === false)) return scene;
-        if (target.channel === "rotation" && frame.rotationKeyed === false) return scene;
-        if (target.channel === "focus" && frame?.target === undefined) return scene;
-        if (target.channel === "fov" && frame?.fov === undefined) return scene;
-        if (!target.channel) return { ...scene, cameras: scene.cameras.map((item) => item.id === camera.id ? {
-            ...item,
-            keyframes: removeDirectorKeyframe(item.keyframes, target.keyframeId),
-            ...(item.drawnPath ? { drawnPath: { ...item.drawnPath, sampleKeyframeIds: item.drawnPath.sampleKeyframeIds.filter((id) => id !== target.keyframeId) } } : {}),
-        } : item) };
-        const nextFrame = target.channel === "position" ? { ...frame, positionKeyed: false }
-            : target.channel === "rotation" ? { ...frame, rotationKeyed: false }
-                : target.channel === "focus" ? { ...frame, target: undefined }
-                    : { ...frame, fov: undefined };
-        const hasOtherTrack = nextFrame.positionKeyed !== false || nextFrame.rotationKeyed !== false || nextFrame.target !== undefined || nextFrame.fov !== undefined;
-        const keyframes = hasOtherTrack
-            ? camera.keyframes.map((item) => item.id === target.keyframeId ? nextFrame : item)
-            : removeDirectorKeyframe(camera.keyframes, target.keyframeId);
-        if (keyframes === camera.keyframes) return scene;
-        return { ...scene, cameras: scene.cameras.map((item) => (item.id === camera.id ? { ...item, keyframes } : item)) };
-    }
-
-    const object = scene.objects.find((item) => item.id === target.objectId);
-    if (!object) return scene;
-
-    if (target.track === "object-transform") {
-        const frame = object.keyframes.find((item) => item.id === target.keyframeId);
-        if (!frame || (target.channel && frame[`${target.channel}Keyed`] === false)) return scene;
-        const nextFrame = target.channel ? { ...frame, [`${target.channel}Keyed`]: false } : null;
-        const keyframes = nextFrame && (nextFrame.positionKeyed !== false || nextFrame.rotationKeyed !== false || nextFrame.scaleKeyed !== false)
-            ? object.keyframes.map((item) => item.id === frame.id ? nextFrame : item)
-            : removeDirectorKeyframe(object.keyframes, target.keyframeId);
-        if (keyframes === object.keyframes) return scene;
-        return { ...scene, objects: scene.objects.map((item) => (item.id === object.id ? {
-            ...item,
-            keyframes,
-            ...(item.motionPath?.controlKeyframeIds ? { motionPath: { ...item.motionPath, controlKeyframeIds: item.motionPath.controlKeyframeIds.filter((id) => id !== target.keyframeId) } } : {}),
-        } : item)) };
-    }
-
-    const tracks = object.boneTracks || [];
-    const boneTracks = removeDirectorBoneKeyframe(tracks, target.bone, target.keyframeId);
-    if (boneTracks === tracks) return scene;
-    return { ...scene, objects: scene.objects.map((item) => (item.id === object.id ? { ...item, boneTracks } : item)) };
-}
-
-/**
- * 更新一枚关键帧后续区间的缓动。未命中时返回原 scene 引用，调用方据此跳过历史与保存。
- */
-export function setDirectorSceneKeyframeEasing(scene: DirectorScene, target: DirectorKeyframeDeleteTarget, easing: DirectorKeyframeEasing): DirectorScene {
-    const update = <T extends { id: string; easing?: DirectorKeyframeEasing }>(keyframes: T[]) => {
-        if (!keyframes.some((item) => item.id === target.keyframeId)) return keyframes;
-        return keyframes.map((item) => item.id === target.keyframeId ? { ...item, easing } : item);
-    };
-
-    if (target.track === "camera") {
-        const camera = scene.cameras.find((item) => item.id === target.cameraId);
-        if (!camera) return scene;
-        const keyframes = update(camera.keyframes);
-        if (keyframes === camera.keyframes) return scene;
-        return { ...scene, cameras: scene.cameras.map((item) => item.id === camera.id ? { ...item, keyframes } : item) };
-    }
-
-    const object = scene.objects.find((item) => item.id === target.objectId);
-    if (!object) return scene;
-    if (target.track === "object-transform") {
-        const keyframes = update(object.keyframes);
-        if (keyframes === object.keyframes) return scene;
-        return { ...scene, objects: scene.objects.map((item) => item.id === object.id ? { ...item, keyframes } : item) };
-    }
-
-    const tracks = object.boneTracks || [];
-    const track = tracks.find((item) => item.bone === target.bone);
-    if (!track) return scene;
-    const keyframes = update(track.keyframes);
-    if (keyframes === track.keyframes) return scene;
-    const boneTracks = tracks.map((item) => item.bone === target.bone ? { ...item, keyframes } : item);
-    return { ...scene, objects: scene.objects.map((item) => item.id === object.id ? { ...item, boneTracks } : item) };
-}
-
-/** 缓动属于前一枚关键帧到下一枚关键帧的区间。旧数据未声明时保持线性。 */
-export function resolveDirectorKeyframeProgress(progress: number, easing: DirectorKeyframeEasing = "linear") {
-    const clamped = Math.max(0, Math.min(1, progress));
-    if (easing === "step") return 0;
-    if (easing === "smooth") return clamped * clamped * (3 - 2 * clamped);
-    return clamped;
-}
-
-/** 轨迹渲染只接受有限时间与位置；坏数据不得进入 Three 几何体。 */
-export function finiteDirectorTransformKeyframes(keyframes: DirectorKeyframe[]) {
-    return keyframes.filter((keyframe) => keyframe.positionKeyed !== false && [keyframe.time, ...keyframe.transform.position].every(Number.isFinite));
-}
-
-/** 按时间顺序累计 Transform 关键帧路径长度；非法时间或坐标段忽略，不污染界面统计。 */
-export function directorTransformPathLength(keyframes: DirectorKeyframe[]) {
-    const sorted = keyframes.filter((keyframe) => keyframe.positionKeyed !== false).sort((left, right) => left.time - right.time);
-    let length = 0;
-    for (let index = 1; index < sorted.length; index += 1) {
-        const previousTime = sorted[index - 1].time;
-        const currentTime = sorted[index].time;
-        const previous = sorted[index - 1].transform.position;
-        const current = sorted[index].transform.position;
-        if (![previousTime, currentTime, ...previous, ...current].every(Number.isFinite)) continue;
-        length += Math.hypot(current[0] - previous[0], current[1] - previous[1], current[2] - previous[2]);
-    }
-    return length;
-}
-
-export function interpolateDirectorTransform(base: DirectorTransform, keyframes: DirectorKeyframe[], time: number): DirectorTransform {
-    if (keyframes.some((frame) => frame.positionKeyed === false || frame.rotationKeyed === false || frame.scaleKeyed === false)) {
-        return {
-            position: interpolateDirectorTransformUnfiltered(base, keyframes.filter((frame) => frame.positionKeyed !== false), time).position,
-            rotation: interpolateDirectorTransformUnfiltered(base, keyframes.filter((frame) => frame.rotationKeyed !== false), time).rotation,
-            scale: interpolateDirectorTransformUnfiltered(base, keyframes.filter((frame) => frame.scaleKeyed !== false), time).scale,
-        };
-    }
-    return interpolateDirectorTransformUnfiltered(base, keyframes, time);
-}
-
-function interpolateDirectorTransformUnfiltered(base: DirectorTransform, keyframes: DirectorKeyframe[], time: number): DirectorTransform {
-    if (!keyframes.length) return base;
-    const previous = [...keyframes].reverse().find((item) => item.time <= time) || keyframes[0];
-    const next = keyframes.find((item) => item.time >= time) || keyframes[keyframes.length - 1];
-    if (previous.id === next.id) return previous.transform;
-    const progress = resolveDirectorKeyframeProgress((time - previous.time) / Math.max(next.time - previous.time, DIRECTOR_KEYFRAME_EPSILON), previous.easing);
-    const rotation = new Quaternion().setFromEuler(new Euler(...previous.transform.rotation)).slerp(new Quaternion().setFromEuler(new Euler(...next.transform.rotation)), progress);
-    return {
-        position: lerpVec3(previous.transform.position, next.transform.position, progress),
-        rotation: new Euler().setFromQuaternion(rotation).toArray().slice(0, 3) as DirectorVec3,
-        scale: lerpVec3(previous.transform.scale, next.transform.scale, progress),
-    };
-}
-
-export function interpolateDirectorBoneRotation(base: DirectorQuat, keyframes: DirectorBoneKeyframe[], time: number): DirectorQuat {
-    if (!keyframes.length) return base;
-    const previous = [...keyframes].reverse().find((item) => item.time <= time) || keyframes[0];
-    const next = keyframes.find((item) => item.time >= time) || keyframes[keyframes.length - 1];
-    if (previous.id === next.id) return previous.rotation;
-    const progress = resolveDirectorKeyframeProgress((time - previous.time) / Math.max(next.time - previous.time, DIRECTOR_KEYFRAME_EPSILON), previous.easing);
-    return new Quaternion(...previous.rotation).slerp(new Quaternion(...next.rotation), progress).toArray() as DirectorQuat;
-}
-
-export function directorBoneLabel(bone: string) {
-    return ({
-        hips: "骨盆", spine: "脊柱", chest: "胸腔", neck: "颈部", head: "头部",
-        leftShoulder: "左肩", leftUpperArm: "左上臂", leftLowerArm: "左前臂", leftHand: "左手",
-        rightShoulder: "右肩", rightUpperArm: "右上臂", rightLowerArm: "右前臂", rightHand: "右手",
-        leftUpperLeg: "左大腿", leftLowerLeg: "左小腿", leftFoot: "左脚",
-        rightUpperLeg: "右大腿", rightLowerLeg: "右小腿", rightFoot: "右脚",
-        leftThumb1: "左拇指·根", leftThumb2: "左拇指·中", leftThumb3: "左拇指·尖",
-        leftIndex1: "左食指·根", leftIndex2: "左食指·中", leftIndex3: "左食指·尖",
-        leftMiddle1: "左中指·根", leftMiddle2: "左中指·中", leftMiddle3: "左中指·尖",
-        leftRing1: "左无名指·根", leftRing2: "左无名指·中", leftRing3: "左无名指·尖",
-        leftPinky1: "左小指·根", leftPinky2: "左小指·中", leftPinky3: "左小指·尖",
-        rightThumb1: "右拇指·根", rightThumb2: "右拇指·中", rightThumb3: "右拇指·尖",
-        rightIndex1: "右食指·根", rightIndex2: "右食指·中", rightIndex3: "右食指·尖",
-        rightMiddle1: "右中指·根", rightMiddle2: "右中指·中", rightMiddle3: "右中指·尖",
-        rightRing1: "右无名指·根", rightRing2: "右无名指·中", rightRing3: "右无名指·尖",
-        rightPinky1: "右小指·根", rightPinky2: "右小指·中", rightPinky3: "右小指·尖",
-    } as Record<string, string>)[bone] || bone;
-}
-
-export function directorPoseLabel(pose: DirectorPose) {
-    return ({ neutral: "自然", stand: "站立", t_pose: "T 型", walk: "行走", run: "跑步", sit: "坐姿", squat: "蹲下", kneel_single: "单膝跪", kneel_double: "双膝跪", hands_hips: "叉腰", lean: "倚靠", bow: "鞠躬", think: "思考", fight: "格斗", kick: "踢球", throw: "投掷", push: "推进", wave: "招手", reach: "伸手", arms_crossed: "抱臂", phone: "看手机" } as Record<DirectorPose, string>)[pose];
-}
-
-export function directorPoseBoneDeltas(pose: DirectorPose): Partial<Record<DirectorHumanoidBone, DirectorQuat>> {
-    // Soldier 的左右上臂局部 Z 轴方向一致，正向旋转才会把两侧手臂从 T Pose 放下。
-    const armsDown = { leftUpperArm: poseQuaternion(0, 0, 1.28), rightUpperArm: poseQuaternion(0, 0, 1.28) };
-    const poses: Record<DirectorPose, Partial<Record<DirectorHumanoidBone, DirectorQuat>>> = {
-        neutral: armsDown,
-        stand: armsDown,
-        t_pose: {},
-        walk: { ...armsDown, leftUpperArm: poseQuaternion(0.36, 0, 1.2), rightUpperArm: poseQuaternion(-0.36, 0, 1.2), leftUpperLeg: poseQuaternion(-0.32, 0, 0), rightUpperLeg: poseQuaternion(0.32, 0, 0) },
-        run: { ...armsDown, leftUpperArm: poseQuaternion(0.75, 0, 1.05), rightUpperArm: poseQuaternion(-0.75, 0, 1.05), leftLowerArm: poseQuaternion(-0.7, 0, 0), rightLowerArm: poseQuaternion(-0.7, 0, 0), leftUpperLeg: poseQuaternion(-0.65, 0, 0), rightUpperLeg: poseQuaternion(0.55, 0, 0), rightLowerLeg: poseQuaternion(0.8, 0, 0) },
-        sit: { ...armsDown, leftUpperLeg: poseQuaternion(-1.35, 0, 0), rightUpperLeg: poseQuaternion(-1.35, 0, 0), leftLowerLeg: poseQuaternion(1.25, 0, 0), rightLowerLeg: poseQuaternion(1.25, 0, 0) },
-        squat: { ...armsDown, hips: poseQuaternion(0.25, 0, 0), leftUpperLeg: poseQuaternion(-0.75, 0, 0), rightUpperLeg: poseQuaternion(-0.75, 0, 0), leftLowerLeg: poseQuaternion(1.2, 0, 0), rightLowerLeg: poseQuaternion(1.2, 0, 0) },
-        kneel_single: { ...armsDown, leftUpperLeg: poseQuaternion(-0.95, 0, 0), leftLowerLeg: poseQuaternion(1.45, 0, 0), rightUpperLeg: poseQuaternion(-0.35, 0, 0), rightLowerLeg: poseQuaternion(0.75, 0, 0) },
-        kneel_double: { ...armsDown, leftUpperLeg: poseQuaternion(-0.55, 0, 0), rightUpperLeg: poseQuaternion(-0.55, 0, 0), leftLowerLeg: poseQuaternion(1.45, 0, 0), rightLowerLeg: poseQuaternion(1.45, 0, 0) },
-        hands_hips: { leftUpperArm: poseQuaternion(0, 0, 0.75), rightUpperArm: poseQuaternion(0, 0, 0.75), leftLowerArm: poseQuaternion(-0.1, 0.2, -1.5), rightLowerArm: poseQuaternion(-0.1, -0.2, 1.5) },
-        lean: { ...armsDown, hips: poseQuaternion(0, 0, 0.18), spine: poseQuaternion(0, 0, -0.12), head: poseQuaternion(0, 0, -0.08) },
-        bow: { ...armsDown, hips: poseQuaternion(0.5, 0, 0), spine: poseQuaternion(0.28, 0, 0), head: poseQuaternion(-0.18, 0, 0) },
-        think: { ...armsDown, rightUpperArm: poseQuaternion(-0.25, 0, 0.55), rightLowerArm: poseQuaternion(-1.35, 0, 0.3), head: poseQuaternion(0.05, -0.22, 0) },
-        fight: { leftUpperArm: poseQuaternion(-0.65, 0, 0.7), rightUpperArm: poseQuaternion(-0.55, 0, 0.65), leftLowerArm: poseQuaternion(-1.2, 0, 0), rightLowerArm: poseQuaternion(-1.25, 0, 0), chest: poseQuaternion(0, 0.2, 0), leftUpperLeg: poseQuaternion(-0.15, 0, 0), rightUpperLeg: poseQuaternion(0.2, 0, 0) },
-        kick: { ...armsDown, leftUpperArm: poseQuaternion(0.3, 0, 1.1), rightUpperArm: poseQuaternion(-0.3, 0, 1.1), rightUpperLeg: poseQuaternion(-1.1, 0, 0), rightLowerLeg: poseQuaternion(0.35, 0, 0) },
-        throw: { leftUpperArm: poseQuaternion(-0.35, 0.2, 0.35), rightUpperArm: poseQuaternion(-1.2, 0, 0.25), rightLowerArm: poseQuaternion(-1.05, 0, 0), chest: poseQuaternion(0, -0.3, 0) },
-        push: { leftUpperArm: poseQuaternion(-0.9, 0, 0.3), rightUpperArm: poseQuaternion(-0.9, 0, 0.3), leftLowerArm: poseQuaternion(-0.35, 0, 0), rightLowerArm: poseQuaternion(-0.35, 0, 0), chest: poseQuaternion(0.15, 0, 0) },
-        wave: { ...armsDown, rightUpperArm: poseQuaternion(0, 0, -0.35), rightLowerArm: poseQuaternion(0, 0, -1.45), rightHand: poseQuaternion(0, 0, -0.3) },
-        reach: { ...armsDown, rightUpperArm: poseQuaternion(-1.35, 0, -0.05), rightLowerArm: poseQuaternion(-0.1, 0, 0) },
-        arms_crossed: { leftUpperArm: poseQuaternion(-0.65, 0, 0.65), rightUpperArm: poseQuaternion(-0.65, 0, 0.65), leftLowerArm: poseQuaternion(-1.2, 0.15, -0.4), rightLowerArm: poseQuaternion(-1.2, -0.15, 0.4) },
-        phone: { ...armsDown, leftUpperArm: poseQuaternion(-0.45, 0, 0.95), rightUpperArm: poseQuaternion(-0.45, 0, 0.95), leftLowerArm: poseQuaternion(-1.1, 0, 0.15), rightLowerArm: poseQuaternion(-1.1, 0, -0.15), head: poseQuaternion(0.28, 0, 0) },
-    };
-    return poses[pose];
-}
-
-export function directorColorLabel(value: string) {
-    const hsl = { h: 0, s: 0, l: 0 };
-    new Color(value).getHSL(hsl);
-    if (hsl.l >= 0.86 && hsl.s <= 0.2) return "白色";
-    if (hsl.l <= 0.18) return "黑色";
-    if (hsl.s <= 0.16) return hsl.l >= 0.52 ? "浅灰色" : "深灰色";
-    const hue = hsl.h * 360;
-    if (hue < 18 || hue >= 345) return "红色";
-    if (hue < 48) return "橙色";
-    if (hue < 72) return "黄色";
-    if (hue < 165) return "绿色";
-    if (hue < 195) return "青色";
-    if (hue < 255) return "蓝色";
-    if (hue < 290) return "紫色";
-    return "粉色";
-}
-
-function poseQuaternion(x: number, y: number, z: number): DirectorQuat {
-    return new Quaternion().setFromEuler(new Euler(x, y, z)).toArray() as DirectorQuat;
-}
-
-function lerpVec3(from: DirectorVec3, to: DirectorVec3, progress: number): DirectorVec3 {
-    return from.map((value, index) => value + (to[index] - value) * progress) as DirectorVec3;
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-session.ts
-LINES: 1-79
-========================================================================
-import type { DirectorScene, DirectorScreenshot } from "../../../types/director";
-
-/**
- * 打开期间本地 draft 是唯一权威：只有 scene id 变化（或首次挂载）才重建会话。
- * 同 id 的父级镜像回流绝不能重新 clone / 清历史 / 重置播放头。
- */
-export function shouldReinitializeDirectorSession(input: { initializedSceneId: string | null; nextSceneId: string | null }) {
-    const { initializedSceneId, nextSceneId } = input;
-    if (!nextSceneId) return false;
-    return initializedSceneId !== nextSceneId;
-}
-
-/** 以 id upsert，调用方必须传入「当前最新」数组，避免旧闭包覆盖并发保存。 */
-export function upsertDirectorSceneById(scenes: DirectorScene[], scene: DirectorScene): DirectorScene[] {
-    return scenes.some((item) => item.id === scene.id) ? scenes.map((item) => (item.id === scene.id ? scene : item)) : [...scenes, scene];
-}
-
-/** Commit a canvas director-node description to its shot prompt; stale shot ids fall back safely. */
-export function updateDirectorShotPrompt(scene: DirectorScene, requestedShotId: string | undefined, input: string): DirectorScene {
-    const prompt = input.trim();
-    if (!prompt || scene.shots.length === 0) return scene;
-    const shotId = requestedShotId && scene.shots.some((shot) => shot.id === requestedShotId)
-        ? requestedShotId
-        : scene.shots.some((shot) => shot.id === scene.activeShotId) ? scene.activeShotId : scene.shots[0].id;
-    const current = scene.shots.find((shot) => shot.id === shotId)!;
-    if (current.prompt === prompt) return scene;
-    return { ...scene, shots: scene.shots.map((shot) => shot.id === shotId ? { ...shot, prompt } : shot) };
-}
-
-/**
- * 输出上传可能跨越数秒。只把生成出的预览引用合并到最新场景，绝不拿输出开始时的
- * scene 快照覆盖期间发生的标题、对象、关键帧或镜头编辑。
- */
-export function mergeDirectorOutputPreview(scene: DirectorScene, input: { sceneId: string; shotId: string; previewNodeId: string }) {
-    if (scene.id !== input.sceneId || !scene.shots.some((shot) => shot.id === input.shotId)) return null;
-    return {
-        ...scene,
-        shots: scene.shots.map((shot) => (shot.id === input.shotId ? { ...shot, previewNodeId: input.previewNodeId, depthNodeId: undefined, normalNodeId: undefined } : shot)),
-    };
-}
-
-/** Asynchronous uploads and asset registration must not publish into a switched canvas or deleted shot. */
-export function isDirectorOutputTargetCurrent(input: {
-    currentProjectId: string | null;
-    outputProjectId: string;
-    projectExists: boolean;
-    sourceNode: { id: string; metadata?: { directorSceneId?: string } } | undefined;
-    sourceNodeId: string;
-    latestScene: Pick<DirectorScene, "id" | "shots"> | undefined;
-    sceneId: string;
-    shotId: string;
-}): boolean {
-    return input.currentProjectId === input.outputProjectId
-        && input.projectExists
-        && input.sourceNode?.id === input.sourceNodeId
-        && input.sourceNode.metadata?.directorSceneId === input.sceneId
-        && input.latestScene?.id === input.sceneId
-        && input.latestScene.shots.some((shot) => shot.id === input.shotId);
-}
-
-/** 截图上传完成后合入最新场景，避免旧快照覆盖期间的其他编辑。 */
-export function appendDirectorScreenshot(scene: DirectorScene, input: { sceneId: string; shotId: string; screenshot: DirectorScreenshot }): DirectorScene {
-    if (scene.id !== input.sceneId || !scene.shots.some((shot) => shot.id === input.shotId)) return scene;
-    return {
-        ...scene,
-        shots: scene.shots.map((shot) => shot.id === input.shotId ? { ...shot, screenshots: [...(shot.screenshots || []), input.screenshot] } : shot),
-    };
-}
-
-export function nextDirectorScreenshotName(cameraName: string, existingCount: number): string {
-    return `${cameraName}-shot-${String(existingCount + 1).padStart(2, "0")}`;
-}
-
-/** 长截图/录制结束前，场景引用与活动镜头必须仍是操作开始时的快照。 */
-export function isDirectorOutputSnapshotCurrent(scene: DirectorScene | null, expected: { scene: DirectorScene; shotId: string }) {
-    if (scene !== expected.scene) return false;
-    const activeShot = scene.shots.find((shot) => shot.id === scene.activeShotId) || scene.shots[0];
-    return activeShot?.id === expected.shotId;
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-shortcuts.ts
-LINES: 1-169
-========================================================================
-/**
- * 导演台键盘快捷键解析。
- *
- * 纯函数：只把「按键事件形状」映射为语义动作，不碰 DOM、不改场景。
- * 组件层负责注册监听与执行动作，因此这里可以完整单测。
- *
- * 安全边界：焦点落在任何交互控件（输入框、按钮、链接、role 型控件、
- * 可编辑区域）或其内部时，绝不把按键解析为全局快捷键。
- * 否则用户改名时会误删对象、按 Space 激活按钮时会误切换播放。
- */
-
-/**
- * 语义动作。只保留导演台里已经存在真实执行路径的动作：
- * 变换模式（DirectorViewportDock 的 V/R/F，兼容 W/E）、删除选中对象或灯光、
- * 撤销/重做（顶栏按钮）、切换选中对象显隐（检查器「可见」开关）、
- * 取消选择、播放/暂停（时间轴 transport）。
- *
- * 聚焦、复制、重命名没有对应实现，不在这里造无处可去的动作。
- */
-export type DirectorShortcutAction = { kind: "transform-mode"; mode: "translate" | "rotate" | "scale" } | { kind: "nudge-selected"; direction: "up" | "down" | "left" | "right"; fine?: boolean } | { kind: "delete-selected" } | { kind: "undo" } | { kind: "redo" } | { kind: "toggle-visibility" } | { kind: "deselect" } | { kind: "toggle-play" } | { kind: "open-add-menu" };
-
-/** 只取事件的必要形状，便于测试构造，也避免耦合真实 KeyboardEvent。 */
-export type DirectorKeyEvent = {
-    key: string;
-    ctrlKey?: boolean;
-    metaKey?: boolean;
-    shiftKey?: boolean;
-    altKey?: boolean;
-    /** 事件目标是否落在交互控件内，由调用方判定后传入。 */
-    isInteractiveTarget?: boolean;
-};
-
-const TRANSFORM_KEYS: Record<string, "translate" | "rotate" | "scale"> = {
-    v: "translate",
-    r: "rotate",
-    f: "scale",
-    w: "translate",
-    e: "rotate",
-};
-
-/**
- * 解析按键为动作；不匹配返回 null。
- *
- * 约定：
- * - 交互控件语境一律不解析，交还给控件本身；
- * - 带修饰键的组合优先（Undo/Redo），避免 Ctrl+R 被当作 rotate；
- * - 单字母快捷键不区分大小写，Shift+W 仍是 translate；
- * - Redo 同时接受 Ctrl/Cmd+Shift+Z 与 Ctrl/Cmd+Y。
- */
-export function resolveDirectorShortcut(event: DirectorKeyEvent): DirectorShortcutAction | null {
-    if (event.isInteractiveTarget) return null;
-
-    const key = String(event.key || "");
-    const lower = key.toLowerCase();
-    const accel = Boolean(event.ctrlKey || event.metaKey);
-
-    if (accel) {
-        // Alt 组合留给浏览器/系统，不抢。
-        if (event.altKey) return null;
-        if (lower === "z") return event.shiftKey ? { kind: "redo" } : { kind: "undo" };
-        if (lower === "y") return { kind: "redo" };
-        return null;
-    }
-
-    if (event.altKey) return null;
-
-    const arrowDirections: Record<string, "up" | "down" | "left" | "right"> = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
-    if (arrowDirections[key]) return { kind: "nudge-selected", direction: arrowDirections[key], ...(event.shiftKey ? { fine: true } : {}) };
-
-    if (lower === "a" && event.shiftKey) return { kind: "open-add-menu" };
-    if (lower in TRANSFORM_KEYS) return { kind: "transform-mode", mode: TRANSFORM_KEYS[lower] };
-    if (key === "Delete" || key === "Backspace") return { kind: "delete-selected" };
-    if (lower === "h") return { kind: "toggle-visibility" };
-    if (key === "Escape") return { kind: "deselect" };
-    if (key === " " || key === "Spacebar") return { kind: "toggle-play" };
-
-    return null;
-}
-
-/**
- * 交互控件的唯一真源。
- * DIRECTOR_INTERACTIVE_SELECTOR（真实 DOM 的 closest 用）与
- * isDirectorInteractiveNode（单节点判定）都从这里派生，避免两处清单漂移。
- */
-const INTERACTIVE_TAGS = ["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A", "OPTION", "LABEL", "SUMMARY"] as const;
-
-/**
- * role 型控件：AntD 大量用 role 而非原生标签表达按钮、开关、菜单项。
- * Space/Delete/Backspace 对这些控件都有自己的含义，必须让它们优先。
- */
-const INTERACTIVE_ROLES = [
-    "textbox",
-    "combobox",
-    "spinbutton",
-    "searchbox",
-    "button",
-    "switch",
-    "tab",
-    "menuitem",
-    "menuitemcheckbox",
-    "menuitemradio",
-    "option",
-    "slider",
-    "checkbox",
-    "radio",
-    "link",
-    "listbox",
-    "menu",
-    "radiogroup",
-    "treeitem",
-] as const;
-
-/** 供真实 DOM 的 Element.closest 使用：命中控件自身或任何交互祖先。 */
-export const DIRECTOR_INTERACTIVE_SELECTOR = [...INTERACTIVE_TAGS.map((tag) => tag.toLowerCase()), ...INTERACTIVE_ROLES.map((role) => `[role="${role}"]`), '[contenteditable="true"]', '[contenteditable=""]'].join(",");
-
-/**
- * 判断单个节点自身是否是交互控件。不看祖先。
- * 祖先由 blocksDirectorShortcut 通过 closest 处理。
- */
-export function isDirectorInteractiveNode(target: unknown): boolean {
-    if (!target || typeof target !== "object") return false;
-    const node = target as { tagName?: unknown; isContentEditable?: unknown; getAttribute?: (name: string) => string | null };
-    if (node.isContentEditable === true) return true;
-
-    const tagName = typeof node.tagName === "string" ? node.tagName.toUpperCase() : "";
-    if ((INTERACTIVE_TAGS as readonly string[]).includes(tagName)) return true;
-
-    if (typeof node.getAttribute === "function") {
-        const role = node.getAttribute("role");
-        if (role && (INTERACTIVE_ROLES as readonly string[]).includes(role)) return true;
-        const editable = node.getAttribute("contenteditable");
-        if (editable === "" || editable === "true") return true;
-    }
-    return false;
-}
-
-/**
- * 事件目标是否应当阻止全局快捷键。
- *
- * 用 closest 而不是只看 target 自身：点击按钮里的 <svg>/<span> 时
- * event.target 是子元素，只判自身会漏掉整个控件。
- * closest 同时覆盖 SVG 元素（SVGElement 也实现 Element.closest）。
- *
- * 没有 closest 的目标（window、document、测试替身）退化为单节点判定。
- */
-export function blocksDirectorShortcut(target: unknown): boolean {
-    if (!target || typeof target !== "object") return false;
-    const node = target as { closest?: (selector: string) => unknown };
-    if (typeof node.closest === "function") return Boolean(node.closest(DIRECTOR_INTERACTIVE_SELECTOR));
-    return isDirectorInteractiveNode(target);
-}
-
-/**
- * 指针激活后释放焦点，使全局快捷键立刻可用。
- *
- * 为什么需要：blocksDirectorShortcut 会吃掉聚焦控件上的所有全局快捷键（这是刻意的，
- * Space/Delete/Backspace 属于控件自己）。但鼠标点完一个工具按钮或场景行之后，
- * 焦点仍留在按钮上，于是「点选对象 -> 按 Delete」这类主流程会静默失效。
- *
- * detail === 0 表示键盘激活（Enter/Space 合成的 click），此时必须保留焦点，
- * 否则 Tab 序列会断、键盘用户会丢失位置。判据与 plugins 页一致。
- *
- * 导演台的按钮分散在 workbench、dock、sequencer 三处，各自没有公共基组件，
- * 因此这条规则集中在这里，避免每个 onClick 各写一遍而慢慢走偏。
- */
-export function releaseDirectorFocusAfterPointer(event: { detail: number; currentTarget: { blur?: () => void } }): void {
-    if (event.detail === 0) return;
-    event.currentTarget.blur?.();
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-stage-palette.ts
-LINES: 1-10
-========================================================================
-import { Color } from "three";
-
-/** Only new dark scenes use the charcoal stage. Existing light scenes retain their previous floor/grid. */
-export function directorStagePalette(background: string): { ground: string; cell: string; section: string } {
-    const color = new Color(background);
-    const lightness = color.getHSL({ h: 0, s: 0, l: 0 }).l;
-    return lightness < 0.22
-        ? { ground: "#151820", cell: "#4a7094", section: "#5f8bb0" }
-        : { ground: "#aeb7bf", cell: "#8f99a3", section: "#626d77" };
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-stage-transform.ts
-LINES: 1-49
-========================================================================
-import { Euler, Matrix4, Quaternion, Vector3 } from "three";
-
-import type { DirectorScene, DirectorTransform, DirectorVec3 } from "@/types/director";
-
-export type DirectorStageTransform = NonNullable<DirectorScene["stageTransform"]>;
-
-export const DIRECTOR_DEFAULT_STAGE_TRANSFORM: DirectorStageTransform = {
-    scale: 1,
-    position: [0, 0, 0],
-    rotation: [0, 0, 0],
-};
-
-export function directorStageTransform(scene: Pick<DirectorScene, "stageTransform">): DirectorStageTransform {
-    const value = scene.stageTransform;
-    if (!value || !Number.isFinite(value.scale) || value.scale < 0.1 || value.scale > 10) return DIRECTOR_DEFAULT_STAGE_TRANSFORM;
-    if (![value.position, value.rotation].every((axis) => Array.isArray(axis) && axis.length === 3 && axis.every(Number.isFinite))) return DIRECTOR_DEFAULT_STAGE_TRANSFORM;
-    return value;
-}
-
-export function directorStageMatrix(stage: DirectorStageTransform): Matrix4 {
-    const rotation = new Euler(...stage.rotation.map((degrees) => degrees * Math.PI / 180) as DirectorVec3);
-    return new Matrix4().compose(new Vector3(...stage.position), new Quaternion().setFromEuler(rotation), new Vector3(stage.scale, stage.scale, stage.scale));
-}
-
-export function directorStagePoint(stage: DirectorStageTransform, point: DirectorVec3): DirectorVec3 {
-    return new Vector3(...point).applyMatrix4(directorStageMatrix(stage)).toArray() as DirectorVec3;
-}
-
-export function directorStageLocalPoint(stage: DirectorStageTransform, point: DirectorVec3): DirectorVec3 {
-    return new Vector3(...point).applyMatrix4(directorStageMatrix(stage).invert()).toArray() as DirectorVec3;
-}
-
-export function directorStageDirection(stage: DirectorStageTransform, direction: DirectorVec3): DirectorVec3 {
-    const result = new Vector3(...direction).transformDirection(directorStageMatrix(stage));
-    return result.toArray() as DirectorVec3;
-}
-
-/** Convert a world-space viewport camera back into local scene coordinates before saving it. */
-export function directorStageLocalCamera(stage: DirectorStageTransform, world: DirectorTransform): DirectorTransform {
-    if (stage.scale === 1 && stage.position.every((value) => value === 0) && stage.rotation.every((value) => value === 0)) return world;
-    const worldRotation = new Quaternion().setFromEuler(new Euler(...world.rotation));
-    const stageRotation = new Quaternion().setFromEuler(new Euler(...stage.rotation.map((degrees) => degrees * Math.PI / 180) as DirectorVec3));
-    const localRotation = new Euler().setFromQuaternion(stageRotation.invert().multiply(worldRotation));
-    return {
-        ...world,
-        position: directorStageLocalPoint(stage, world.position),
-        rotation: [localRotation.x, localRotation.y, localRotation.z],
-    };
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-templates.ts
-LINES: 1-153
-========================================================================
-import { nanoid } from "nanoid";
-
-import { createDirectorActor, createDirectorCamera, createDirectorLight, createDirectorObject, directorFocalLengthToFov, DIRECTOR_ACTOR_COLORS } from "@/lib/canvas/director/director-scene";
-import { DIRECTOR_DEFAULT_GROUND } from "@/lib/canvas/director/director-ground";
-import { DIRECTOR_DEFAULT_STAGE_TRANSFORM } from "@/lib/canvas/director/director-stage-transform";
-import type { DirectorCamera, DirectorLight, DirectorObject, DirectorScene, DirectorShot } from "@/types/director";
-
-/**
- * 新建场景模板。
- *
- * 为什么存在：createDirectorScene 无条件塞一个默认演员，产品/空场景根本不需要它，
- * 而双人、走位这类常见开局每次都要手工摆一遍。模板把「开局布局」变成显式选择。
- *
- * 硬约束：
- * - 纯函数 + 确定性布局。同一模板每次生成的结构完全一致，只有 id 与时间戳不同。
- * - 每次调用都产生独立 id（工厂内部 nanoid），两个实例不会共享对象身份。
- * - 不改变 DirectorScene 版本：模板只预填已有场景字段。
- * - 对象之间 XZ 占位不重叠，判据与 resolveDirectorPlacement 完全一致。
- */
-
-export type DirectorTemplateId = "empty" | "monologue" | "dialogue" | "blocking" | "product";
-
-export type DirectorTemplate = {
-    id: DirectorTemplateId;
-    name: string;
-    description: string;
-    /** 列表里给用户的预期提示，不参与生成。 */
-    summary: string;
-};
-
-/** 展示顺序即用户看到的顺序：空场景在最前，其余按上手复杂度递增。 */
-export const DIRECTOR_TEMPLATES: DirectorTemplate[] = [
-    { id: "empty", name: "空场景", description: "只有摄影机和三点布光，没有任何演员或道具。", summary: "摄影机 + 布光" },
-    { id: "monologue", name: "单人对白", description: "一名演员居中，中近景机位，适合独白与特写。", summary: "1 演员 · 中近景" },
-    { id: "dialogue", name: "双人对话", description: "两名演员面对面分立左右，过肩机位起手。", summary: "2 演员 · 对话机位" },
-    { id: "blocking", name: "人物走位", description: "三名演员分散站位，广角机位便于安排走动路线。", summary: "3 演员 · 广角" },
-    { id: "product", name: "产品/道具镜头", description: "产品置于中心，背景板与侧面道具就位，长焦特写。", summary: "产品 + 背景板 · 长焦" },
-];
-
-type TemplateBlueprint = {
-    objects: DirectorObject[];
-    camera: DirectorCamera;
-    shot: Omit<DirectorShot, "id" | "cameraId">;
-};
-
-/**
- * 三点布光：主光、轮廓光、环境光。
- * 五个模板共用同一套光位，避免模板之间打光风格漂移。
- */
-function threePointRig(): DirectorLight[] {
-    return [createDirectorLight("directional", "主光", [4, 6, 4], 2.4), createDirectorLight("directional", "轮廓光", [-4, 3, -2], 1.1), createDirectorLight("ambient", "环境光", [0, 0, 0], 0.65)];
-}
-
-/** 按模板意图摆机位。focalLength 与 fov 一起写，保证两者自洽。 */
-function templateCamera(input: { name: string; position: DirectorCamera["transform"]["position"]; target: DirectorCamera["target"]; focalLength: number; focusDistance: number; aperture: number }): DirectorCamera {
-    const base = createDirectorCamera(input.name);
-    return {
-        ...base,
-        transform: { ...base.transform, position: input.position },
-        target: input.target,
-        focalLength: input.focalLength,
-        fov: directorFocalLengthToFov(input.focalLength),
-        aperture: input.aperture,
-        focusDistance: input.focusDistance,
-    };
-}
-
-/** 演员朝向：绕 Y 轴。左侧演员朝右为 +PI/2，右侧演员朝左为 -PI/2。 */
-function facing(actor: DirectorObject, yaw: number): DirectorObject {
-    return { ...actor, transform: { ...actor.transform, rotation: [0, yaw, 0] } };
-}
-
-function buildBlueprint(id: DirectorTemplateId): TemplateBlueprint {
-    if (id === "monologue") {
-        return {
-            objects: [createDirectorActor("演员 1", [0, 0, 0], DIRECTOR_ACTOR_COLORS[0])],
-            camera: templateCamera({ name: "主摄影机", position: [1.5, 1.65, 3.1], target: [0, 1.15, 0], focalLength: 50, focusDistance: 3.4, aperture: 2.2 }),
-            shot: { name: "镜头 1", duration: 5, fps: 24, shotSize: "medium", cameraMove: "static", prompt: "" },
-        };
-    }
-
-    if (id === "dialogue") {
-        // dx = 1.6 >= (0.8 + 0.8) / 2 + 0.25 = 1.05，两名演员必然不重叠。
-        return {
-            objects: [facing(createDirectorActor("演员 1", [-0.8, 0, 0.3], DIRECTOR_ACTOR_COLORS[0]), Math.PI / 2), facing(createDirectorActor("演员 2", [0.8, 0, -0.3], DIRECTOR_ACTOR_COLORS[2]), -Math.PI / 2)],
-            camera: templateCamera({ name: "主摄影机", position: [2.9, 1.7, 3.4], target: [0, 1.1, 0], focalLength: 40, focusDistance: 4.2, aperture: 2.8 }),
-            shot: { name: "镜头 1", duration: 6, fps: 24, shotSize: "medium", cameraMove: "static", prompt: "" },
-        };
-    }
-
-    if (id === "blocking") {
-        // 三名演员两两 dx >= 1.8，全部大于 1.05 阈值。
-        return {
-            objects: [createDirectorActor("演员 1", [-1.8, 0, 0.6], DIRECTOR_ACTOR_COLORS[0]), createDirectorActor("演员 2", [0, 0, -0.4], DIRECTOR_ACTOR_COLORS[2]), createDirectorActor("演员 3", [1.8, 0, 0.8], DIRECTOR_ACTOR_COLORS[3])],
-            camera: templateCamera({ name: "主摄影机", position: [0.6, 3.1, 7.4], target: [0, 1, 0], focalLength: 28, focusDistance: 7.6, aperture: 4 }),
-            shot: { name: "镜头 1", duration: 8, fps: 24, shotSize: "wide", cameraMove: "static", prompt: "" },
-        };
-    }
-
-    if (id === "product") {
-        // 产品镜头没有演员。背景板靠 dz=1.35 拉开，侧面道具靠 dx=1.15 拉开。
-        const product = createDirectorObject("box", "产品主体", [0, 0.5, 0], "#b8c0ca");
-        const backdrop = createDirectorObject("plane", "背景板", [0, 1.4, -1.35], "#e8ebef");
-        const prop = createDirectorObject("cylinder", "侧面道具", [1.15, 0.4, 0.5], "#8795a5");
-        return {
-            objects: [
-                { ...product, transform: { ...product.transform, scale: [0.9, 0.9, 0.9] } },
-                { ...backdrop, transform: { ...backdrop.transform, scale: [3.2, 2, 1] } },
-                { ...prop, transform: { ...prop.transform, scale: [0.5, 0.8, 0.5] } },
-            ],
-            camera: templateCamera({ name: "主摄影机", position: [1.1, 1.05, 2.35], target: [0, 0.55, 0], focalLength: 85, focusDistance: 2.6, aperture: 2.8 }),
-            shot: { name: "镜头 1", duration: 4, fps: 24, shotSize: "close_up", cameraMove: "push_in", prompt: "" },
-        };
-    }
-
-    return {
-        objects: [],
-        camera: templateCamera({ name: "主摄影机", position: [4.8, 2.7, 6.8], target: [0, 1, 0], focalLength: 35, focusDistance: 5, aperture: 2.8 }),
-        shot: { name: "镜头 1", duration: 5, fps: 24, shotSize: "medium", cameraMove: "static", prompt: "" },
-    };
-}
-
-/**
- * 按模板生成全新场景。
- * 未知 id 回落到空场景 —— 宁可少给内容，也不要偷偷塞回默认演员。
- */
-export function createDirectorSceneFromTemplate(templateId: DirectorTemplateId, title = "未命名场景"): DirectorScene {
-    const blueprint = buildBlueprint(templateId);
-    const now = new Date().toISOString();
-    const shotId = nanoid();
-    return {
-        id: nanoid(),
-        version: 1,
-        title,
-        background: "#060608",
-        environmentIntensity: 0.7,
-        gridVisible: true,
-        gridSnap: false,
-        panoramaRotation: 0,
-        panoramaRadius: 60,
-        ground: { ...DIRECTOR_DEFAULT_GROUND },
-        stageTransform: { ...DIRECTOR_DEFAULT_STAGE_TRANSFORM, position: [...DIRECTOR_DEFAULT_STAGE_TRANSFORM.position], rotation: [...DIRECTOR_DEFAULT_STAGE_TRANSFORM.rotation] },
-        labelsVisible: true,
-        aspectRatio: "adaptive",
-        objects: blueprint.objects,
-        cameras: [blueprint.camera],
-        lights: threePointRig(),
-        shots: [{ ...blueprint.shot, id: shotId, cameraId: blueprint.camera.id }],
-        activeShotId: shotId,
-        createdAt: now,
-        updatedAt: now,
-    };
 }
 

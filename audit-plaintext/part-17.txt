@@ -1,7 +1,747 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+========================================================================
+FILE: web/src/pages/admin/components/invite.tsx
+LINES: 1-258
+========================================================================
+import { useEffect, useState } from "react";
+import { App as AntApp, Button, Input, InputNumber, Select, Switch, Table } from "antd";
+import type { TableColumnsType } from "antd";
+import dayjs from "dayjs";
+import { Link, useSearchParams } from "react-router-dom";
+
+import { useAdminRequest } from "../use-admin-request";
+import { ADMIN_AUTOFILL_OFF, AdminBadge, AdminField, AdminPanel, AdminStat, AdminToolbar } from "./ui";
+import { useAdminPermissions } from "../permissions";
+
+type InviteSettings = { enabled: boolean; rebatePercent: number; membershipRebatePercent: number };
+type Relation = { id: string; inviterEmail: string; inviteeEmail: string; status: string; totalRebate: number; createdAt: string };
+type Rebate = {
+    id: string;
+    orderNo: string;
+    inviterEmail: string;
+    inviteeEmail: string;
+    orderCredits: number;
+    amountCents: number;
+    rebatePercent: number;
+    rebateCredits: number;
+    recoveredCredits: number | null;
+    recoveryShortfall: number | null;
+    status: string;
+    createdAt: string;
+    revokedAt: string | null;
+};
+
+const formatTime = (value?: string | null) => (value ? dayjs(value).format("YYYY-MM-DD HH:mm") : "-");
+
+export function InviteTab() {
+    const permissions = useAdminPermissions();
+    const [urlParams] = useSearchParams();
+    const apiRequest = useAdminRequest();
+    const { message } = AntApp.useApp();
+    const [settings, setSettings] = useState<InviteSettings>({ enabled: true, rebatePercent: 10, membershipRebatePercent: 10 });
+    const [saving, setSaving] = useState(false);
+    const [relations, setRelations] = useState<Relation[]>([]);
+    const [relationTotal, setRelationTotal] = useState(0);
+    const [relationPage, setRelationPage] = useState(1);
+    const [keyword, setKeyword] = useState("");
+    const [rebates, setRebates] = useState<Rebate[]>([]);
+    const [rebateTotal, setRebateTotal] = useState(0);
+    const [rebatePage, setRebatePage] = useState(1);
+    const [totals, setTotals] = useState({ granted: 0, revoked: 0 });
+    const [loading, setLoading] = useState(false);
+    const [filterUser, setFilterUser] = useState(urlParams.get("userId") ?? "");
+    const [relationStatus, setRelationStatus] = useState("");
+    const [rebateStatus, setRebateStatus] = useState("");
+    const [orderNo, setOrderNo] = useState(urlParams.get("orderNo") ?? "");
+    const [from, setFrom] = useState("");
+    const [to, setTo] = useState("");
+    function appendFilters(params: URLSearchParams, status: string) {
+        if (filterUser.trim()) params.set("userId", filterUser.trim());
+        if (status) params.set("status", status);
+        if (from) params.set("from", new Date(`${from}T00:00:00`).toISOString());
+        if (to) { const end = new Date(`${to}T00:00:00`); end.setDate(end.getDate() + 1); params.set("to", end.toISOString()); }
+    }
+
+    async function loadSettings() {
+        const data = await apiRequest<{ settings: InviteSettings }>("/api/admin/invite/settings");
+        setSettings({ ...data.settings, membershipRebatePercent: Number(data.settings.membershipRebatePercent ?? data.settings.rebatePercent) || 0 });
+    }
+
+    async function loadRelations(currentPage = relationPage) {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams({ page: String(currentPage), pageSize: "20", keyword });
+            appendFilters(params, relationStatus);
+            const data = await apiRequest<{ items: Relation[]; total: number }>(`/api/admin/invite/relations?${params.toString()}`);
+            setRelations(data.items);
+            setRelationTotal(data.total);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function loadRebates(currentPage = rebatePage) {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams({ page: String(currentPage), pageSize: "20" });
+            appendFilters(params, rebateStatus);
+            if (orderNo.trim()) params.set("orderNo", orderNo.trim());
+            const data = await apiRequest<{ items: Rebate[]; total: number; totals: { granted: number; revoked: number } }>(`/api/admin/invite/rebates?${params}`);
+            setRebates(data.items);
+            setRebateTotal(data.total);
+            setTotals(data.totals);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    useEffect(() => {
+        void loadSettings().catch((error: unknown) => message.error(error instanceof Error ? error.message : String(error)));
+    }, []);
+
+    useEffect(() => {
+        void loadRelations();
+    }, [relationPage]);
+
+    useEffect(() => {
+        void loadRebates();
+    }, [rebatePage]);
+
+    async function saveSettings() {
+        setSaving(true);
+        try {
+            await apiRequest("/api/admin/invite/settings", { method: "PUT", json: settings });
+            message.success("邀请设置已保存");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function toggleRelation(relation: Relation) {
+        const status = relation.status === "active" ? "disabled" : "active";
+        try {
+            await apiRequest(`/api/admin/invite/relations/${relation.id}`, { method: "PATCH", json: { status } });
+            await loadRelations();
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+        }
+    }
+
+    const relationColumns: TableColumnsType<Relation> = [
+        { title: "邀请人", dataIndex: "inviterEmail", render: (value: string) => <Link to={`/admin?tab=users&search=${encodeURIComponent(value)}`}>{value}</Link> },
+        { title: "被邀请人", dataIndex: "inviteeEmail", render: (value: string) => <Link to={`/admin?tab=users&search=${encodeURIComponent(value)}`}>{value}</Link> },
+        { title: "累计返佣", dataIndex: "totalRebate", align: "right", render: (value: number) => <span className="tabular-nums">{value.toLocaleString("zh-CN")}</span> },
+        { title: "状态", dataIndex: "status", render: (value: string) => <AdminBadge tone={value === "active" ? "positive" : "neutral"}>{value === "active" ? "生效" : "已禁用"}</AdminBadge> },
+        { title: "建立时间", dataIndex: "createdAt", render: formatTime },
+        {
+            title: "操作",
+            key: "actions",
+            align: "right",
+            render: (_value, record) => (
+                permissions.includes("invites.manage") ? <Button size="small" onClick={() => void toggleRelation(record)}>
+                    {record.status === "active" ? "禁用" : "启用"}
+                </Button> : null
+            ),
+        },
+    ];
+
+    const rebateColumns: TableColumnsType<Rebate> = [
+        { title: "订单号", dataIndex: "orderNo", render: (value: string) => <Link to={`/admin?tab=orders&search=${encodeURIComponent(value)}`} className="font-mono text-[11px]">{value}</Link> },
+        { title: "邀请人", dataIndex: "inviterEmail", render: (value: string) => <span className="text-[var(--admin-ink)]">{value}</span> },
+        { title: "被邀请人", dataIndex: "inviteeEmail", render: (value: string) => <span className="text-[var(--admin-muted)]">{value}</span> },
+        { title: "订单积分", dataIndex: "orderCredits", align: "right", render: (value: number) => <span className="tabular-nums">{value.toLocaleString("zh-CN")}</span> },
+        { title: "比例", dataIndex: "rebatePercent", align: "right", render: (value: number) => <span className="tabular-nums">{Number(value)}%</span> },
+        { title: "返佣积分", dataIndex: "rebateCredits", align: "right", render: (value: number) => <span className="font-medium tabular-nums">{value.toLocaleString("zh-CN")}</span> },
+        { title: "实际扣回", dataIndex: "recoveredCredits", align: "right", render: (value: number | null) => value == null ? "—" : value },
+        { title: "扣回差额", dataIndex: "recoveryShortfall", align: "right", render: (value: number | null) => value == null ? "—" : value },
+        { title: "状态", dataIndex: "status", render: (value: string) => <AdminBadge tone={value === "granted" ? "positive" : "danger"}>{value === "granted" ? "已发放" : "已撤回"}</AdminBadge> },
+        { title: "时间", dataIndex: "createdAt", render: formatTime },
+    ];
+
+    return (
+        <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-3">
+                <AdminStat label="累计发放返佣" value={totals.granted.toLocaleString("zh-CN")} note="积分" accent />
+                <AdminStat label="已撤销返佣" value={totals.revoked.toLocaleString("zh-CN")} note="原返佣额度，实际扣回见明细" />
+                <AdminStat label="邀请关系" value={relationTotal.toLocaleString("zh-CN")} note="一个用户只能被邀请一次" />
+            </div>
+
+            <AdminPanel
+                title="返佣规则"
+                description="被邀请人充值或会员订单支付成功后，按对应比例给邀请人发放积分；订单退款时自动撤回并扣回。"
+                actions={
+                    <Button type="primary" size="small" disabled={!permissions.includes("invites.manage")} loading={saving} onClick={() => void saveSettings()}>
+                        保存设置
+                    </Button>
+                }
+            >
+                <div className="grid gap-4 sm:grid-cols-3">
+                    <AdminField label="积分充值返佣比例（%）" hint="按充值订单到账积分计算，例如 10 表示充值 100 积分返 10 积分。">
+                        <InputNumber
+                            {...ADMIN_AUTOFILL_OFF}
+                            name="sundas-invite-credits-percent"
+                            className="w-full"
+                            disabled={!permissions.includes("invites.manage")}
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={settings.rebatePercent}
+                            onChange={(value) => setSettings({ ...settings, rebatePercent: Number(value) || 0 })}
+                        />
+                    </AdminField>
+                    <AdminField label="会员订单返佣比例（%）" hint="按会员套餐订单到账积分计算，例如 10 表示到账 100 积分返 10 积分。">
+                        <InputNumber
+                            {...ADMIN_AUTOFILL_OFF}
+                            name="sundas-invite-membership-percent"
+                            className="w-full"
+                            disabled={!permissions.includes("invites.manage")}
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={settings.membershipRebatePercent}
+                            onChange={(value) => setSettings({ ...settings, membershipRebatePercent: Number(value) || 0 })}
+                        />
+                    </AdminField>
+                    <div className="flex items-center justify-between rounded-[9px] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] px-3 py-2.5">
+                        <div>
+                            <div className="text-xs font-medium text-[var(--admin-ink)]">启用邀请返佣</div>
+                            <div className="mt-0.5 text-[11px] text-[var(--admin-muted)]">关闭后不再发放新的返佣</div>
+                        </div>
+                        <Switch disabled={!permissions.includes("invites.manage")} checked={settings.enabled} onChange={(checked) => setSettings({ ...settings, enabled: checked })} />
+                    </div>
+                </div>
+            </AdminPanel>
+
+            <AdminPanel title="邀请关系" description="禁用后该关系不再产生返佣，已发放的积分不会扣回。" flush>
+                <AdminToolbar>
+                    <Input placeholder="用户 ID" value={filterUser} onChange={e => setFilterUser(e.target.value)} className="max-w-[220px]" />
+                    <Select value={relationStatus} onChange={setRelationStatus} options={[{value:"",label:"全部关系"},{value:"active",label:"生效"},{value:"disabled",label:"禁用"}]} />
+                    <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="max-w-[160px]" />
+                    <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="max-w-[160px]" />
+                    <Input.Search
+                        allowClear
+                        placeholder="搜索邮箱"
+                        className="max-w-[260px]"
+                        value={keyword}
+                        onChange={(event) => setKeyword(event.target.value)}
+                        onSearch={() => {
+                            if (relationPage === 1) void loadRelations(1);
+                            else setRelationPage(1);
+                        }}
+                    />
+                    <Button onClick={() => { if (relationPage === 1) void loadRelations(1); else setRelationPage(1); }}>查询关系</Button>
+                </AdminToolbar>
+                <Table<Relation>
+                    rowKey="id"
+                    loading={loading}
+                    dataSource={relations}
+                    columns={relationColumns}
+                    scroll={{ x: 860 }}
+                    pagination={{ current: relationPage, pageSize: 20, total: relationTotal, onChange: setRelationPage, size: "small" }}
+                />
+            </AdminPanel>
+
+            <AdminPanel title="返佣记录" description="同一笔订单只返佣一次；退款后状态变为已撤回并扣回积分。" flush>
+                <AdminToolbar><Input placeholder="订单号" value={orderNo} onChange={e => setOrderNo(e.target.value)} className="max-w-[240px]" /><Select value={rebateStatus} onChange={setRebateStatus} options={[{value:"",label:"全部返佣"},{value:"granted",label:"已发放"},{value:"revoked",label:"已撤回"}]} /><Button onClick={() => { if (rebatePage === 1) void loadRebates(1); else setRebatePage(1); }}>查询</Button></AdminToolbar>
+                <Table<Rebate>
+                    rowKey="id"
+                    loading={loading}
+                    dataSource={rebates}
+                    columns={rebateColumns}
+                    scroll={{ x: 1080 }}
+                    pagination={{ current: rebatePage, pageSize: 20, total: rebateTotal, onChange: setRebatePage, size: "small" }}
+                />
+            </AdminPanel>
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/pages/admin/components/model-editor.tsx
+LINES: 1-475
+========================================================================
+import { useEffect, useState } from "react";
+import { App as AntApp, AutoComplete, Button, Input, InputNumber, Modal, Select, Switch } from "antd";
+import { Plus, Trash2 } from "lucide-react";
+
+import { useAdminRequest } from "../use-admin-request";
+import { ADMIN_AUTOFILL_OFF, AdminBadge, AdminField } from "./ui";
+
+export type AdminFamily = {
+    id: string;
+    name: string;
+    vendor: string;
+    description: string;
+    icon: string;
+    sort: number;
+    modelCount?: number;
+};
+
+export type AdminModelRoute = {
+    id?: string;
+    channelId: string;
+    channelName?: string;
+    unit: string;
+    baseCredits: number | string;
+    resolutionMultipliers: Record<string, number>;
+    priority: number;
+    weight: number;
+    enabled: boolean;
+    healthStatus?: string;
+};
+
+export type AdminModel = {
+    id: string;
+    familyId: string | null;
+    familyName: string | null;
+    upstreamName: string;
+    displayName: string;
+    description: string;
+    capability: string;
+    metadata: Record<string, unknown>;
+    enabled: boolean;
+    sort: number;
+    routes: AdminModelRoute[];
+};
+
+type ChannelOption = { id: string; name: string; enabled: boolean; healthStatus?: string };
+type ResolutionRow = { value: string; multiplier: number };
+type RouteDraft = {
+    channelId: string;
+    unit: string;
+    baseCredits: number;
+    priority: number;
+    weight: number;
+    enabled: boolean;
+    resolutions: ResolutionRow[];
+};
+type MetadataDraft = {
+    visionInput: boolean;
+    upscaleAdapter: string;
+    imageProtocol: string;
+    tags: string;
+    refImages: number;
+    refVideos: number;
+    refAudios: number;
+    durationMin: number;
+    durationMax: number;
+    aspectRatios: string;
+    docsUrl: string;
+    promptSkill: string;
+};
+
+type PromptSkillOption = { key: string; label: string; capability: "image" | "video"; description: string };
+
+const CAPABILITIES = [
+    { value: "image", label: "图片" },
+    { value: "video", label: "视频" },
+    { value: "text", label: "文本" },
+    { value: "audio", label: "音频" },
+];
+const IMAGE_PROTOCOLS = [
+    { value: "", label: "OpenAI Images（默认）" },
+    { value: "gemini", label: "Gemini 原生" },
+    { value: "gpt88", label: "GPT88" },
+    { value: "catcode", label: "Catcode" },
+    { value: "cangyuan", label: "Cangyuan" },
+];
+const UNITS = [
+    { value: "image", label: "按张" },
+    { value: "second", label: "按秒" },
+    { value: "request", label: "按次" },
+    { value: "1k_chars", label: "按千字符" },
+];
+const UNITS_BY_CAPABILITY: Record<string, string[]> = {
+    image: ["image", "request"],
+    video: ["second", "request"],
+    text: ["request"],
+    audio: ["1k_chars", "request"],
+};
+const defaultResolutions: ResolutionRow[] = [
+    { value: "720", multiplier: 1 },
+    { value: "1080", multiplier: 2 },
+];
+
+function unitsFor(capability: string) {
+    return UNITS.filter((unit) => (UNITS_BY_CAPABILITY[capability] ?? []).includes(unit.value));
+}
+
+function nextUnit(capability: string, current: string) {
+    const allowed = UNITS_BY_CAPABILITY[capability] ?? [];
+    return allowed.includes(current) ? current : allowed[0] ?? "request";
+}
+
+function normalizeResolutionKey(value: string) {
+    return String(value || "").trim().toLowerCase().replace(/p$/i, "");
+}
+
+function resolutionRowsFromMap(multipliers: Record<string, number> | undefined): ResolutionRow[] {
+    const rows = Object.entries(multipliers ?? {}).map(([value, multiplier]) => ({ value: normalizeResolutionKey(value), multiplier: Number(multiplier) > 0 ? Number(multiplier) : 1 }));
+    const unique = rows.filter((row, index) => row.value && rows.findIndex((item) => item.value === row.value) === index);
+    return unique.length ? unique : defaultResolutions.map((row) => ({ ...row }));
+}
+
+function resolutionsToMap(rows: ResolutionRow[]) {
+    const multipliers: Record<string, number> = {};
+    for (const row of rows) {
+        const value = normalizeResolutionKey(row.value);
+        if (!value || multipliers[value] !== undefined) continue;
+        multipliers[value] = Number(row.multiplier) > 0 ? Number(row.multiplier) : 1;
+    }
+    return multipliers;
+}
+
+function metadataDraftOf(metadata: Record<string, unknown> | undefined): MetadataDraft {
+    const reference = (metadata?.referenceLimits ?? {}) as Record<string, unknown>;
+    const durations = (metadata?.durations ?? {}) as Record<string, unknown>;
+    return {
+        upscaleAdapter: String((metadata?.upscale as { adapter?: string } | undefined)?.adapter ?? ''),
+        imageProtocol: String(metadata?.imageProtocol ?? ""),
+        tags: Array.isArray(metadata?.tags) ? metadata.tags.join(", ") : "",
+        refImages: Number(reference.images) || 0,
+        refVideos: Number(reference.videos) || 0,
+        refAudios: Number(reference.audios) || 0,
+        durationMin: Number(durations.min) || 0,
+        durationMax: Number(durations.max) || 0,
+        aspectRatios: Array.isArray(metadata?.aspectRatios) ? metadata.aspectRatios.join(", ") : "",
+        docsUrl: String(metadata?.docsUrl ?? ""),
+        promptSkill: String(metadata?.promptSkill ?? ""),
+        visionInput: metadata?.visionInput === true,
+    };
+}
+
+function metadataFromDraft(draft: MetadataDraft): Record<string, unknown> {
+    const referenceLimits = {
+        ...(draft.refImages > 0 ? { images: draft.refImages } : {}),
+        ...(draft.refVideos > 0 ? { videos: draft.refVideos } : {}),
+        ...(draft.refAudios > 0 ? { audios: draft.refAudios } : {}),
+    };
+    const durations = {
+        ...(draft.durationMin > 0 ? { min: draft.durationMin } : {}),
+        ...(draft.durationMax > 0 ? { max: draft.durationMax } : {}),
+    };
+    const aspectRatios = draft.aspectRatios.split(",").map((item) => item.trim()).filter(Boolean);
+    return {
+        ...(draft.upscaleAdapter ? { upscale: { enabled: true, adapter: draft.upscaleAdapter } } : {}),
+        visionInput: draft.visionInput,
+        ...(draft.tags.trim() ? { tags: draft.tags.split(",").map((item) => item.trim()).filter(Boolean) } : {}),
+        ...(Object.keys(referenceLimits).length ? { referenceLimits } : {}),
+        ...(Object.keys(durations).length ? { durations } : {}),
+        ...(aspectRatios.length ? { aspectRatios } : {}),
+        ...(draft.docsUrl.trim() ? { docsUrl: draft.docsUrl.trim() } : {}),
+        ...(draft.promptSkill ? { promptSkill: draft.promptSkill } : {}),
+    };
+}
+
+function routeDraftsOf(model: AdminModel | null, channels: ChannelOption[]): RouteDraft[] {
+    if (model?.routes?.length) {
+        return model.routes.map((route) => ({
+            channelId: route.channelId,
+            unit: nextUnit(model.capability, route.unit),
+            baseCredits: Number(route.baseCredits) || 1,
+            priority: Number(route.priority) || 0,
+            weight: Number(route.weight) || 100,
+            enabled: route.enabled !== false,
+            resolutions: resolutionRowsFromMap(route.resolutionMultipliers),
+        }));
+    }
+    return [
+        {
+            channelId: channels[0]?.id ?? "",
+            unit: model?.capability === "video" ? "second" : "request",
+            baseCredits: 1,
+            priority: 0,
+            weight: 100,
+            enabled: true,
+            resolutions: defaultResolutions.map((row) => ({ ...row })),
+        },
+    ];
+}
+
+export function ModelEditorModal({
+    open,
+    model,
+    families,
+    channels,
+    modelSuggestions,
+    onClose,
+    onSaved,
+}: {
+    open: boolean;
+    model: AdminModel | null;
+    families: AdminFamily[];
+    channels: ChannelOption[];
+    modelSuggestions: string[];
+    onClose: () => void;
+    onSaved: () => Promise<void> | void;
+}) {
+    const apiRequest = useAdminRequest();
+    const { message } = AntApp.useApp();
+    const [familyId, setFamilyId] = useState("");
+    const [upstreamName, setUpstreamName] = useState("");
+    const [displayName, setDisplayName] = useState("");
+    const [description, setDescription] = useState("");
+    const [capability, setCapability] = useState("image");
+    const [metadata, setMetadata] = useState<MetadataDraft>(metadataDraftOf({}));
+    const [routes, setRoutes] = useState<RouteDraft[]>([]);
+    const [enabled, setEnabled] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [promptSkills, setPromptSkills] = useState<PromptSkillOption[]>([]);
+    const imageResolutionPricing = capability === 'image' && Boolean(model?.metadata?.cangyuanImage);
+
+    useEffect(() => {
+        if (!open) return;
+        setFamilyId(model?.familyId ?? families[0]?.id ?? "");
+        setUpstreamName(model?.upstreamName ?? "");
+        setDisplayName(model?.displayName ?? "");
+        setDescription(model?.description ?? "");
+        setCapability(model?.capability ?? "image");
+        setMetadata(metadataDraftOf(model?.metadata));
+        setRoutes(routeDraftsOf(model, channels));
+        setEnabled(model?.enabled !== false);
+    }, [open, model]);
+
+    useEffect(() => {
+        if (!open) return;
+        let alive = true;
+        apiRequest<{ skills: PromptSkillOption[] }>("/api/admin/prompt-skills")
+            .then((data) => { if (alive) setPromptSkills(data.skills); })
+            .catch(() => { if (alive) setPromptSkills([]); });
+        return () => { alive = false; };
+    }, [open, apiRequest]);
+
+    function updateRoute(index: number, patch: Partial<RouteDraft>) {
+        setRoutes((current) => current.map((route, routeIndex) => (routeIndex === index ? { ...route, ...patch } : route)));
+    }
+
+    function changeCapability(value: string) {
+        setCapability(value);
+        setMetadata((current) => ({
+            ...current,
+            upscaleAdapter: '',
+            promptSkill: promptSkills.some((skill) => skill.key === current.promptSkill && skill.capability === value) ? current.promptSkill : "",
+        }));
+        setRoutes((current) => current.map((route) => ({ ...route, unit: nextUnit(value, route.unit) })));
+    }
+
+    async function save() {
+        if (metadata.upscaleAdapter && routes.some(route => !(route.baseCredits > 0))) { message.error('请填写超分模型的实际售价'); return; }
+        if (!upstreamName.trim()) {
+            message.error("请填写上游模型名");
+            return;
+        }
+        if (!routes.length || routes.some((route) => !route.channelId)) {
+            message.error("请至少配置一条完整线路");
+            return;
+        }
+        setSaving(true);
+        try {
+            const { tags: _tags, referenceLimits: _referenceLimits, durations: _durations, aspectRatios: _aspectRatios, docsUrl: _docsUrl, promptSkill: _promptSkill, ...protocolMetadata } = model?.metadata ?? {};
+            const editedMetadata = metadataFromDraft(metadata);
+            if (protocolMetadata.videoProtocol === "tongxin") {
+                editedMetadata.referenceLimits = { ...(editedMetadata.referenceLimits as Record<string, number> | undefined), videos: 0, audios: 0 };
+            }
+            const nextMetadata = { ...protocolMetadata, ...editedMetadata };
+            if (!metadata.upscaleAdapter) delete nextMetadata.upscale;
+            if (capability === "image" && metadata.imageProtocol) nextMetadata.imageProtocol = metadata.imageProtocol;
+            else delete nextMetadata.imageProtocol;
+            if (capability === "image" || capability === "video") {
+                if (metadata.promptSkill) nextMetadata.promptSkill = metadata.promptSkill;
+                else delete nextMetadata.promptSkill;
+            } else {
+                delete nextMetadata.promptSkill;
+            }
+            const payload = {
+                familyId: familyId || null,
+                upstreamName: upstreamName.trim(),
+                displayName: displayName.trim() || upstreamName.trim(),
+                description,
+                capability,
+                metadata: nextMetadata,
+                enabled,
+                routes: routes.map((route) => ({
+                    channelId: route.channelId,
+                    unit: route.unit,
+                    baseCredits: route.baseCredits,
+                    resolutionMultipliers: capability === "video" || imageResolutionPricing ? resolutionsToMap(route.resolutions) : {},
+                    priority: route.priority,
+                    weight: route.weight,
+                    enabled: route.enabled,
+                })),
+            };
+            await apiRequest(model?.id ? `/api/admin/models/${model.id}` : "/api/admin/models", {
+                method: model?.id ? "PATCH" : "POST",
+                json: payload,
+            });
+            message.success("模型已保存");
+            await onSaved();
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <Modal title={model ? "编辑模型" : "新增模型"} open={open} onCancel={onClose} onOk={() => void save()} okText="保存" confirmLoading={saving} width={760}>
+            <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1 pt-1">
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <AdminField label="模型族" hint="用于前台按 Seedance、Grok 等系列分组。">
+                        <Select className="w-full" value={familyId || undefined} placeholder="未分组" onChange={setFamilyId} options={families.map((family) => ({ value: family.id, label: family.name }))} allowClear />
+                    </AdminField>
+                    <AdminField label="能力">
+                        <Select className="w-full" value={capability} onChange={changeCapability} options={CAPABILITIES} />
+                    </AdminField>
+                    <AdminField label="上游模型名" required>
+                        <AutoComplete className="w-full" value={upstreamName} onChange={setUpstreamName} options={modelSuggestions.map(value => ({ value }))} filterOption={(input, option) => String(option?.value ?? "").toLowerCase().includes(input.toLowerCase())} placeholder="选择已获取的模型，或手动输入名称" />
+                    </AdminField>
+                    <AdminField label="展示名">
+                        <Input {...ADMIN_AUTOFILL_OFF} name="sundas-model-display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="用户看到的名字" />
+                    </AdminField>
+                </div>
+
+                <AdminField label="模型描述" hint="显示在模型选择器详情里，可写适用场景、限制等。">
+                    <Input.TextArea {...ADMIN_AUTOFILL_OFF} name="sundas-model-description" value={description} onChange={(event) => setDescription(event.target.value)} autoSize={{ minRows: 2, maxRows: 4 }} placeholder="例如：1080p 快速生成，适合口播和商品展示。" />
+                </AdminField>
+
+                {capability === 'text' && <AdminField label="图像理解能力" hint="仅在已验证上游支持图片输入时启用，供创作助手检查真实参考帧。"><label><input type="checkbox" checked={metadata.visionInput} onChange={event => setMetadata({ ...metadata, visionInput: event.target.checked })} /> 支持图像理解</label></AdminField>}
+                {(capability === 'image' || capability === 'video') && <AdminField label="模型用途" hint="超分使用阿里云 VIAPI 渠道；配置售价并完成实际验收后启用，不会出现在普通生成列表。">
+                    <Select className="w-full" value={metadata.upscaleAdapter} options={[{ value: '', label: '普通生成 / 编辑' },
+                        { value: capability === 'image' ? 'aliyun-image-super-resolution' : 'aliyun-video-super-resolution', label: capability === 'image' ? '阿里云图片超分（1–4 倍）' : '阿里云视频超分（2 倍）' }]}
+                        onChange={value => { setMetadata({ ...metadata, upscaleAdapter: value }); if (value) { setUpstreamName(capability === 'image' ? 'MakeSuperResolutionImage' : 'SuperResolveVideo'); setEnabled(false); setRoutes(items => items.map(item => ({ ...item, baseCredits: 0, resolutions: [] }))); } }} />
+                </AdminField>}
+
+                {capability === "image" || capability === "video" ? (
+                    <AdminField label="提示词优化 Skill" hint="默认自动识别；也可按模型系列手动指定。">
+                        <Select
+                            className="w-full"
+                            allowClear
+                            value={metadata.promptSkill || undefined}
+                            placeholder="自动识别"
+                            options={promptSkills.filter((skill) => skill.capability === capability).map((skill) => ({ value: skill.key, label: skill.label }))}
+                            onChange={(value) => setMetadata({ ...metadata, promptSkill: value ?? "" })}
+                        />
+                    </AdminField>
+                ) : null}
+
+                <div className="rounded-[9px] border border-[var(--admin-line)] p-3">
+                    <div className="mb-3 text-xs font-medium text-[var(--admin-ink)]">能力与限制</div>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                        <AdminField label="参考图上限">
+                            <InputNumber {...ADMIN_AUTOFILL_OFF} name="sundas-model-ref-images" className="w-full" min={0} value={metadata.refImages} onChange={(value) => setMetadata({ ...metadata, refImages: Number(value) || 0 })} />
+                        </AdminField>
+                        {capability === "image" ? <AdminField label="图片协议" hint="Gemini 图片模型请选择 Gemini 原生。">
+                            <Select className="w-full" value={metadata.imageProtocol} onChange={(value) => setMetadata({ ...metadata, imageProtocol: value })} options={IMAGE_PROTOCOLS} />
+                        </AdminField> : null}
+                        <AdminField label="参考视频上限">
+                            <InputNumber {...ADMIN_AUTOFILL_OFF} name="sundas-model-ref-videos" className="w-full" min={0} value={metadata.refVideos} onChange={(value) => setMetadata({ ...metadata, refVideos: Number(value) || 0 })} />
+                        </AdminField>
+                        <AdminField label="参考音频上限">
+                            <InputNumber {...ADMIN_AUTOFILL_OFF} name="sundas-model-ref-audios" className="w-full" min={0} value={metadata.refAudios} onChange={(value) => setMetadata({ ...metadata, refAudios: Number(value) || 0 })} />
+                        </AdminField>
+                        {capability === "video" ? (
+                            <>
+                                <AdminField label="最短时长（秒）">
+                                    <InputNumber {...ADMIN_AUTOFILL_OFF} name="sundas-model-duration-min" className="w-full" min={0} value={metadata.durationMin} onChange={(value) => setMetadata({ ...metadata, durationMin: Number(value) || 0 })} />
+                                </AdminField>
+                                <AdminField label="最长时长（秒）">
+                                    <InputNumber {...ADMIN_AUTOFILL_OFF} name="sundas-model-duration-max" className="w-full" min={0} value={metadata.durationMax} onChange={(value) => setMetadata({ ...metadata, durationMax: Number(value) || 0 })} />
+                                </AdminField>
+                                <AdminField label="宽高比">
+                                    <Input {...ADMIN_AUTOFILL_OFF} name="sundas-model-aspect-ratios" value={metadata.aspectRatios} onChange={(event) => setMetadata({ ...metadata, aspectRatios: event.target.value })} placeholder="16:9, 9:16, 1:1" />
+                                </AdminField>
+                            </>
+                        ) : null}
+                    </div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <AdminField label="标签">
+                            <Input {...ADMIN_AUTOFILL_OFF} name="sundas-model-tags" value={metadata.tags} onChange={(event) => setMetadata({ ...metadata, tags: event.target.value })} placeholder="快速, 人物, 口播" />
+                        </AdminField>
+                        <AdminField label="文档链接">
+                            <Input {...ADMIN_AUTOFILL_OFF} name="sundas-model-docs-url" value={metadata.docsUrl} onChange={(event) => setMetadata({ ...metadata, docsUrl: event.target.value })} placeholder="https://..." />
+                        </AdminField>
+                    </div>
+                </div>
+
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <div className="text-xs font-medium text-[var(--admin-ink)]">模型线路</div>
+                            <div className="mt-0.5 text-[11px] text-[var(--admin-muted)]">一个模型绑多个渠道；前台只显示一次，网关按优先级和健康状态选路。</div>
+                        </div>
+                        <Button size="small" icon={<Plus size={13} />} onClick={() => setRoutes([...routes, { channelId: channels[0]?.id ?? "", unit: nextUnit(capability, "request"), baseCredits: 1, priority: routes.length, weight: 100, enabled: true, resolutions: defaultResolutions.map((row) => ({ ...row })) }])}>
+                            添加线路
+                        </Button>
+                    </div>
+                    {routes.map((route, index) => (
+                        <div key={index} className="space-y-3 rounded-[9px] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-medium text-[var(--admin-ink)]">线路 {index + 1}</span>
+                                    {route.channelId ? <AdminBadge tone={route.enabled ? "positive" : "neutral"}>{route.enabled ? "启用" : "停用"}</AdminBadge> : null}
+                                </div>
+                                <Button type="text" danger icon={<Trash2 size={14} />} aria-label="删除线路" onClick={() => setRoutes(routes.filter((_item, routeIndex) => routeIndex !== index))} />
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                <AdminField label="渠道" required>
+                                    <Select className="w-full" value={route.channelId || undefined} placeholder="选择渠道" onChange={(value) => updateRoute(index, { channelId: value })} options={channels.map((channel) => ({ value: channel.id, label: `${channel.name}${channel.healthStatus === "down" ? "（异常）" : ""}` }))} />
+                                </AdminField>
+                                <AdminField label="计量单位">
+                                    <Select className="w-full" value={route.unit} onChange={(value) => updateRoute(index, { unit: value })} options={unitsFor(capability)} />
+                                </AdminField>
+                                <AdminField label="单价（积分）">
+                                    <InputNumber {...ADMIN_AUTOFILL_OFF} name={`sundas-route-credits-${index}`} className="w-full" min={0.0001} step={0.5} value={route.baseCredits} onChange={(value) => updateRoute(index, { baseCredits: Number(value) || 0 })} />
+                                </AdminField>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <AdminField label="优先级">
+                                        <InputNumber {...ADMIN_AUTOFILL_OFF} name={`sundas-route-priority-${index}`} className="w-full" value={route.priority} onChange={(value) => updateRoute(index, { priority: Number(value) || 0 })} />
+                                    </AdminField>
+                                    <AdminField label="权重">
+                                        <InputNumber {...ADMIN_AUTOFILL_OFF} name={`sundas-route-weight-${index}`} className="w-full" min={1} value={route.weight} onChange={(value) => updateRoute(index, { weight: Number(value) || 100 })} />
+                                    </AdminField>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-[11px] text-[var(--admin-muted)]">优先级越小越先尝试，权重用于同优先级排序。</span>
+                                <Switch checked={route.enabled} onChange={(checked) => updateRoute(index, { enabled: checked })} />
+                            </div>
+                            {capability === "video" || imageResolutionPricing ? (
+                                <div className="space-y-2 border-t border-[var(--admin-line)] pt-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[11px] text-[var(--admin-muted)]">该线路支持的分辨率</span>
+                                        <Button size="small" type="text" icon={<Plus size={12} />} onClick={() => updateRoute(index, { resolutions: [...route.resolutions, { value: "", multiplier: 1 }] })}>分辨率</Button>
+                                    </div>
+                                    {route.resolutions.map((row, resolutionIndex) => (
+                                        <div key={resolutionIndex} className="grid grid-cols-[1fr_100px_28px] gap-2">
+                                            <Input {...ADMIN_AUTOFILL_OFF} name={`sundas-route-resolution-${index}-${resolutionIndex}`} value={row.value} placeholder="720 / 1080 / 2k / 4k" onChange={(event) => updateRoute(index, { resolutions: route.resolutions.map((item, itemIndex) => (itemIndex === resolutionIndex ? { ...item, value: event.target.value } : item)) })} />
+                                            <InputNumber {...ADMIN_AUTOFILL_OFF} name={`sundas-route-resolution-multiplier-${index}-${resolutionIndex}`} className="w-full" min={0.1} step={0.1} value={row.multiplier} onChange={(value) => updateRoute(index, { resolutions: route.resolutions.map((item, itemIndex) => (itemIndex === resolutionIndex ? { ...item, multiplier: Number(value) || 1 } : item)) })} />
+                                            <Button type="text" danger icon={<Trash2 size={13} />} aria-label="删除分辨率" onClick={() => updateRoute(index, { resolutions: route.resolutions.filter((_item, itemIndex) => itemIndex !== resolutionIndex) })} />
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+                    ))}
+                </div>
+
+                <div className="flex items-center justify-between rounded-[9px] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] px-3 py-2.5">
+                    <div>
+                        <div className="text-xs font-medium text-[var(--admin-ink)]">启用模型</div>
+                        <div className="mt-0.5 text-[11px] text-[var(--admin-muted)]">关闭后前台不会展示该模型。</div>
+                    </div>
+                    <Switch checked={enabled} onChange={setEnabled} />
+                </div>
+            </div>
+        </Modal>
+    );
+}
 
 
 ========================================================================
@@ -2114,850 +2854,6 @@ export function RedeemTab() {
                     </div>
                     <AdminField label="过期时间" hint="留空表示永久有效。">
                         <DatePicker className="w-full" showTime value={expiresAt} onChange={setExpiresAt} placeholder="永久有效" />
-                    </AdminField>
-                </div>
-            </Modal>
-        </div>
-    );
-}
-
-
-========================================================================
-FILE: web/src/pages/admin/components/settings.tsx
-LINES: 1-491
-========================================================================
-import { useCallback, useEffect, useState } from "react";
-import { App as AntApp, Button, Checkbox, Input, InputNumber, Select, Switch, Tabs } from "antd";
-import { Calculator, CreditCard, Globe2, HardDrive, Home, Mail, ReceiptText, RefreshCw, Sparkles } from "lucide-react";
-
-import { useAdminRequest } from "../use-admin-request";
-import { useAdminPermissions } from "../permissions";
-import { clearSiteInfoCache } from "@/services/api/site";
-import { fetchPromptSources } from "@/services/api/prompts";
-import { ADMIN_AUTOFILL_OFF, AdminBadge, AdminField, AdminLoading, AdminPanel } from "./ui";
-
-type FieldType = "text" | "password" | "number" | "bool" | "list" | "textarea" | "payTypes" | "source" | "model";
-type SettingField = { name: string; label: string; type?: FieldType; step?: number; hint?: string; placeholder?: string; span?: 2; modelCapability?: "text" };
-type SectionKey = "site" | "home" | "smtp" | "epay" | "zpay" | "alipay" | "billing" | "payment" | "storage" | "promptOptimizer" | "creationChat";
-type Section = { key: SectionKey; title: string; fields: SettingField[] };
-
-const SECTIONS: Record<SectionKey, Section> = {
-    site: {
-        key: "site",
-        title: "站点信息",
-        fields: [
-            { name: "name", label: "站点名称", placeholder: "sundas" },
-            { name: "apiIntegrationUrl", label: "API 对接链接", span: 2, placeholder: "https://api.example.com", hint: "配置后导航栏显示「API 对接」，点击在新标签页打开。留空隐藏入口。" },
-            { name: "description", label: "站点描述", type: "textarea", span: 2, placeholder: "一句话介绍这个站点", hint: "用于页面元信息与前台展示。" },
-        ],
-    },
-    smtp: {
-        key: "smtp",
-        title: "邮件发送",
-        fields: [
-            { name: "host", label: "SMTP 主机", placeholder: "smtp.example.com" },
-            { name: "port", label: "端口", type: "number", hint: "SSL 常见 465，STARTTLS 常见 587。" },
-            { name: "user", label: "用户名" },
-            { name: "pass", label: "密码 / 授权码", type: "password" },
-            { name: "from", label: "发件人", span: 2, placeholder: "sundas <no-reply@example.com>" },
-            { name: "secure", label: "SSL 加密", type: "bool", hint: "465 端口通常需要开启。" },
-        ],
-    },
-    epay: {
-        key: "epay",
-        title: "易支付",
-        fields: [
-            { name: "gateway", label: "网关地址", placeholder: "https://pay.example.com" },
-            { name: "pid", label: "商户 ID" },
-            { name: "key", label: "商户密钥", type: "password" },
-            { name: "enabled", label: "启用渠道", type: "bool" },
-        ],
-    },
-    zpay: {
-        key: "zpay",
-        title: "ZPay",
-        fields: [
-            { name: "gateway", label: "网关地址", placeholder: "https://zpay.example.com" },
-            { name: "pid", label: "商户 ID" },
-            { name: "key", label: "商户密钥", type: "password" },
-            { name: "enabled", label: "启用渠道", type: "bool" },
-        ],
-    },
-    alipay: {
-        key: "alipay",
-        title: "支付宝官方 · 电脑 / 手机网站支付",
-        fields: [
-            { name: "appId", label: "应用 APPID", placeholder: "16 位数字", hint: "使用已开通对应支付产品的网页应用；手机 H5 需签约手机网站支付。" },
-            { name: "sellerId", label: "收款账户 UID", placeholder: "16 位数字", hint: "填写该应用实际收款支付宝账户的 UID。" },
-            { name: "privateKey", label: "应用私钥（RSA2）", type: "password", span: 2, hint: "使用公钥模式；填写应用私钥的完整 Base64 内容。保存后仅显示掩码。" },
-            { name: "alipayPublicKey", label: "支付宝公钥", type: "textarea", span: 2, hint: "上传应用公钥后，从支付宝开放平台获取。请勿填写应用公钥或证书。" },
-            { name: "sandbox", label: "沙箱环境", type: "bool", hint: "默认开启，需使用整套沙箱配置；正式收款需换成正式配置并关闭沙箱。" },
-            { name: "pageEnabled", label: "电脑网站支付", type: "bool", hint: "仅在应用已开通电脑网站支付时开启。" },
-            { name: "wapEnabled", label: "手机 H5 支付", type: "bool", hint: "仅在应用已开通手机网站支付时开启。手机浏览器自动使用 H5 收银台，电脑继续使用电脑网站支付。" },
-            { name: "enabled", label: "启用渠道", type: "bool", hint: "默认关闭。完成签约和联调后启用，并在「支付方式与订单」勾选支付宝。" },
-        ],
-    },
-    billing: {
-        key: "billing",
-        title: "计费规则",
-        fields: [
-            { name: "memberDiscount", label: "未绑定档位的会员生成折扣", type: "number", step: 0.01, hint: "0.9 表示 9 折，1 表示标准计费。已绑定档位的套餐请在「模型与套餐 → 会员档位」配置；已购会员沿用折扣快照。" },
-            { name: "promoMultiplier", label: "活动倍率", type: "number", step: 0.01, hint: "1 表示原价，0.8 表示活动 8 折。" },
-            { name: "registerCredits", label: "注册赠送积分", type: "number", hint: "新用户首次注册到账，永久有效。" },
-            { name: "creditPriceCents", label: "每积分价格（分）", type: "number", hint: "10 表示 0.1 元/积分。" },
-            { name: "minCredits", label: "最少充值积分", type: "number", hint: "单笔充值的最低积分数。" },
-            { name: "textRequestCredits", label: "文本请求基础积分", type: "number", hint: "每次文本请求的基础扣费。" },
-        ],
-    },
-    creationChat: {
-        key: "creationChat",
-        title: "创作对话看图模型",
-        fields: [
-            { name: "modelId", label: "专用看图模型", type: "model", modelCapability: "text", span: 2, placeholder: "选择支持图片输入的文本模型", hint: "请确认该模型及线路支持图片输入。创作对话带图时固定使用此模型，按该模型现有积分价格计费。" },
-            { name: "enabled", label: "启用对话看图", type: "bool", hint: "关闭后普通文字对话仍可使用；带图对话会提示配置，不能冒充已经看图。" },
-        ],
-    },
-    promptOptimizer: {
-        key: "promptOptimizer",
-        title: "提示词优化",
-        fields: [
-            { name: "modelId", label: "优化用文本模型", type: "model", modelCapability: "text", span: 2, placeholder: "选择 OpenAI 文本模型", hint: "每次优化按该模型的现有积分价格正常冻结和结算；失败或取消自动退款。支持已启用的 OpenAI Chat 或 Responses 文本模型。" },
-            { name: "enabled", label: "启用提示词优化", type: "bool", hint: "关闭后前台按钮仍可见，但请求会提示暂未配置。" },
-        ],
-    },
-    payment: {
-        key: "payment",
-        title: "订单参数",
-        fields: [
-            { name: "orderTtlMinutes", label: "订单关单分钟", type: "number", hint: "超时未支付自动关闭。" },
-            { name: "payTypes", label: "开启的支付方式", type: "payTypes", span: 2, hint: "可仅开启微信、仅开启支付宝或同时开启；全部取消则暂停新订单。需同时在「支付渠道」启用并配置支付网关。" },
-        ],
-    },
-    home: {
-        key: "home",
-        title: "首页文案",
-        fields: [
-            { name: "heroKicker", label: "首屏小标签", placeholder: "AI 视频创作工作台", hint: "轮播图上方那一行带圆点的小字。留空则用内置文案。" },
-            { name: "heroTitleLead", label: "大标题（前半）", placeholder: "从一个" },
-            { name: "heroTitleAccent", label: "大标题（高亮）", placeholder: "画面" },
-            { name: "heroTitleTail", label: "大标题（后半）", placeholder: "开始。" },
-            { name: "heroDescription", label: "首屏描述", type: "textarea", span: 2, placeholder: "输入镜头、角色或故事，图片与视频共用同一个入口，进入对应的工作台。" },
-            { name: "heroVideoCta", label: "主按钮文案", placeholder: "生成视频" },
-            { name: "heroCanvasCta", label: "次按钮文案", placeholder: "进入画布" },
-            { name: "composerVideoMode", label: "创作入口：视频", placeholder: "视频" },
-            { name: "composerImageMode", label: "创作入口：图片", placeholder: "图片" },
-            { name: "composerPlaceholder", label: "输入框占位文案", placeholder: "描述你想生成的画面、镜头运动或故事……" },
-            { name: "composerStartCta", label: "开始创作按钮", placeholder: "开始创作" },
-            { name: "composerLoginCta", label: "未登录按钮文案", placeholder: "登录后开始创作" },
-            { name: "composerHint", label: "底部快捷键提示", span: 2, placeholder: "⌘ / Ctrl + Enter 开始创作" },
-            { name: "canvasesEnabled", label: "显示「最近画布」区块", type: "bool" },
-            { name: "canvasesTitle", label: "画布区块标题", placeholder: "最近画布" },
-            { name: "canvasesNote", label: "画布区块描述", placeholder: "继续上一次的画面", span: 2 },
-            { name: "canvasesViewAll", label: "画布区块链接文案", placeholder: "查看全部" },
-            { name: "canvasesNew", label: "新建画布卡片文案", placeholder: "新建画布" },
-            { name: "canvasesOpen", label: "新建画布副文案", placeholder: "打开画布" },
-            { name: "inspirationEnabled", label: "显示「灵感大厅」区块", type: "bool" },
-            { name: "inspirationTitle", label: "灵感大厅标题", placeholder: "灵感大厅" },
-            { name: "inspirationDescription", label: "灵感大厅描述", type: "textarea", span: 2, placeholder: "从提示词库挑一个方向，继续你的创作。" },
-            { name: "inspirationViewAll", label: "提示词库链接文案", placeholder: "查看提示词库" },
-            { name: "inspirationVideoTab", label: "灵感大厅：视频标签", placeholder: "视频" },
-            { name: "inspirationImageTab", label: "灵感大厅：图片标签", placeholder: "图片" },
-            { name: "inspirationEmpty", label: "空列表文案", placeholder: "暂无提示词" },
-            { name: "inspirationSourceId", label: "灵感大厅数据来源", type: "source", placeholder: "全部来源（不限）", hint: "选定后，视频页签与图片页签只展示该来源的提示词；不选则展示全部来源。来源列表来自提示词库。" },
-            { name: "inspirationVideoLimit", label: "视频页签条数", type: "number", hint: "0 表示沿用下方「灵感大厅展示条数」（默认 12 条，桌面端 4 列正好 3 行）。" },
-            { name: "inspirationImageLimit", label: "图片页签条数", type: "number", hint: "0 表示沿用下方「灵感大厅展示条数」（默认 12 条）。" },
-            { name: "promptLimit", label: "灵感大厅展示条数", type: "number", hint: "0 表示不限（实际展示 12 条）。仅控制首页展示数量，不影响提示词库本身。" },
-        ],
-    },
-    storage: {
-        key: "storage",
-        title: "存储空间",
-        fields: [
-            { name: "quotaGb", label: "单用户存储上限（GB）", type: "number", hint: "所有上传素材和生成媒体的总容量上限；修改后立即影响新上传。" },
-        ],
-    },
-};
-
-type SettingsTab = { key: string; label: string; description: string; icon: typeof Globe2; sections: SectionKey[] };
-
-const TABS: SettingsTab[] = [
-    { key: "site", label: "站点", description: "站点名称和描述会出现在页面元信息与前台展示中。", icon: Globe2, sections: ["site"] },
-    { key: "home", label: "首页文案", description: "覆盖首页各区块的标题、描述与按钮文案；留空表示沿用内置默认文案（跟随界面语言）。保存后刷新前台页面生效。", icon: Home, sections: ["home"] },
-    { key: "smtp", label: "邮件", description: "注册验证码、找回密码等邮件依赖这里的 SMTP 配置。", icon: Mail, sections: ["smtp"] },
-    { key: "payments", label: "支付渠道", description: "至少启用一个渠道；密钥只写入不回显，保存后下一次支付请求生效。", icon: CreditCard, sections: ["alipay", "epay", "zpay"] },
-    { key: "billing", label: "计费", description: "会员折扣、活动倍率和积分价格会直接影响下单与生成扣费。", icon: Calculator, sections: ["billing"] },
-    { key: "orders", label: "支付方式与订单", description: "控制支付订单的有效期与收银台展示的支付方式。", icon: ReceiptText, sections: ["payment"] },
-    { key: "storage", label: "存储", description: "配置每个用户的媒体存储空间上限，用户头像菜单会显示已用容量。", icon: HardDrive, sections: ["storage"] },
-    { key: "creationChat", label: "对话看图", description: "配置创作聊天专用的视觉模型和启用状态。", icon: Sparkles, sections: ["creationChat"] },
-    { key: "promptOptimizer", label: "提示词优化", description: "选择前台提示词优化使用的文本模型（Chat / Responses）；按该模型现有价格正常扣积分。", icon: Sparkles, sections: ["promptOptimizer"] },
-];
-
-type SettingsState = Record<string, Record<string, unknown>>;
-
-export function SettingsTab() {
-    const apiRequest = useAdminRequest();
-    const { message } = AntApp.useApp();
-    const [settings, setSettings] = useState<SettingsState>({});
-    const [saved, setSaved] = useState<SettingsState>({});
-    const [activeTab, setActiveTab] = useState("site");
-    const [saving, setSaving] = useState("");
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
-
-    const load = useCallback(async () => {
-        setLoading(true);
-        setError("");
-        try {
-            const data = await apiRequest<{ settings: SettingsState }>("/api/admin/settings");
-            setSettings(data.settings);
-            setSaved(data.settings);
-        } catch (reason) {
-            const text = reason instanceof Error ? reason.message : String(reason);
-            setError(text);
-            message.error(text);
-        } finally {
-            setLoading(false);
-        }
-    }, [message]);
-
-    useEffect(() => {
-        void load();
-    }, [load]);
-
-    function update(section: SectionKey, field: string, value: unknown) {
-        setSettings((previous) => ({ ...previous, [section]: { ...(previous[section] ?? {}), [field]: value } }));
-    }
-
-    function isDirty(tab: SettingsTab) {
-        return tab.sections.some((section) => JSON.stringify(settings[section] ?? {}) !== JSON.stringify(saved[section] ?? {}));
-    }
-
-    async function save(tab: SettingsTab) {
-        setSaving(tab.key);
-        try {
-            for (const section of tab.sections) {
-                await apiRequest(`/api/admin/settings/${section}`, { method: "PUT", json: { value: settings[section] ?? {} } });
-            }
-            setSaved((previous) => {
-                const next = { ...previous };
-                for (const section of tab.sections) next[section] = settings[section] ?? {};
-                return next;
-            });
-            if (tab.sections.includes("site")) clearSiteInfoCache();
-            message.success("设置已保存，下一次请求生效");
-        } catch (reason) {
-            message.error(reason instanceof Error ? reason.message : String(reason));
-        } finally {
-            setSaving("");
-        }
-    }
-
-    if (loading) return <AdminLoading label="正在读取系统设置" />;
-    if (error && !Object.keys(settings).length) {
-        return (
-            <AdminPanel title="设置暂时不可用" description={error} actions={<Button icon={<RefreshCw className="size-4" />} onClick={() => void load()}>重试</Button>}>
-                <p className="text-sm text-[var(--admin-muted)]">检查 API 服务或管理员权限后重试。</p>
-            </AdminPanel>
-        );
-    }
-
-    return (
-        <div>
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs leading-5 text-[var(--admin-muted)]">修改保存后立即写入数据库，支付与邮件参数会在下一次请求使用。</p>
-                <AdminBadge tone="neutral" dot={false}>按页签分别保存</AdminBadge>
-            </div>
-            <Tabs
-                activeKey={activeTab}
-                onChange={setActiveTab}
-                items={TABS.map((tab) => ({
-                    key: tab.key,
-                    label: (
-                        <span className="inline-flex items-center gap-2">
-                            <span className="hidden sm:inline-flex">
-                                <tab.icon className="size-3.5" />
-                            </span>
-                            {tab.label}
-                            {isDirty(tab) ? <span className="size-1.5 rounded-full bg-[var(--admin-warning)]" /> : null}
-                        </span>
-                    ),
-                    children: (
-                        <SettingsPane
-                            tab={tab}
-                            settings={settings}
-                            update={update}
-                            dirty={isDirty(tab)}
-                            saving={saving === tab.key}
-                            disabled={Boolean(saving)}
-                            onSave={() => void save(tab)}
-                        />
-                    ),
-                }))}
-            />
-        </div>
-    );
-}
-
-function SettingsPane({
-    tab,
-    settings,
-    update,
-    dirty,
-    saving,
-    disabled,
-    onSave,
-}: {
-    tab: SettingsTab;
-    settings: SettingsState;
-    update: (section: SectionKey, field: string, value: unknown) => void;
-    dirty: boolean;
-    saving: boolean;
-    disabled: boolean;
-    onSave: () => void;
-}) {
-    const canManage = useAdminPermissions().includes("settings.manage");
-    return (
-        <AdminPanel
-            title={tab.label}
-            description={tab.description}
-            actions={dirty ? <AdminBadge tone="warning" dot={false}>有未保存修改</AdminBadge> : <AdminBadge tone="positive" dot={false}>已同步</AdminBadge>}
-        >
-            <form autoComplete="off" onSubmit={(event) => event.preventDefault()}>
-                <fieldset disabled={!canManage}>
-                {tab.key === "payments" ? (
-                    <div className="grid gap-4 xl:grid-cols-2">
-                        {tab.sections.map((section) => (
-                            <PaymentSection key={section} section={SECTIONS[section]} settings={settings} update={update} />
-                        ))}
-                    </div>
-                ) : (
-                    <SectionFields section={SECTIONS[tab.sections[0]]} settings={settings} update={update} />
-                )}
-                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--admin-line)] pt-4">
-                    <span className="text-[11px] text-[var(--admin-muted)]">保存后立即生效；密钥类字段不会回显明文。</span>
-                    {canManage && <Button type="primary" loading={saving} disabled={!dirty || disabled} onClick={onSave}>
-                        保存更改
-                    </Button>}
-                </div>
-                </fieldset>
-            </form>
-        </AdminPanel>
-    );
-}
-
-function PaymentSection({
-    section,
-    settings,
-    update,
-}: {
-    section: Section;
-    settings: SettingsState;
-    update: (section: SectionKey, field: string, value: unknown) => void;
-}) {
-    const enabled = Boolean(settings[section.key]?.enabled);
-    return (
-        <section className="rounded-[12px] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-[var(--admin-ink)]">{section.title}</h3>
-                <AdminBadge tone={enabled ? "positive" : "neutral"}>{enabled ? "已启用" : "未启用"}</AdminBadge>
-            </div>
-            <div className="grid gap-4">
-                {section.fields.filter((field) => field.type !== "bool").map((field) => (
-                    <SettingControl key={field.name} section={section} field={field} settings={settings} update={update} />
-                ))}
-            </div>
-            <div className="mt-4 border-t border-[var(--admin-line)] pt-4">
-                {section.fields.filter((field) => field.type === "bool").map((field) => (
-                    <SettingControl key={field.name} section={section} field={field} settings={settings} update={update} />
-                ))}
-            </div>
-        </section>
-    );
-}
-
-function SectionFields({ section, settings, update }: { section: Section; settings: SettingsState; update: (section: SectionKey, field: string, value: unknown) => void }) {
-    return (
-        <div className="grid gap-x-5 gap-y-5 md:grid-cols-2">
-            {section.fields.map((field) => (
-                <SettingControl key={field.name} section={section} field={field} settings={settings} update={update} className={field.span === 2 ? "md:col-span-2" : undefined} />
-            ))}
-        </div>
-    );
-}
-
-function SettingControl({
-    section,
-    field,
-    settings,
-    update,
-    className,
-}: {
-    section: Section;
-    field: SettingField;
-    settings: SettingsState;
-    update: (section: SectionKey, field: string, value: unknown) => void;
-    className?: string;
-}) {
-    const value = settings[section.key]?.[field.name];
-    const name = `sundas-${section.key}-${field.name}`;
-    const apiRequest = useAdminRequest();
-    const [promptSources, setPromptSources] = useState<{ id: string; name: string }[]>([]);
-    const [models, setModels] = useState<{ id: string; displayName: string; capability: string; enabled: boolean; routes: { unit: string; protocol: string; textMode: string; enabled: boolean }[] }[]>([]);
-
-    useEffect(() => {
-        if (field.type !== "source") return;
-        let alive = true;
-        fetchPromptSources().then((list) => { if (alive) setPromptSources(list); }).catch(() => { if (alive) setPromptSources([]); });
-        return () => { alive = false; };
-    }, [field.type]);
-
-    useEffect(() => {
-        if (field.type !== "model") return;
-        let alive = true;
-        apiRequest<{ models: { id: string; displayName: string; capability: string; enabled: boolean; routes: { unit: string; protocol: string; textMode: string; enabled: boolean }[] }[] }>("/api/admin/models")
-            .then((data) => { if (alive) setModels(data.models); })
-            .catch(() => { if (alive) setModels([]); });
-        return () => { alive = false; };
-    }, [apiRequest, field.type]);
-
-    if (field.type === "source") {
-        return (
-            <AdminField label={field.label} hint={field.hint} className={className}>
-                <Select
-                    className="w-full"
-                    allowClear
-                    value={String(value ?? "") || undefined}
-                    placeholder={field.placeholder}
-                    options={promptSources.map((source) => ({ label: `${source.name}（${source.id}）`, value: source.id }))}
-                    onChange={(next) => update(section.key, field.name, next ?? "")}
-                />
-            </AdminField>
-        );
-    }
-
-    if (field.type === "model") {
-        const options = models.filter((model) => model.enabled && model.capability === field.modelCapability
-            && model.routes.some((route) => route.enabled && route.unit === "request" && route.protocol === "openai"))
-            .map((model) => ({ value: model.id, label: model.displayName }));
-        return (
-            <AdminField label={field.label} hint={field.hint} className={className}>
-                <Select
-                    className="w-full"
-                    showSearch
-                    allowClear
-                    optionFilterProp="label"
-                    value={String(value ?? "") || undefined}
-                    placeholder={field.placeholder}
-                    options={options}
-                    notFoundContent="暂无已启用的 OpenAI 文本模型"
-                    onChange={(next) => update(section.key, field.name, next ?? "")}
-                />
-            </AdminField>
-        );
-    }
-
-    if (field.type === "bool") {
-        return (
-            <AdminField label={field.label} hint={field.hint} className={className}>
-                <div className="flex h-[38px] items-center justify-between rounded-[9px] border border-[var(--admin-line)] bg-[var(--admin-panel)] px-3">
-                    <span className="text-xs text-[var(--admin-muted)]">{value ? "已启用" : "未启用"}</span>
-                    <Switch checked={Boolean(value)} onChange={(checked) => update(section.key, field.name, checked)} />
-                </div>
-            </AdminField>
-        );
-    }
-
-    if (field.type === "payTypes") {
-        return (
-            <AdminField label={field.label} hint={field.hint} className={className}>
-                <Checkbox.Group name={name} value={Array.isArray(value) ? value : []}
-                    options={[{ label: "微信支付", value: "wxpay" }, { label: "支付宝", value: "alipay" }]}
-                    onChange={(next) => update(section.key, field.name, next)} />
-            </AdminField>
-        );
-    }
-
-    if (field.type === "textarea") {
-        return (
-            <AdminField label={field.label} hint={field.hint} className={className}>
-                <Input.TextArea {...ADMIN_AUTOFILL_OFF} name={name} rows={3} value={String(value ?? "")} placeholder={field.placeholder} onChange={(event) => update(section.key, field.name, event.target.value)} />
-            </AdminField>
-        );
-    }
-
-    if (field.type === "number") {
-        return (
-            <AdminField label={field.label} hint={field.hint} className={className}>
-                <InputNumber {...ADMIN_AUTOFILL_OFF} name={name} className="w-full" value={Number(value ?? 0)} step={field.step} onChange={(next) => update(section.key, field.name, Number(next) || 0)} />
-            </AdminField>
-        );
-    }
-
-    if (field.type === "list") {
-        return (
-            <AdminField label={field.label} hint={field.hint} className={className}>
-                <Input
-                    {...ADMIN_AUTOFILL_OFF}
-                    name={name}
-                    value={Array.isArray(value) ? value.join(", ") : String(value ?? "")}
-                    placeholder={field.placeholder}
-                    onChange={(event) => update(section.key, field.name, event.target.value.split(",").map((item) => item.trim()).filter(Boolean))}
-                />
-            </AdminField>
-        );
-    }
-
-    return (
-        <AdminField label={field.label} hint={field.hint} className={className}>
-            {field.type === "password" ? (
-                <Input.Password {...ADMIN_AUTOFILL_OFF} autoComplete="new-password" name={name} value={String(value ?? "")} placeholder={field.placeholder} onChange={(event) => update(section.key, field.name, event.target.value)} />
-            ) : (
-                <Input {...ADMIN_AUTOFILL_OFF} name={name} value={String(value ?? "")} placeholder={field.placeholder} onChange={(event) => update(section.key, field.name, event.target.value)} />
-            )}
-        </AdminField>
-    );
-}
-
-
-========================================================================
-FILE: web/src/pages/admin/components/ui.tsx
-LINES: 1-114
-========================================================================
-import type { ReactNode } from "react";
-import { Spin } from "antd";
-
-import { cn } from "@/lib/utils";
-
-export function AdminPanel({
-    title,
-    description,
-    actions,
-    children,
-    className,
-    bodyClassName,
-    flush = false,
-}: {
-    title?: ReactNode;
-    description?: ReactNode;
-    actions?: ReactNode;
-    children: ReactNode;
-    className?: string;
-    bodyClassName?: string;
-    flush?: boolean;
-}) {
-    return (
-        <section className={cn("overflow-hidden rounded-[14px] border border-[var(--admin-line)] bg-[var(--admin-panel)]", className)}>
-            {title || description || actions ? (
-                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--admin-line)] px-5 py-4">
-                    <div className="min-w-0">
-                        {title ? <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-[var(--admin-ink)]">{title}</h2> : null}
-                        {description ? <p className="mt-1 max-w-[72ch] text-xs leading-5 text-[var(--admin-muted)]">{description}</p> : null}
-                    </div>
-                    {actions ? <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
-                </div>
-            ) : null}
-            <div className={cn(flush ? "" : "p-5", bodyClassName)}>{children}</div>
-        </section>
-    );
-}
-
-export function AdminToolbar({ children, className }: { children: ReactNode; className?: string }) {
-    return <div className={cn("flex flex-wrap items-center gap-2 border-b border-[var(--admin-line)] px-5 py-3", className)}>{children}</div>;
-}
-
-export function AdminField({
-    label,
-    hint,
-    required,
-    children,
-    className,
-}: {
-    label: ReactNode;
-    hint?: ReactNode;
-    required?: boolean;
-    children: ReactNode;
-    className?: string;
-}) {
-    return (
-        <label className={cn("block", className)}>
-            <span className="mb-1.5 flex items-center gap-1 text-xs font-medium text-[var(--admin-muted)]">
-                {label}
-                {required ? <span className="text-[var(--admin-danger)]">*</span> : null}
-            </span>
-            {children}
-            {hint ? <span className="mt-1.5 block text-[11px] leading-4 text-[var(--admin-muted)]">{hint}</span> : null}
-        </label>
-    );
-}
-
-export const ADMIN_AUTOFILL_OFF = {
-    autoComplete: "off",
-    "data-lpignore": "true",
-    "data-1p-ignore": "true",
-    "data-form-type": "other",
-} as const;
-
-export type AdminBadgeTone = "neutral" | "positive" | "warning" | "danger" | "accent";
-
-const BADGE_TONES: Record<AdminBadgeTone, string> = {
-    neutral: "border-[var(--admin-line)] bg-[var(--admin-panel-soft)] text-[var(--admin-muted)]",
-    positive: "border-[var(--admin-positive-line)] bg-[var(--admin-positive-soft)] text-[var(--admin-positive)]",
-    warning: "border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]",
-    danger: "border-[var(--admin-danger-line)] bg-[var(--admin-danger-soft)] text-[var(--admin-danger)]",
-    accent: "border-[rgba(212,255,58,0.38)] bg-[var(--admin-accent-soft)] text-[var(--admin-ink)] dark:text-[var(--admin-accent)]",
-};
-
-export function AdminBadge({ tone = "neutral", children, dot = true }: { tone?: AdminBadgeTone; children: ReactNode; dot?: boolean }) {
-    return (
-        <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-5", BADGE_TONES[tone])}>
-            {dot ? <span className="size-1.5 rounded-full bg-current" /> : null}
-            {children}
-        </span>
-    );
-}
-
-export function AdminStat({ label, value, note, accent = false }: { label: ReactNode; value: ReactNode; note?: ReactNode; accent?: boolean }) {
-    return (
-        <div className="min-w-0 px-5 py-5 sm:px-6">
-            <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-medium text-[var(--admin-muted)]">{label}</span>
-                {accent ? <span className="size-1.5 rounded-full bg-[var(--admin-accent)]" /> : null}
-            </div>
-            <div className="mt-2.5 text-[28px] font-semibold leading-none tracking-[-0.035em] tabular-nums text-[var(--admin-ink)]">{value}</div>
-            {note ? <div className="mt-2.5 text-[11px] leading-4 text-[var(--admin-muted)]">{note}</div> : null}
-        </div>
-    );
-}
-
-export function AdminLoading({ label = "加载中" }: { label?: string }) {
-    return (
-        <div className="flex min-h-40 flex-col items-center justify-center gap-2">
-            <Spin size="small" />
-            <span className="text-xs text-[var(--admin-muted)]">{label}</span>
-        </div>
-    );
-}
-
-
-========================================================================
-FILE: web/src/pages/admin/components/users.tsx
-LINES: 1-221
-========================================================================
-import { useEffect, useState } from "react";
-import type { Key } from "react";
-import { App as AntApp, Button, Input, InputNumber, Modal, Select, Table } from "antd";
-import type { TableColumnsType } from "antd";
-import dayjs from "dayjs";
-import { RefreshCw, Search } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
-
-import { useAdminRequest } from "../use-admin-request";
-import { ADMIN_AUTOFILL_OFF, AdminBadge, AdminField, AdminPanel, AdminToolbar } from "./ui";
-import { UserDetail } from "../users/user-detail";
-import { useAdminPermissions } from "../permissions";
-
-type AdminUser = {
-    id: string;
-    email: string;
-    displayName: string;
-    role: string;
-    status: string;
-    balance: number;
-    held: number;
-    member: boolean;
-    createdAt: string;
-    lastLoginAt: string | null;
-};
-
-export function UsersTab() {
-    const permissions = useAdminPermissions();
-    const [urlParams] = useSearchParams();
-    const apiRequest = useAdminRequest();
-    const { message, modal } = AntApp.useApp();
-    const [search, setSearch] = useState(urlParams.get("search") ?? "");
-    const [query, setQuery] = useState(urlParams.get("search") ?? "");
-    const [statusFilter, setStatusFilter] = useState("");
-    const [page, setPage] = useState(1);
-    const [data, setData] = useState<{ items: AdminUser[]; total: number }>({ items: [], total: 0 });
-    const [loading, setLoading] = useState(false);
-    const [target, setTarget] = useState<AdminUser | null>(null);
-    const [detailUserId, setDetailUserId] = useState<string | null>(null);
-    const [amount, setAmount] = useState(0);
-    const [remark, setRemark] = useState("");
-    const [adjusting, setAdjusting] = useState(false);
-    const [selected, setSelected] = useState<Key[]>([]);
-    const [batchStatus, setBatchStatus] = useState<"active" | "banned" | null>(null);
-    const [batchNote, setBatchNote] = useState("");
-    const [batchResult, setBatchResult] = useState<{ id: string; success: boolean; error?: string }[] | null>(null);
-
-    async function load() {
-        setLoading(true);
-        try {
-            const params = new URLSearchParams({ page: String(page), pageSize: "20", search: query, status: statusFilter });
-            const result = await apiRequest<{ items: AdminUser[]; total: number }>(`/api/admin/users?${params}`);
-            setData(result);
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : String(error));
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    useEffect(() => {
-        void load();
-    }, [page, query, statusFilter]);
-
-    async function adjust() {
-        if (!target) return;
-        setAdjusting(true);
-        try {
-            await apiRequest(`/api/admin/users/${target.id}/credits`, { method: "POST", json: { amount, remark } });
-            message.success("积分已调整");
-            setTarget(null);
-            setAmount(0);
-            setRemark("");
-            await load();
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : String(error));
-        } finally {
-            setAdjusting(false);
-        }
-    }
-
-    function toggleStatus(user: AdminUser) {
-        modal.confirm({
-            title: user.status === "active" ? "禁用该用户？" : "恢复该用户？",
-            content: user.email,
-            okText: user.status === "active" ? "禁用" : "恢复",
-            okButtonProps: { danger: user.status === "active" },
-            onOk: async () => {
-                await apiRequest(`/api/admin/users/${user.id}`, { method: "PATCH", json: { status: user.status === "active" ? "banned" : "active" } });
-                await load();
-            },
-        });
-    }
-
-    async function batchUpdate() {
-        if (!batchStatus || !batchNote.trim()) { message.warning("请填写操作原因"); return; }
-        setAdjusting(true);
-        try {
-            const result = await apiRequest<{ results: { id: string; success: boolean; error?: string }[] }>("/api/admin/users/batch-status", { method: "POST", json: { userIds: selected, status: batchStatus, note: batchNote } });
-            setBatchStatus(null); setBatchNote(""); setSelected([]); setBatchResult(result.results); await load();
-        } catch (error) { message.error(error instanceof Error ? error.message : String(error)); }
-        finally { setAdjusting(false); }
-    }
-
-    const columns: TableColumnsType<AdminUser> = [
-        {
-            title: "用户",
-            dataIndex: "email",
-            render: (value: string, record) => (
-                <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                        <span className="truncate font-medium text-[var(--admin-ink)]">{value}</span>
-                        {record.role === "admin" ? <AdminBadge tone="accent">管理员</AdminBadge> : null}
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-[var(--admin-muted)]">{record.displayName || "未设置昵称"}</div>
-                </div>
-            ),
-        },
-        {
-            title: "积分",
-            dataIndex: "balance",
-            render: (value: number, record) => (
-                <div>
-                    <div className="font-medium tabular-nums text-[var(--admin-ink)]">{value.toLocaleString("zh-CN")}</div>
-                    {record.held ? <div className="mt-0.5 text-[11px] text-[var(--admin-muted)]">冻结 {record.held}</div> : null}
-                </div>
-            ),
-        },
-        { title: "会员", dataIndex: "member", render: (value: boolean) => <AdminBadge tone={value ? "positive" : "neutral"}>{value ? "会员" : "普通"}</AdminBadge> },
-        { title: "状态", dataIndex: "status", render: (value: string) => <AdminBadge tone={value === "active" ? "positive" : "danger"}>{value === "active" ? "正常" : "禁用"}</AdminBadge> },
-        { title: "注册时间", dataIndex: "createdAt", render: (value: string) => <span className="tabular-nums text-[var(--admin-muted)]">{dayjs(value).format("YYYY-MM-DD HH:mm")}</span> },
-        {
-            title: "操作",
-            key: "actions",
-            align: "right",
-            render: (_value, record) => (
-                <div className="flex justify-end gap-1.5">
-                    <Button size="small" onClick={() => setDetailUserId(record.id)}>详情</Button>
-                    {permissions.includes("credits.adjust") && <Button size="small" onClick={() => setTarget(record)}>
-                        调积分
-                    </Button>}
-                    {permissions.includes("users.manage") && <Button size="small" danger={record.status === "active"} onClick={() => toggleStatus(record)}>
-                        {record.status === "active" ? "禁用" : "恢复"}
-                    </Button>}
-                </div>
-            ),
-        },
-    ];
-
-    return (
-        <div className="space-y-5">
-            <UserDetail userId={detailUserId} onClose={() => setDetailUserId(null)} onChanged={() => void load()} />
-            <AdminPanel title="用户列表" description="按邮箱或昵称搜索，调整积分或控制账户访问。" actions={<Button size="small" icon={<RefreshCw className="size-3.5" />} loading={loading} onClick={() => void load()}>刷新</Button>} flush>
-                <AdminToolbar>
-                    <div className="w-full sm:w-80">
-                        <Input.Search
-                            {...ADMIN_AUTOFILL_OFF}
-                            name="sundas-admin-user-search"
-                            placeholder="搜索邮箱或昵称"
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            onSearch={(value) => {
-                                setPage(1);
-                                setQuery(value.trim());
-                            }}
-                            className="w-full"
-                            allowClear
-                            prefix={<Search className="size-4 text-[var(--admin-muted)]" />}
-                        />
-                    </div>
-                    <Select value={statusFilter} onChange={value => { setPage(1); setStatusFilter(value); }} options={[{ value: "", label: "全部状态" }, { value: "active", label: "正常" }, { value: "banned", label: "已禁用" }]} />
-                    <span className="ml-auto text-xs text-[var(--admin-muted)]">共 {data.total.toLocaleString("zh-CN")} 位用户</span>
-                    {permissions.includes("users.manage") && <><Button disabled={!selected.length} onClick={() => setBatchStatus("active")}>批量恢复</Button><Button danger disabled={!selected.length} onClick={() => setBatchStatus("banned")}>批量禁用</Button></>}
-                </AdminToolbar>
-                <Table<AdminUser>
-                    rowKey="id"
-                    loading={loading}
-                    dataSource={data.items}
-                    columns={columns}
-                    rowSelection={permissions.includes("users.manage") ? { selectedRowKeys: selected, onChange: setSelected } : undefined}
-                    scroll={{ x: 900 }}
-                    pagination={{ current: page, pageSize: 20, total: data.total, onChange: setPage, showSizeChanger: false }}
-                />
-            </AdminPanel>
-
-            <Modal title={`确认${batchStatus === "banned" ? "禁用" : "恢复"} ${selected.length} 位用户`} open={Boolean(batchStatus)} onCancel={() => { setBatchStatus(null); setBatchNote(""); }} onOk={() => void batchUpdate()} confirmLoading={adjusting}>
-                <p>选中用户：{selected.join("、")}</p><AdminField label="操作原因"><Input value={batchNote} onChange={event => setBatchNote(event.target.value)} /></AdminField>
-            </Modal>
-            <Modal title="批量操作结果" open={Boolean(batchResult)} onCancel={() => setBatchResult(null)} footer={<Button onClick={() => setBatchResult(null)}>关闭</Button>}>
-                {batchResult?.map(item => <p key={item.id}>{item.id}：{item.success ? "成功" : item.error}</p>)}
-            </Modal>
-
-            <Modal
-                title="调整积分"
-                open={Boolean(target)}
-                onCancel={() => setTarget(null)}
-                onOk={() => void adjust()}
-                okText="确认调整"
-                confirmLoading={adjusting}
-                okButtonProps={{ disabled: amount === 0 }}
-                width={460}
-            >
-                <div className="space-y-4 pt-1">
-                    <div className="rounded-[10px] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] px-4 py-3">
-                        <div className="truncate text-sm font-medium text-[var(--admin-ink)]">{target?.email}</div>
-                        <div className="mt-1 text-xs text-[var(--admin-muted)]">
-                            当前余额 <span className="font-semibold tabular-nums text-[var(--admin-ink)]">{target?.balance ?? 0}</span>
-                            {target?.held ? ` · 冻结 ${target.held}` : ""}
-                        </div>
-                    </div>
-                    <AdminField label="调整数量" hint="正数增加，负数扣减；扣减时最多扣到余额为 0。">
-                        <InputNumber {...ADMIN_AUTOFILL_OFF} name="sundas-user-credit-amount" className="w-full" value={amount} onChange={(value) => setAmount(Number(value) || 0)} placeholder="例如 100 或 -50" />
-                    </AdminField>
-                    <AdminField label="备注">
-                        <Input {...ADMIN_AUTOFILL_OFF} name="sundas-user-credit-remark" value={remark} onChange={(event) => setRemark(event.target.value)} placeholder="说明这次调整的原因" />
                     </AdminField>
                 </div>
             </Modal>

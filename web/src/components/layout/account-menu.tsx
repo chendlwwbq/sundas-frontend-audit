@@ -155,7 +155,7 @@ export function UserAccountMenu() {
                                 <span className="tabular-nums text-muted-foreground">{formatStorage(usedBytes)} / {formatStorage(limitBytes)}</span>
                             </div>
                             <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
-                                <span className="block h-full rounded-full bg-[#009EFA] transition-[width]" style={{ width: `${storagePercent}%` }} />
+                                <span className="block h-full rounded-full bg-brand transition-[width]" style={{ width: `${storagePercent}%` }} />
                             </div>
                             {storagePercent >= 90 ? <p className="mt-2 text-xs text-amber-500">{t("account.storageNearlyFull")}</p> : null}
                             <div className="mt-2 flex items-center justify-between gap-2">

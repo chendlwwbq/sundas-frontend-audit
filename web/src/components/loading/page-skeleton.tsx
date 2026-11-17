@@ -2,17 +2,19 @@
  * 页面加载骨架屏
  * 提供比简单文本更好的加载体验，减少感知加载时间
  */
-export const PageSkeleton = () => {
+export const PageSkeleton = ({ embedded = false }: { embedded?: boolean }) => {
     return (
-        <div className="flex h-screen w-full flex-col bg-background p-6">
-            {/* 顶部导航栏骨架 */}
-            <div className="mb-8 flex items-center justify-between">
-                <div className="h-8 w-32 animate-pulse rounded-lg bg-muted" />
-                <div className="flex gap-4">
-                    <div className="h-10 w-20 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-10 w-24 animate-pulse rounded-lg bg-muted" />
+        <div className={`flex ${embedded ? "h-full" : "h-screen"} w-full flex-col bg-background p-6`}>
+            {!embedded && (
+                /* 顶部导航栏骨架 */
+                <div className="mb-8 flex items-center justify-between">
+                    <div className="h-8 w-32 animate-pulse rounded-lg bg-muted" />
+                    <div className="flex gap-4">
+                        <div className="h-10 w-20 animate-pulse rounded-lg bg-muted" />
+                        <div className="h-10 w-24 animate-pulse rounded-lg bg-muted" />
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* 主内容区域骨架 */}
             <div className="flex-1 space-y-6">
@@ -31,13 +33,15 @@ export const PageSkeleton = () => {
                 </div>
             </div>
 
-            {/* 品牌化加载指示器（可选） */}
-            <div className="fixed bottom-8 left-1/2 -translate-x-1/2">
-                <div className="flex items-center gap-2 rounded-full bg-card/80 px-4 py-2 shadow-lg backdrop-blur">
-                    <div className="h-2 w-2 animate-pulse rounded-full bg-brand" />
-                    <span className="text-sm text-muted-foreground">加载中...</span>
+            {!embedded && (
+                /* 品牌化加载指示器（可选） */
+                <div className="fixed bottom-8 left-1/2 -translate-x-1/2">
+                    <div className="flex items-center gap-2 rounded-full bg-card/80 px-4 py-2 shadow-lg backdrop-blur">
+                        <div className="h-2 w-2 animate-pulse rounded-full bg-brand" />
+                        <span className="text-sm text-muted-foreground">加载中...</span>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };

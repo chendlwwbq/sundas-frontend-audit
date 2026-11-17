@@ -1,7 +1,355 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+========================================================================
+FILE: web/src/components/layout/app-top-nav.tsx
+LINES: 1-165
+========================================================================
+import { useEffect, useState } from "react";
+import type { ComponentType } from "react";
+import { Code2, Menu, X } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+
+import { BrandWordmark } from "@/components/brand/brand-wordmark";
+import { PromoContactButton } from "@/components/promo/promo-contact-button";
+import { UserAccountMenu } from "@/components/layout/account-menu";
+import { NavAdminIcon, NavAssetsIcon, NavCanvasIcon, NavCreateIcon, NavExploreIcon, NavHomeIcon, NavPromptsIcon } from "@/components/layout/nav-icons";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { AppConfigModalHost } from "@/components/layout/lazy-overlays";
+import { cn } from "@/lib/utils";
+import { prefetchRoute } from "@/lib/route-prefetch";
+import { loadSiteInfo } from "@/services/api/site";
+import "./app-top-nav.css";
+
+export function useApiIntegrationUrl() {
+    const [url, setUrl] = useState("");
+    useEffect(() => {
+        let active = true;
+        void loadSiteInfo().then(({ site }) => {
+            const value = site.apiIntegrationUrl?.trim();
+            if (active && value && /^https?:\/\//i.test(value)) setUrl(value);
+        }).catch(() => undefined);
+        return () => { active = false; };
+    }, []);
+    return url;
+}
+
+type NavIcon = ComponentType<{ className?: string }>;
+type NavItem = { to: string; labelKey: string; icon: NavIcon; match: (pathname: string) => boolean };
+
+const creationNav: NavItem[] = [
+    { to: "/", labelKey: "navigation.home", icon: NavHomeIcon, match: path => path === "/" },
+    { to: "/canvas", labelKey: "navigation.canvas", icon: NavCanvasIcon, match: path => path === "/canvas" },
+    { to: "/create", labelKey: "navigation.create", icon: NavCreateIcon, match: path => ["/create", "/image", "/video"].includes(path) },
+    { to: "/explore", labelKey: "navigation.explore", icon: NavExploreIcon, match: path => path === "/explore" },
+];
+const resourceNav: NavItem[] = [
+    { to: "/assets", labelKey: "navigation.assets", icon: NavAssetsIcon, match: path => path === "/assets" },
+    { to: "/prompts", labelKey: "navigation.prompts", icon: NavPromptsIcon, match: path => path === "/prompts" },
+];
+
+function useNavItems(): NavItem[] {
+    const user = useAuthStore((state) => state.user);
+    return user?.role === "admin"
+        ? [...creationNav, ...resourceNav, { to: "/admin", labelKey: "navigation.admin", icon: NavAdminIcon, match: (path: string) => path === "/admin" }]
+        : [...creationNav, ...resourceNav];
+}
+
+export function AppTopNav({ mobileOpen, onMobileOpen, onMobileClose }: { mobileOpen: boolean; onMobileOpen: () => void; onMobileClose: () => void }) {
+    const { t } = useTranslation();
+    const { pathname } = useLocation();
+    const items = useNavItems();
+    const apiUrl = useApiIntegrationUrl();
+
+    return (
+        <>
+            <header className="app-top-nav sticky top-0 z-40 shrink-0 border-b border-[rgba(255,255,255,0.08)] bg-rail/85 backdrop-blur-[20px]">
+                {/* 头部通栏：布局保留（logo 贴左、导航居中、账户区贴右），视觉按即梦规范 */}
+                <div className="flex h-[64px] w-full items-center gap-5 px-5 md:px-6 xl:px-8">
+                    <Link to="/" className="flex shrink-0 items-center gap-2.5 !text-foreground transition hover:opacity-80">
+                        <img src="/brand/sundas-symbol.svg" alt="" className="size-[26px]" />
+                        <BrandWordmark height={17} decorative />
+                    </Link>
+
+                    <nav className="hidden min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] lg:flex [&::-webkit-scrollbar]:hidden" aria-label="primary">
+                        <div className="mx-auto flex w-max items-center gap-1">
+                            {apiUrl && <a href={apiUrl} target="_blank" rel="noopener noreferrer" className="flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-[8px] px-2.5 text-[13px] font-medium !text-muted-foreground transition-colors hover:text-foreground"><Code2 className="size-4" />API 对接</a>}
+                            {items.map((item) => {
+                                const Icon = item.icon;
+                                const active = item.match(pathname);
+                                return (
+                                    <Link
+                                        key={item.to}
+                                        to={item.to}
+                                        aria-current={active ? "page" : undefined}
+                                        onMouseEnter={() => prefetchRoute(item.to)}
+                                        onFocus={() => prefetchRoute(item.to)}
+                                        className={cn(
+                                            "nav-item relative flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-[8px] px-2.5 text-[13px] font-medium transition-colors duration-150 min-[1360px]:px-3",
+                                            active ? "is-active !text-white" : "!text-muted-foreground hover:!text-foreground",
+                                        )}
+                                    >
+                                        <Icon className="size-4 shrink-0" />
+                                        <span className="nav-label">{t(item.labelKey)}</span>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    </nav>
+
+                    <div className="ml-auto flex shrink-0 items-center gap-2 lg:ml-0">
+                        {/* 右侧动作区：不套背景容器，会员/积分/头像三枚胶囊直接贴在顶栏上 */}
+                        <div className="hidden items-center gap-2 md:flex">
+                            <PromoContactButton variant="topbar" />
+                            <UserAccountMenu />
+                        </div>
+                        <div className="flex items-center md:hidden">
+                            <UserAccountMenu />
+                        </div>
+                        <button
+                            type="button"
+                            className="grid size-9 place-items-center rounded-[8px] border border-border text-muted-foreground transition hover:text-foreground lg:hidden"
+                            onClick={onMobileOpen}
+                            aria-label={t("navigation.openMenu")}
+                        >
+                            <Menu className="size-5" />
+                        </button>
+                    </div>
+                </div>
+            </header>
+            {mobileOpen ? <MobileDrawer items={items} pathname={pathname} onNavigate={onMobileClose} /> : null}
+            <AppConfigModalHost />
+        </>
+    );
+}
+
+function MobileDrawer({ items, pathname, onNavigate }: { items: NavItem[]; pathname: string; onNavigate: () => void }) {
+    const { t } = useTranslation();
+    const apiUrl = useApiIntegrationUrl();
+    return (
+        <div className="fixed inset-0 z-50 lg:hidden">
+            <button type="button" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" onClick={onNavigate} aria-label={t("navigation.closeMenu")} />
+            <aside className="absolute left-0 top-0 flex h-full w-[280px] flex-col border-r border-border bg-popover shadow-2xl">
+                <div className="relative flex h-[72px] shrink-0 items-center px-5">
+                    <Link to="/" onClick={onNavigate} className="flex items-center gap-2.5 text-foreground">
+                        <img src="/brand/sundas-symbol.svg" alt="" className="size-6" />
+                        <BrandWordmark height={16} decorative />
+                    </Link>
+                    <button type="button" className="absolute right-3 grid size-8 place-items-center text-muted-foreground hover:text-foreground" onClick={onNavigate} aria-label={t("navigation.closeMenu")}>
+                        <X className="size-4" />
+                    </button>
+                </div>
+                <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-3">
+                    {apiUrl && <a href={apiUrl} target="_blank" rel="noopener noreferrer" onClick={onNavigate} className="flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm !text-muted-foreground hover:!bg-accent hover:text-foreground"><Code2 className="size-4" />API 对接</a>}
+                    {items.map((item) => {
+                        const Icon = item.icon;
+                        const active = item.match(pathname);
+                        return (
+                            <Link
+                                key={item.to}
+                                to={item.to}
+                                aria-current={active ? "page" : undefined}
+                                onClick={onNavigate}
+                                onPointerDown={() => prefetchRoute(item.to)}
+                                className={cn(
+                                    "relative flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm transition-colors",
+                                    active ? "bg-[rgba(255,255,255,0.08)] font-medium !text-foreground" : "!text-muted-foreground hover:!bg-accent hover:!text-foreground",
+                                )}
+                            >
+                                <Icon className={cn("size-4 shrink-0", active ? "text-white" : "text-muted-foreground")} />
+                                <span>{t(item.labelKey)}</span>
+                            </Link>
+                        );
+                    })}
+                </nav>
+                <div className="shrink-0 border-t border-border p-3">
+                    <PromoContactButton />
+                </div>
+            </aside>
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/layout/client-root-init.tsx
+LINES: 1-42
+========================================================================
+import { useEffect } from "react";
+import type { ReactNode } from "react";
+import { App } from "antd";
+
+import { useCloudSync } from "@/hooks/use-cloud-sync";
+import { applyServerModels, type ServerModel } from "@/lib/server-models";
+import { apiRequest } from "@/services/api/client";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { subscribeSessionChanges } from "@/lib/session-broadcast";
+
+export function ClientRootInit({ children }: { children: ReactNode }) {
+    const { message } = App.useApp();
+    useCloudSync();
+
+    useEffect(() => {
+        void useAuthStore.getState().hydrate().catch((error) => message.error(error instanceof Error ? error.message : "无法确认登录状态"));
+        return subscribeSessionChanges(() => { void useAuthStore.getState().externalSessionChanged().catch((error) => message.error(error instanceof Error ? error.message : "无法确认登录状态")); });
+    }, []);
+
+    useEffect(() => {
+        const refresh = () => { if (document.visibilityState === "visible") void useAuthStore.getState().refreshWallet().catch(() => undefined); };
+        document.addEventListener("visibilitychange", refresh);
+        window.addEventListener("online", refresh);
+        return () => { document.removeEventListener("visibilitychange", refresh); window.removeEventListener("online", refresh); };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        apiRequest<{ models: ServerModel[] }>("/api/models")
+            .then((data) => {
+                if (!cancelled && data.models.length) applyServerModels(data.models);
+            })
+            .catch(() => {
+                // 模型列表拉取失败时保留本地缓存，登录后还会再拉一次。
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    return <>{children}</>;
+}
+
+
+========================================================================
+FILE: web/src/components/layout/creation-sidebar.tsx
+LINES: 1-79
+========================================================================
+import { loadCreationChats, useCreationChat } from "@/pages/chat/chat-store";
+import { Drawer } from "antd";
+import { ImagePlus, LayoutGrid, Menu, Video, X, MessageSquare } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+
+import { useAuthStore } from "@/stores/use-auth-store";
+import { isCanvasAccountActive, useCanvasStore } from "@/stores/canvas/use-canvas-store";
+import { useCreationHistory } from "@/components/creation/creation-history";
+import { fetchRecentGenerationHistory } from "@/services/api/generation-history";
+
+export function CreationSidebar() {
+    const [open, setOpen] = useState(false);
+    const { pathname, search } = useLocation();
+    const user = useAuthStore((state) => state.user);
+    const ready = useAuthStore((state) => state.ready);
+    const epoch = useAuthStore((state) => state.sessionEpoch);
+    const history = useCreationHistory();
+    const chats = useCreationChat();
+    useEffect(() => { if (ready && user) void loadCreationChats(user.id); }, [ready, user?.id]);
+    const threads = chats.owner === user?.id ? chats.threads : [];
+    useEffect(() => { setOpen(false); }, [pathname, search]);
+    useEffect(() => {
+        if (!ready || !user) return;
+        const owner = user.id;
+        const session = `${owner}:${epoch}`;
+        const videoMode = pathname === "/video" || (pathname === "/create" && new URLSearchParams(search).get("mode") === "video");
+        const modes: ("image" | "video")[] = videoMode ? ["image"] : pathname === "/image" || pathname === "/create" ? ["video"] : ["image", "video"];
+        let active = true;
+        for (const mode of modes) {
+            const current = useCreationHistory.getState();
+            if (current.session === session && current[mode].length) continue;
+            void fetchRecentGenerationHistory(owner, mode).then((items) => {
+                const auth = useAuthStore.getState();
+                const currentState = useCreationHistory.getState();
+                if (active && auth.ready && auth.user?.id === owner && auth.sessionEpoch === epoch && (currentState.session !== session || !currentState[mode].length)) currentState.update(session, mode, items);
+            }).catch(() => undefined);
+        }
+        return () => { active = false; };
+    }, [ready, user?.id, epoch, pathname, search]);
+    const projects = useCanvasStore((state) => state.projects);
+    const hydrated = useCanvasStore((state) => state.hydrated);
+    const recent = ready && hydrated && user && isCanvasAccountActive(user.id)
+        ? [...projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4)
+        : [];
+
+    const recentGenerations = ready && user && history.session === `${user.id}:${epoch}`
+        ? [...history.image, ...history.video].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5)
+        : [];
+    const recentWorks = [
+        ...threads.filter(t => t.messages.length || t.records.length || t.draft).map(t => ({ key: `chat:${t.id}`, title: t.title, time: t.updatedAt, to: `/create?mode=chat&thread=${t.id}`, icon: MessageSquare, type: "对话" })),
+        ...recentGenerations.map(item => ({ key: `${item.mode}:${item.id}`, title: item.title, time: item.createdAt, to: threads.some(t => t.records.some(r => r.id === item.id)) ? `/create?mode=chat&thread=${threads.find(t => t.records.some(r => r.id === item.id))!.id}` : `/create?mode=${item.mode}&record=${encodeURIComponent(item.id)}`, icon: item.mode === "image" ? ImagePlus : Video, type: item.mode === "image" ? "图片" : "视频" })),
+        ...recent.map(project => ({ key: `canvas:${project.id}`, title: project.title, time: new Date(project.updatedAt).getTime(), to: `/canvas/${project.id}`, icon: LayoutGrid, type: "画布" })),
+    ].sort((a, b) => b.time - a.time);
+
+    const sidebar = (
+        <aside className="creation-sidebar flex h-full w-[220px] lg:w-[240px] shrink-0 flex-col border-r border-border text-foreground">
+            <div className="flex h-16 items-center justify-between px-5">
+                <h2 className="text-sm font-semibold">最近作品</h2>
+                <button type="button" onClick={() => setOpen(false)} className="text-muted-foreground lg:hidden" aria-label="关闭最近作品"><X className="size-5" /></button>
+            </div>
+            <nav className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-4" aria-label="最近作品">
+                {user && <div>
+                    {recentWorks.map(({ key, title, to, icon: Icon, type }) => <Link key={key} to={to} aria-current={`${pathname}${search}` === to ? "page" : undefined} title={`${type} · ${title}`} onClick={() => setOpen(false)} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm !text-muted-foreground hover:bg-muted hover:!text-foreground"><Icon className="size-3.5 shrink-0" /><span className="min-w-0 flex-1 truncate">{title}</span><span className="shrink-0 text-xs">{type}</span></Link>)}
+                    {recentWorks.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">暂无最近作品</p>}
+                    <div className="mt-2 flex gap-3 px-3 text-xs"><Link to="/create" onClick={() => setOpen(false)} className="!text-muted-foreground hover:!text-foreground">生成历史</Link><Link to="/canvas" onClick={() => setOpen(false)} className="!text-muted-foreground hover:!text-foreground">全部画布</Link></div>
+                </div>}
+            </nav>
+
+        </aside>
+    );
+    // 未登录访客没有「最近作品」，不占侧栏宽度
+    if (!user) return null;
+    return <>
+        <div className="hidden h-full lg:block">{sidebar}</div>
+        <button type="button" onClick={() => setOpen(true)} className="m-2 flex shrink-0 items-center gap-2 self-start rounded-lg px-3 py-2 text-xs text-muted-foreground hover:bg-muted lg:hidden" aria-label="打开最近作品" aria-expanded={open} aria-controls="creation-mobile-navigation"><Menu className="size-4" />最近作品</button>
+        <Drawer open={open} onClose={() => setOpen(false)} placement="left" size={220} closable={false} styles={{ body: { padding: 0 } }} rootClassName="creation-mobile-drawer" destroyOnHidden><div id="creation-mobile-navigation" className="creation-shell h-full">{sidebar}</div></Drawer>
+    </>;
+}
+
+
+========================================================================
+FILE: web/src/components/layout/lazy-overlays.tsx
+LINES: 1-43
+========================================================================
+import { Suspense, lazy, useEffect, useState } from "react";
+
+import { useAuthDialogStore } from "@/stores/use-auth-dialog-store";
+import { useConfigStore } from "@/stores/use-config-store";
+
+/**
+ * 全局浮层（登录弹窗 / 偏好设置弹窗）按需加载：
+ * 这两块只在用户主动触发时才出现，但会静态带进 antd 的 Form / Modal / Select / Radio / Switch，
+ * 是首屏包最大的一块业务开销。默认不挂载 → chunk 不下载；
+ * 首次打开后保持挂载，关闭动画与内部状态与原来一致。
+ */
+const AuthDialog = lazy(() => import("@/components/auth/auth-dialog").then((module) => ({ default: module.AuthDialog })));
+const AppConfigModal = lazy(() => import("@/components/layout/app-config-modal").then((module) => ({ default: module.AppConfigModal })));
+
+function useKeepMountedWhen(open: boolean) {
+    const [mounted, setMounted] = useState(open);
+    useEffect(() => {
+        if (open) setMounted(true);
+    }, [open]);
+    return mounted;
+}
+
+export function AuthDialogHost() {
+    const open = useAuthDialogStore((state) => state.mode !== null);
+    const mounted = useKeepMountedWhen(open);
+    if (!mounted) return null;
+    return (
+        <Suspense fallback={null}>
+            <AuthDialog />
+        </Suspense>
+    );
+}
+
+export function AppConfigModalHost() {
+    const open = useConfigStore((state) => state.isConfigOpen);
+    const mounted = useKeepMountedWhen(open);
+    if (!mounted) return null;
+    return (
+        <Suspense fallback={null}>
+            <AppConfigModal />
+        </Suspense>
+    );
+}
 
 
 ========================================================================
@@ -581,7 +929,7 @@ export function RouteErrorPage() {
 
 ========================================================================
 FILE: web/src/components/layout/site-footer.css
-LINES: 1-260
+LINES: 1-270
 ========================================================================
 /* ===== site footer（参照 sundas-index.html 页脚）===== */
 
@@ -659,6 +1007,11 @@ LINES: 1-260
     color: var(--muted-foreground);
     font-size: 12.5px;
     line-height: 1.5;
+}
+
+.site-footer-col li > span {
+    color: rgba(255, 255, 255, 0.36);
+    cursor: default;
 }
 
 .site-footer-col li a,
@@ -813,6 +1166,11 @@ LINES: 1-260
     align-items: center;
     gap: 12px;
     line-height: 20px;
+}
+
+.site-footer-legal span {
+    color: rgba(255, 255, 255, 0.42);
+    cursor: default;
 }
 
 .site-footer-legal i {
@@ -1004,23 +1362,25 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
 
 ========================================================================
 FILE: web/src/components/loading/page-skeleton.tsx
-LINES: 1-58
+LINES: 1-62
 ========================================================================
 /**
  * 页面加载骨架屏
  * 提供比简单文本更好的加载体验，减少感知加载时间
  */
-export const PageSkeleton = () => {
+export const PageSkeleton = ({ embedded = false }: { embedded?: boolean }) => {
     return (
-        <div className="flex h-screen w-full flex-col bg-background p-6">
-            {/* 顶部导航栏骨架 */}
-            <div className="mb-8 flex items-center justify-between">
-                <div className="h-8 w-32 animate-pulse rounded-lg bg-muted" />
-                <div className="flex gap-4">
-                    <div className="h-10 w-20 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-10 w-24 animate-pulse rounded-lg bg-muted" />
+        <div className={`flex ${embedded ? "h-full" : "h-screen"} w-full flex-col bg-background p-6`}>
+            {!embedded && (
+                /* 顶部导航栏骨架 */
+                <div className="mb-8 flex items-center justify-between">
+                    <div className="h-8 w-32 animate-pulse rounded-lg bg-muted" />
+                    <div className="flex gap-4">
+                        <div className="h-10 w-20 animate-pulse rounded-lg bg-muted" />
+                        <div className="h-10 w-24 animate-pulse rounded-lg bg-muted" />
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* 主内容区域骨架 */}
             <div className="flex-1 space-y-6">
@@ -1039,13 +1399,15 @@ export const PageSkeleton = () => {
                 </div>
             </div>
 
-            {/* 品牌化加载指示器（可选） */}
-            <div className="fixed bottom-8 left-1/2 -translate-x-1/2">
-                <div className="flex items-center gap-2 rounded-full bg-card/80 px-4 py-2 shadow-lg backdrop-blur">
-                    <div className="h-2 w-2 animate-pulse rounded-full bg-brand" />
-                    <span className="text-sm text-muted-foreground">加载中...</span>
+            {!embedded && (
+                /* 品牌化加载指示器（可选） */
+                <div className="fixed bottom-8 left-1/2 -translate-x-1/2">
+                    <div className="flex items-center gap-2 rounded-full bg-card/80 px-4 py-2 shadow-lg backdrop-blur">
+                        <div className="h-2 w-2 animate-pulse rounded-full bg-brand" />
+                        <span className="text-sm text-muted-foreground">加载中...</span>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };
@@ -2227,7 +2589,7 @@ export function PromoTopBar({ item }: { item: PromoItem | null }) {
 
 ========================================================================
 FILE: web/src/components/promo/promo.css
-LINES: 1-1397
+LINES: 1-1407
 ========================================================================
 .promo-topbar {
     position: relative;
@@ -2529,6 +2891,7 @@ LINES: 1-1397
     transform-origin: 100% 100%;
     pointer-events: none;
     transition:
+        right 200ms cubic-bezier(0.4, 0, 0.2, 1),
         opacity 240ms ease,
         transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
         border-color 220ms ease,
@@ -2548,6 +2911,17 @@ LINES: 1-1397
     transform-origin: 100% 0;
 }
 
+/* 宽屏工作台右侧有生成记录停靠栏（收起 92px / 展开 372px），浮卡向左避让避免遮挡 */
+@media (min-width: 1024px) {
+    .creation-shell:has(.creation-records-rail) .promo-corner--workbench {
+        right: 112px;
+    }
+
+    .creation-shell:has(.creation-records-rail.is-open) .promo-corner--workbench {
+        right: 392px;
+    }
+}
+
 .promo-corner.is-open:hover {
     border-color: rgba(216, 255, 62, 0.46);
     box-shadow:
@@ -2557,12 +2931,12 @@ LINES: 1-1397
 
 .promo-corner-close {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: 8px;
+    right: 8px;
     z-index: 2;
     display: grid;
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
     place-items: center;
     border: 0;
     border-radius: 999px;
@@ -2659,9 +3033,7 @@ LINES: 1-1397
 .promo-corner-cta:hover {
     filter: brightness(1.06);
     transform: translateY(-1px);
-    box-shadow:
-        0 16px 32px -12px rgba(216, 255, 62, 0.85),
-        inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    box-shadow: none;
 }
 
 .promo-corner-cta:active {
@@ -4233,555 +4605,4 @@ export function usePromptList({ keyword, tags = [], category = ALL_PROMPTS_OPTIO
         total: firstPage?.total || 0,
     };
 }
-
-
-========================================================================
-FILE: web/src/components/text-settings-panel.tsx
-LINES: 1-57
-========================================================================
-import { type ReactNode } from "react";
-import { useTranslation } from "react-i18next";
-
-import i18n from "@/i18n";
-import { ImageSettingsTheme } from "@/components/image-settings-panel";
-import { type CanvasTheme } from "@/lib/canvas-theme";
-import type { AiConfig, ReasoningEffort } from "@/stores/use-config-store";
-
-const reasoningEffortOptions: ReasoningEffort[] = ["auto", "low", "medium", "high", "xhigh"];
-
-type TextSettingsPanelProps = {
-    config: AiConfig;
-    onConfigChange: (key: "reasoningEffort", value: ReasoningEffort) => void;
-    theme: CanvasTheme;
-    className?: string;
-};
-
-export function TextSettingsPanel({ config, onConfigChange, theme, className = "space-y-4" }: TextSettingsPanelProps) {
-    const { t } = useTranslation();
-    return (
-        <ImageSettingsTheme theme={theme}>
-            <div className={className} style={{ color: theme.node.text }} onMouseDown={(event) => event.stopPropagation()}>
-                <div className="text-lg font-semibold">{t("settingsPanels.text.title")}</div>
-                <div className="space-y-2.5">
-                    <div className="text-sm font-medium" style={{ color: theme.node.muted }}>
-                        {t("settingsPanels.text.reasoning")}
-                    </div>
-                    <div className="grid grid-cols-5 gap-2">
-                        {reasoningEffortOptions.map((value) => (
-                            <OptionPill key={value} selected={config.reasoningEffort === value} theme={theme} onClick={() => onConfigChange("reasoningEffort", value)}>
-                                {t(`settingsPanels.common.${value}`)}
-                            </OptionPill>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </ImageSettingsTheme>
-    );
-}
-
-export function reasoningEffortLabel(value: ReasoningEffort) {
-    return reasoningEffortOptions.includes(value) ? i18n.t(`settingsPanels.common.${value}`) : value;
-}
-
-function OptionPill({ selected, theme, onClick, children }: { selected: boolean; theme: CanvasTheme; onClick: () => void; children: ReactNode }) {
-    return (
-        <button
-            type="button"
-            className="h-9 cursor-pointer rounded-full border px-2 text-sm transition hover:opacity-80"
-            style={{ background: "transparent", borderColor: selected ? theme.node.text : theme.node.stroke, color: theme.node.text }}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={onClick}
-        >
-            {children}
-        </button>
-    );
-}
-
-
-========================================================================
-FILE: web/src/components/ui/base/switch/index.ts
-LINES: 1-1
-========================================================================
-export { Switch, type SwitchProps } from "./switch";
-
-
-========================================================================
-FILE: web/src/components/ui/base/switch/switch.tsx
-LINES: 1-124
-========================================================================
-import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-
-import { cn } from "@/lib/utils";
-
-/**
- * Switch — 开关（自研，button role=switch，无依赖）。
- *
- * 设计约束（对齐 ui/README 与 ADR-0008）：
- * - <button type="button" role="switch" aria-checked> 承载语义与键盘（Space/Enter 原生），
- *   :focus-visible outline 落自身；无裸色、只消费三层 token。
- * - 开 = bg-foreground + 反色 thumb（bg-background 语义对齐 Checkbox 选中态），
- *   关 = bg-surface-tertiary + 发丝内描边 + surface-strong 抬升 thumb（同 SegmentedControl 选中面）。
- * - thumb 滑动用 translate-x 位移（尺寸档固定行程），motion-reduce 关闭过渡。
- * - data-state="on|off" 暴露给上下文 CSS 覆盖（admin 语义绿等保留于页面层，不侵入组件）。
- * - API 对齐 AntD Switch：checked/defaultChecked/onChange/disabled/size/checkedChildren/
- *   unCheckedChildren/loading + aria-* 透传；受控与否由 checked 是否传入决定，
- *   onChange(checked) 单参。顶层组件接收 checked/onChange → Form.Item valuePropName="checked" 注入兼容。
- * 对标：AntD Switch；boardui base/switch。
- */
-
-export interface SwitchProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "size" | "onChange"> {
-    /** 开关尺寸。默认 md；AntD small → sm 映射。 */
-    size?: "sm" | "md";
-    /** 受控：是否开启 */
-    checked?: boolean;
-    /** 非受控初始值 */
-    defaultChecked?: boolean;
-    /** loading：拇指位换转圈，忽略点击（视觉保留 checked 态） */
-    loading?: boolean;
-    /** 开启时轨道内左侧文案（2 字宽度档） */
-    checkedChildren?: ReactNode;
-    /** 关闭时轨道内右侧文案 */
-    unCheckedChildren?: ReactNode;
-    /** 变化回调（AntD 同签名：仅布尔参） */
-    onChange?: (checked: boolean) => void;
-}
-
-/** 几何档：轨道尺寸与 thumb 行程（thumb 用 left-0.5 起始 + translate-x 档位） */
-const SWITCH_SIZE: Record<"sm" | "md", { root: string; thumbPlain: string; thumbText: string; hasTextRoot: string }> = {
-    sm: {
-        root: "h-5 w-8 rounded-full",
-        thumbPlain: "size-3.5 data-[state=on]:translate-x-3.5",
-        thumbText: "size-3.5 data-[state=on]:translate-x-3.5",
-        hasTextRoot: "",
-    },
-    md: {
-        root: "h-6 w-11 rounded-full",
-        thumbPlain: "size-4 data-[state=on]:translate-x-6",
-        thumbText: "size-4 data-[state=on]:translate-x-9",
-        hasTextRoot: "w-14",
-    },
-};
-
-export function Switch({ size = "md", checked: checkedProp, defaultChecked = false, loading = false, checkedChildren, unCheckedChildren, onChange, disabled, className, "aria-label": ariaLabel, ...props }: SwitchProps) {
-    const [innerChecked, setInnerChecked] = useState(defaultChecked);
-    const controlled = checkedProp !== undefined;
-    const checked = controlled ? checkedProp : innerChecked;
-    const hasText = checkedChildren !== undefined || unCheckedChildren !== undefined;
-
-    const handleClick = () => {
-        if (disabled || loading) {
-            return;
-        }
-        const next = !checked;
-        if (!controlled) {
-            setInnerChecked(next);
-        }
-        onChange?.(next);
-    };
-
-    const geometry = SWITCH_SIZE[size];
-    const thumbClass = hasText ? geometry.thumbText : geometry.thumbPlain;
-
-    return (
-        <button
-            type="button"
-            role="switch"
-            data-slot="switch"
-            data-state={checked ? "on" : "off"}
-            aria-checked={checked}
-            aria-label={ariaLabel}
-            aria-busy={loading || undefined}
-            disabled={disabled}
-            onClick={handleClick}
-            className={cn(
-                "relative inline-flex shrink-0 select-none items-center align-middle transition-colors motion-reduce:transition-none",
-                "data-[state=on]:bg-foreground",
-                "data-[state=off]:bg-surface-tertiary data-[state=off]:ring-1 data-[state=off]:ring-inset data-[state=off]:ring-foreground/15",
-                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-                "disabled:cursor-not-allowed disabled:opacity-45",
-                geometry.root,
-                hasText && size === "md" && geometry.hasTextRoot,
-                className,
-            )}
-            {...props}
-        >
-            {/* 关态文案（右侧） */}
-            {unCheckedChildren !== undefined ? (
-                <span
-                    aria-hidden="true"
-                    className={cn("absolute top-1/2 right-1.5 -translate-y-1/2 text-xs leading-none font-medium transition-opacity motion-reduce:transition-none", checked ? "text-foreground/55 opacity-0" : "text-foreground/55 opacity-100")}
-                >
-                    {unCheckedChildren}
-                </span>
-            ) : null}
-            {/* 开态文案（左侧，反色） */}
-            {checkedChildren !== undefined ? (
-                <span aria-hidden="true" className={cn("absolute top-1/2 left-1.5 -translate-y-1/2 text-xs leading-none font-medium transition-opacity motion-reduce:transition-none", checked ? "text-background opacity-100" : "text-background opacity-0")}>
-                    {checkedChildren}
-                </span>
-            ) : null}
-            {/* thumb / loading 转圈 */}
-            {loading ? (
-                <span aria-hidden="true" className={cn("absolute inset-0 m-auto size-3.5 animate-spin rounded-full border-[1.5px] border-current border-t-transparent", checked ? "text-background" : "text-foreground/60")} />
-            ) : (
-                <span
-                    aria-hidden="true"
-                    data-state={checked ? "on" : "off"}
-                    className={cn("sc-switch-thumb absolute left-0.5 top-1/2 -translate-y-1/2 rounded-full border border-border/80 bg-surface-strong transition-transform duration-200 ease-out motion-reduce:transition-none", thumbClass)}
-                />
-            )}
-        </button>
-    );
-}
-
-
-========================================================================
-FILE: web/src/components/ui/base/tooltip/index.ts
-LINES: 1-1
-========================================================================
-export { Tooltip, type TooltipPlacement, type TooltipProps } from "./tooltip";
-
-
-========================================================================
-FILE: web/src/components/ui/base/tooltip/tooltip.tsx
-LINES: 1-26
-========================================================================
-import type { ReactNode } from "react";
-import { Tooltip as AntTooltip } from "antd";
-
-export type TooltipPlacement = "top" | "bottom" | "left" | "right" | "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
-
-export type TooltipProps = {
-    title?: ReactNode;
-    placement?: TooltipPlacement;
-    children: ReactNode;
-};
-
-/**
- * Tooltip — 气泡提示（sundas 版）。
- *
- * BeefTV 用的是 react-aria-components 自研浮层；sundas 没有这个依赖，
- * 这里落到已有的 antd Tooltip 上，保持同名同 props（title / placement / children），
- * 调用方零改动。title 为空时不渲染浮层，与 BeefTV 行为一致。
- */
-export function Tooltip({ title, placement = "top", children }: TooltipProps) {
-    if (title === undefined || title === null || title === "") return <>{children}</>;
-    return (
-        <AntTooltip title={title} placement={placement} mouseEnterDelay={0.2}>
-            {children}
-        </AntTooltip>
-    );
-}
-
-
-========================================================================
-FILE: web/src/components/ui/dia-text-reveal.tsx
-LINES: 1-226
-========================================================================
-import { useEffect, useRef, useState } from "react";
-import { animate, motion, useInView, useMotionValue, useReducedMotion, useTransform, type HTMLMotionProps } from "motion/react";
-
-import { cn } from "@/lib/utils";
-
-const DEFAULT_COLORS = ["#c679c4", "#fa3d1d", "#ffb005", "#e1e1fe", "#0358f7"];
-const BAND_HALF = 17;
-const SWEEP_START = -BAND_HALF;
-const SWEEP_END = 100 + BAND_HALF;
-
-const sweepEase = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);
-
-function buildGradient(pos: number, colors: string[], textColor: string) {
-    const bandStart = pos - BAND_HALF;
-    const bandEnd = pos + BAND_HALF;
-
-    if (bandStart >= 100) {
-        return `linear-gradient(90deg, ${textColor}, ${textColor})`;
-    }
-    const n = colors.length;
-    const parts: string[] = [];
-
-    if (bandStart > 0) parts.push(`${textColor} 0%`, `${textColor} ${bandStart.toFixed(2)}%`);
-
-    colors.forEach((c, i) => {
-        const pct = n === 1 ? pos : bandStart + (i / (n - 1)) * BAND_HALF * 2;
-        parts.push(`${c} ${pct.toFixed(2)}%`);
-    });
-
-    if (bandEnd < 100) parts.push(`transparent ${bandEnd.toFixed(2)}%`, `transparent 100%`);
-
-    return `linear-gradient(90deg, ${parts.join(", ")})`;
-}
-
-function measureWidths(el: HTMLElement, texts: string[]) {
-    const ghost = el.cloneNode() as HTMLElement;
-    Object.assign(ghost.style, {
-        position: "absolute",
-        visibility: "hidden",
-        pointerEvents: "none",
-        width: "auto",
-        whiteSpace: "nowrap",
-    });
-    el.parentElement!.appendChild(ghost);
-    const widths = texts.map((t) => {
-        ghost.textContent = t;
-        return ghost.getBoundingClientRect().width;
-    });
-    ghost.remove();
-    return widths;
-}
-
-/**
- * Props for {@link DiaTextReveal}.
- */
-export interface DiaTextRevealProps extends Omit<HTMLMotionProps<"span">, "ref" | "children" | "style" | "animate" | "transition" | "color"> {
-    /**
-     * Text to reveal. Pass multiple strings to rotate when {@link DiaTextRevealProps.repeat} is `true`.
-     */
-    text: string | string[];
-    /**
-     * Colors sampled across the moving gradient band. Defaults to a built-in palette.
-     */
-    colors?: string[];
-    /**
-     * CSS color for revealed text after the sweep and for leading/trailing regions during the animation.
-     * @defaultValue `"var(--foreground)"`
-     */
-    textColor?: string;
-    /**
-     * Duration of one sweep pass, in seconds.
-     * @defaultValue `1.5`
-     */
-    duration?: number;
-    /**
-     * Delay before the sweep starts, in seconds.
-     * @defaultValue `0`
-     */
-    delay?: number;
-    /**
-     * When `text` is an array, replay the sweep and advance to the next string after each completion.
-     * @defaultValue `false`
-     */
-    repeat?: boolean;
-    /**
-     * Pause between cycles when {@link DiaTextRevealProps.repeat} is `true`, in seconds.
-     * @defaultValue `0.5`
-     */
-    repeatDelay?: number;
-    /**
-     * If `true`, the animation starts only after the element enters the viewport.
-     * @defaultValue `true`
-     */
-    startOnView?: boolean;
-    /**
-     * Passed to `useInView`: if `true`, in-view detection fires at most once (no replay on scroll-back).
-     * @defaultValue `true`
-     */
-    once?: boolean;
-    /**
-     * Additional class names for the animated `span` (e.g. typography utilities).
-     */
-    className?: string;
-    /**
-     * When `text` has multiple entries, use the widest string’s width for layout instead of animating width per line.
-     * @defaultValue `false`
-     */
-    fixedWidth?: boolean;
-}
-
-export function DiaTextReveal({ text, colors = DEFAULT_COLORS, textColor = "var(--foreground)", duration = 1.5, delay = 0, repeat = false, repeatDelay = 0.5, startOnView = true, once = true, className, fixedWidth = false, ...props }: DiaTextRevealProps) {
-    const texts = Array.isArray(text) ? text : [text];
-    const isMulti = texts.length > 1;
-    const prefersReducedMotion = useReducedMotion();
-
-    const spanRef = useRef<HTMLSpanElement>(null);
-    const optsRef = useRef({
-        colors,
-        textColor,
-        duration,
-        delay,
-        repeat,
-        repeatDelay,
-        texts,
-    });
-    optsRef.current = {
-        colors,
-        textColor,
-        duration,
-        delay,
-        repeat,
-        repeatDelay,
-        texts,
-    };
-
-    const indexRef = useRef(0);
-    const hasPlayedRef = useRef(false);
-    const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-    const playRef = useRef<() => void>(null!);
-    const stopRef = useRef<(() => void) | null>(null);
-
-    const [activeIndex, setActiveIndex] = useState(0);
-    const [measuredWidths, setMeasuredWidths] = useState<number[]>([]);
-
-    const sweepPos = useMotionValue(SWEEP_START);
-
-    const backgroundImage = useTransform(sweepPos, (pos) => buildGradient(pos, optsRef.current.colors, optsRef.current.textColor));
-
-    const isInView = useInView(spanRef, { once, amount: 0.1 });
-
-    useEffect(() => {
-        const el = spanRef.current;
-        if (!el || !isMulti) return;
-        setMeasuredWidths(measureWidths(el, texts));
-    }, [Array.isArray(text) ? text.join("\0") : text]);
-
-    playRef.current = () => {
-        const { duration, delay, repeat, repeatDelay, texts } = optsRef.current;
-
-        sweepPos.set(SWEEP_START);
-
-        const controls = animate(sweepPos, SWEEP_END, {
-            duration,
-            delay,
-            ease: sweepEase,
-            onComplete() {
-                if (!repeat) return;
-                timerRef.current = setTimeout(() => {
-                    const next = (indexRef.current + 1) % texts.length;
-                    indexRef.current = next;
-                    setActiveIndex(next);
-                    playRef.current();
-                }, repeatDelay * 1000);
-            },
-        });
-
-        stopRef.current = () => controls.stop();
-    };
-
-    useEffect(() => {
-        if (prefersReducedMotion) {
-            sweepPos.set(SWEEP_END);
-            return;
-        }
-        if (startOnView && !isInView) return;
-        if (once && hasPlayedRef.current) return;
-        hasPlayedRef.current = true;
-        playRef.current();
-
-        return () => {
-            stopRef.current?.();
-            clearTimeout(timerRef.current);
-        };
-    }, [isInView, startOnView, once, prefersReducedMotion, sweepPos]);
-
-    const fixedW = isMulti && fixedWidth && measuredWidths.length > 0 ? Math.max(...measuredWidths) : undefined;
-
-    const animatedW = isMulti && !fixedWidth && measuredWidths[activeIndex] != null ? measuredWidths[activeIndex] : undefined;
-
-    return (
-        <motion.span
-            ref={spanRef}
-            className={cn("align-bottom leading-[100%] text-inherit", className)}
-            style={{
-                transform: "translateY(-2px)",
-                color: "transparent",
-                backgroundClip: "text",
-                WebkitBackgroundClip: "text",
-                backgroundSize: "100% 100%",
-                backgroundImage,
-                ...(isMulti && {
-                    display: "inline-block",
-                    overflow: "hidden",
-                    whiteSpace: "nowrap",
-                    verticalAlign: "text-center",
-                    ...(fixedW != null && { width: fixedW }),
-                }),
-            }}
-            animate={animatedW != null ? { width: animatedW } : undefined}
-            transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-            {...props}
-        >
-            {texts[activeIndex]}
-        </motion.span>
-    );
-}
-
-
-========================================================================
-FILE: web/src/components/ui/optimized-image.tsx
-LINES: 1-74
-========================================================================
-/**
- * 优化后的图片组件 - 带懒加载和骨架屏
- */
-import { useState } from "react";
-import "../loading/skeleton.css";
-
-interface OptimizedImageProps {
-    src: string;
-    alt: string;
-    className?: string;
-    width?: number;
-    height?: number;
-    aspectRatio?: string;
-}
-
-export function OptimizedImage({
-    src,
-    alt,
-    className = "",
-    width,
-    height,
-    aspectRatio = "16/9"
-}: OptimizedImageProps) {
-    const [loaded, setLoaded] = useState(false);
-    const [error, setError] = useState(false);
-
-    return (
-        <div
-            className={`relative overflow-hidden ${className}`}
-            style={{ aspectRatio }}
-        >
-            {/* 骨架屏 - 图片加载时显示 */}
-            {!loaded && !error && (
-                <div className="skeleton skeleton-media absolute inset-0" />
-            )}
-
-            {/* 错误状态 */}
-            {error && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                    <span className="text-xs text-white/60">加载失败</span>
-                </div>
-            )}
-
-            {/* 实际图片 */}
-            <img
-                src={src}
-                alt={alt}
-                width={width}
-                height={height}
-                loading="lazy"
-                decoding="async"
-                className={`w-full h-full object-cover transition-opacity duration-300 ${
-                    loaded ? "opacity-100" : "opacity-0"
-                }`}
-                onLoad={() => setLoaded(true)}
-                onError={() => {
-                    setLoaded(false);
-                    setError(true);
-                }}
-            />
-        </div>
-    );
-}
-
-/**
- * 使用示例：
- *
- * <OptimizedImage
- *     src={item.coverUrl}
- *     alt={item.title}
- *     className="home-prompt-cover"
- *     aspectRatio="16/9"
- * />
- */
 

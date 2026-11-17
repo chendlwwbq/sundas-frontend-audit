@@ -123,7 +123,7 @@ export function CanvasToolbar({
 
             <div
                 ref={dockRef}
-                className="pointer-events-auto flex h-11 items-center gap-[3px] rounded-2xl border px-1.5 backdrop-blur-2xl"
+                className="pointer-events-auto flex h-11 items-center gap-[3px] rounded-2xl border px-1.5 backdrop-blur-md"
                 style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item, boxShadow: "0 18px 44px rgba(0,0,0,.46)" }}
             >
                 <DockButton

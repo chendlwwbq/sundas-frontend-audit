@@ -34,8 +34,8 @@ export function fetchStorageSummary() {
     return apiRequest<StorageSummary>("/api/storage");
 }
 
-export function fetchStorageItems(category: StorageCategoryKey, page = 1, pageSize = 20) {
-    return apiRequest<StoragePage>(`/api/storage/items?${new URLSearchParams({ category, page: String(page), pageSize: String(pageSize) })}`);
+export function fetchStorageItems(category: StorageCategoryKey, page = 1, pageSize = 20, protectedOnly = false) {
+    return apiRequest<StoragePage>(`/api/storage/items?${new URLSearchParams({ category, page: String(page), pageSize: String(pageSize), protected: String(protectedOnly) })}`);
 }
 
 export function deleteStorageMedia(id: string) {
@@ -44,4 +44,12 @@ export function deleteStorageMedia(id: string) {
 
 export function cleanupHistoryStorage() {
     return apiRequest<{ deleted: number; bytes: number; failed: number }>("/api/storage/cleanup-history", { method: "POST" });
+}
+
+export type StorageSource = {kind:string;owner:string;project:string|null;title:string;releasable:boolean;draft:boolean};
+export function storageSources(id:string) {
+    return apiRequest<{sources:StorageSource[];pinned:boolean;active:boolean;disputed:boolean}>(`/api/storage/media/${encodeURIComponent(id)}/sources`);
+}
+export function releaseStorageSource(id:string, source:StorageSource) {
+    return apiRequest(`/api/storage/media/${encodeURIComponent(id)}/sources/release`, {method:'POST',json:{kind:source.kind,owner:source.owner,project:source.project}});
 }

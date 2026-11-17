@@ -1081,51 +1081,17 @@
     transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
-/* hover 遮罩：底部压暗渐变 + 右上爱心胶囊 + 右下分享圆钮（参照 liblib.tv） */
+/* hover 遮罩：轻微暗角渐变，保持卡片可点击提示 */
 .home-prompt-hover {
     position: absolute;
     inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    justify-content: space-between;
-    padding: 10px;
-    background: linear-gradient(180deg, rgba(5, 6, 3, 0.22) 0%, rgba(5, 6, 3, 0) 36%, rgba(5, 6, 3, 0.55) 100%);
+    background: linear-gradient(180deg, rgba(5, 6, 3, 0.18) 0%, rgba(5, 6, 3, 0) 38%, rgba(5, 6, 3, 0.52) 100%);
     opacity: 0;
     transition: opacity 200ms ease;
 }
 
-.home-prompt-like,
-.home-prompt-share {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 28px;
-    min-width: 28px;
-    padding: 0 9px;
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    border-radius: 999px;
-    background: rgba(10, 11, 8, 0.55);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    color: rgba(255, 255, 255, 0.92);
-    transition: background 160ms ease, transform 160ms ease;
-}
-
-.home-prompt-share {
-    width: 30px;
-    height: 30px;
-    min-width: 0;
-    padding: 0;
-}
-
 .home-prompt-card:hover .home-prompt-hover {
     opacity: 1;
-}
-
-.home-prompt-card:hover .home-prompt-like,
-.home-prompt-card:hover .home-prompt-share {
-    transform: translateY(0);
 }
 
 .home-prompt-card:hover .home-prompt-cover {

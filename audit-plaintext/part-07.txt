@@ -1,7 +1,490 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+========================================================================
+FILE: web/src/components/canvas/director/canvas-director-workbench.tsx
+LINES: 2001-2317
+========================================================================
+                <Field label="时长"><div className="director-scale-row"><input type="range" aria-label="轨迹时长滑杆" min={0.5} max={Math.max(shotDuration, object.motionPath.duration)} step={1 / Math.max(1, fps)} value={object.motionPath.duration} className="director-scale-slider" style={{ "--director-scale-fill": `${Math.round(((object.motionPath.duration - 0.5) / Math.max(0.001, Math.max(shotDuration, object.motionPath.duration) - 0.5)) * 100)}%` } as CSSProperties} onChange={(event) => onPathDurationChange(Number(event.target.value))} /><InputNumber aria-label="轨迹时长" size="small" min={0.5} max={Math.max(shotDuration, object.motionPath.duration)} step={0.1} precision={1} value={object.motionPath.duration} controls={false} className="director-scale-value" onChange={(value) => { if (value !== null) onPathDurationChange(value); }} /></div></Field>
+                <ActorTransformFields transform={object.motionPath.transform} onChange={onPathTransformEdit} />
+                <Field label="统一缩放"><div className="director-scale-row"><input aria-label="统一缩放滑杆" type="range" min={0.1} max={10} step={0.05} value={object.motionPath.transform.scale[0]} className="director-scale-slider" style={{ "--director-scale-fill": directorScaleFill(object.motionPath.transform.scale[0]) } as CSSProperties} onChange={(event) => { const value = Number(event.target.value); onPathTransformEdit({ ...object.motionPath!.transform, scale: [value, value, value] }); }} /><InputNumber aria-label="统一缩放数值" size="small" controls={false} min={0.1} max={10} step={0.05} value={object.motionPath.transform.scale[0]} className="director-scale-value" onChange={(value) => { if (value !== null) onPathTransformEdit({ ...object.motionPath!.transform, scale: [value, value, value] }); }} /></div></Field>
+                <div className="flex items-center justify-between"><span>绑定对象沿路径朝向</span><Switch aria-label="绑定对象沿路径朝向" checked={object.motionPath.facePath} onChange={onPathFacingChange} /></div>
+            </>}
+        </div> : null}
+        {(!isActor || tab === "properties") ? <>
+        {isActor ? <Field label="名称"><Input aria-label="名称" value={object.name} onChange={(event) => onUpdate({ name: event.target.value })} /></Field> : null}
+        <div className="director-inspector-group">
+            <div className="director-inspector-group-title"><span>变换</span><i aria-hidden="true" /></div>
+            {isActor ? <ActorTransformFields transform={rendered} onChange={onTransformEdit} onToggleKey={trackExists ? onToggleTransformKey : undefined} keyedAt={keyedAt} /> : <TransformFields transform={rendered} onChange={onTransformEdit} />}
+            <Field label="统一缩放"><div className="director-scale-row">
+                <input aria-label="统一缩放滑杆" type="range" min={0.1} max={10} step={0.05} value={object.uniformScale ?? 1} className="director-scale-slider" style={{ "--director-scale-fill": directorScaleFill(object.uniformScale ?? 1) } as CSSProperties} onChange={(event) => onUniformScaleChange(Number(event.target.value), true)} onPointerUp={onUniformScaleCommit} onKeyUp={onUniformScaleCommit} onBlur={onUniformScaleCommit} />
+                <InputNumber aria-label="统一缩放数值" size="small" controls={false} min={0.1} max={10} step={0.05} value={object.uniformScale ?? 1} className="director-scale-value" onChange={(value) => { if (value !== null) onUniformScaleChange(value, false); }} />
+            </div></Field>
+        </div>
+        <div className="director-inspector-group">
+            <div className="director-inspector-group-title"><span>外观</span><i aria-hidden="true" /></div>
+            {isActor ? <ActorColorField color={object.color} onChange={(color) => onUpdate({ color })} /> : <Field label="颜色"><ColorPicker value={object.color} onChange={(_, color) => onUpdate({ color })} /></Field>}
+            {!isActor ? <><Field label="可见"><Switch checked={object.visible} onChange={(visible) => onUpdate({ visible })} /></Field><Field label="投射阴影"><Switch checked={object.castShadow} onChange={(castShadow) => onUpdate({ castShadow })} /></Field></> : null}
+        </div>
+        </> : null}
+        {/*
+          骨骼与姿势入口：只在姿态/动画模式出现，且只对演员出现。
+          规格要求「仅在演员选择时展示现有骨骼/姿势入口」——
+          带动画的普通模型不是演员，不应拿到姿势预设与骨骼控制。
+        */}
+        {(!isActor || tab === "pose") ? <>
+        {isActor ? <>
+            <section className="director-pose-section">
+                <div className="director-inspector-section-title"><span>姿势预设</span></div>
+                <div className="director-pose-grid">{poseOptions.map((option) => <button key={option.value} type="button" className={`director-pose-button ${object.pose === option.value && !object.activeMotionClipId ? "is-active" : ""}`} title={option.label} onClick={() => applyPose(option.value)}>{option.label}</button>)}</div>
+            </section>
+            <div className="director-pose-adjust-header"><div>姿势调节</div></div>
+            {mappedBones.length ? !object.url ? <div className="director-pose-controls space-y-3">{directorProceduralPoseControlGroups.map((group) => {
+                const controls = group.controls.filter((control) => mappedBones.includes(control.bone));
+                return controls.length ? <section key={group.label} className="space-y-1.5"><h4 className="text-[var(--fs-tiny)] opacity-55">{group.label}</h4>{controls.map(({ bone, axisIndex, label, direction }) => {
+                    const rotation = evaluatedRotations?.[bone] || object.boneOverrides?.[bone] || poseDeltas[bone] || [0, 0, 0, 1] as DirectorQuat;
+                    const sidePrefix = bone.startsWith("left") ? "左 " : bone.startsWith("right") ? "右 " : "";
+                    const axisLabel = `${sidePrefix}${label}`;
+                    const axisLabels = [axisLabel, axisLabel, axisLabel] as const;
+                    return <div key={`${bone}-${axisIndex}`} data-director-bone-row={bone} data-director-pose-axis={label} className={`rounded-md transition ${selectedBone === bone ? "bg-[var(--cn-fill)] ring-1 ring-[var(--workspace-accent)]/50" : ""}`} onPointerDown={() => onSelectBone(bone)}>
+                        <BoneRotationFields axes={axisLabels} axisIndices={[axisIndex]} axisDirections={axisDirections(axisIndex, direction)} label="" rotation={rotation} onChange={(next) => onBoneRotationStage(bone, next)} onChangeComplete={onBoneRotationCommit} />
+                    </div>;
+                })}</section> : null;
+            })}</div> : <div className="director-pose-controls space-y-3">{directorBoneControlGroups.map((group) => {
+                const bones = group.bones.filter((bone) => mappedBones.includes(bone));
+                return bones.length ? <section key={group.label} className="space-y-2"><h4 className="text-[var(--fs-tiny)] opacity-55">{group.label}</h4>{bones.map((bone) => {
+                    const rotation = evaluatedRotations?.[bone] || object.boneOverrides?.[bone] || poseDeltas[bone] || [0, 0, 0, 1] as DirectorQuat;
+                    return <div key={bone} data-director-bone-row={bone} className={`rounded-md p-1.5 transition ${selectedBone === bone ? "bg-[var(--cn-fill)] ring-1 ring-[var(--workspace-accent)]/50" : ""}`} onPointerDown={() => onSelectBone(bone)}>
+                        <div className="mb-1 flex items-center justify-between gap-2"><button type="button" aria-label={`选择骨骼 ${directorBoneLabel(bone)}`} aria-pressed={selectedBone === bone} className="min-w-0 flex-1 truncate text-left text-[var(--fs-label)]" onClick={() => onSelectBone(bone)}>{directorBoneLabel(bone)}</button><Button size="small" aria-label={`重置骨骼 ${directorBoneLabel(bone)}`} onClick={() => resetBone(bone)}>重置</Button></div>
+                        <BoneRotationFields boneLabel={directorBoneLabel(bone)} label="" rotation={rotation} onChange={(next) => onBoneRotationStage(bone, next)} onChangeComplete={onBoneRotationCommit} />
+                    </div>;
+                })}</section> : null;
+            })}</div> : null}
+            {/* 演员还没加载出模型时给一句解释，避免「动作片段」区域凭空消失。 */}
+            {motionClips.length ? null : <div className="text-[var(--fs-tiny)] opacity-50">模型加载后会显示可用动作 Clip</div>}
+        </> : isActor ? <p className="text-xs opacity-55">切换至“姿态”或“动画”模式后，可编辑角色姿势与骨骼。</p> : null}
+        {/* 动作片段是动画内容而非骨骼入口：任何带 Clip 的对象都能调，不限演员。 */}
+        {tab !== "motion" && motionClips.length ? <><Field label="动作片段"><Select aria-label="动作片段" className="w-full" value={object.activeMotionClipId || ""} options={[{ label: "静态姿势", value: "" }, ...motionClips.map((clip) => ({ label: clip.name, value: clip.id }))]} onChange={(activeMotionClipId) => onUpdate({ activeMotionClipId: activeMotionClipId || undefined })} /></Field>{activeMotionClip ? <><div className="grid grid-cols-2 gap-2"><Field label="开始时间"><InputNumber aria-label="动作开始时间" className="w-full" min={0} max={shotDuration} step={1 / Math.max(1, fps)} precision={3} value={activeMotionClip.start} addonAfter="秒" onChange={(value) => updateActiveMotion({ start: snapDirectorTime(value ?? 0, fps) })} /></Field><Field label="播放速度"><InputNumber className="w-full" min={0.1} max={4} step={0.1} value={activeMotionClip.playbackRate} onChange={(playbackRate) => updateActiveMotion({ playbackRate: playbackRate || 1 })} /></Field></div><Field label="循环"><Switch checked={activeMotionClip.loop} onChange={(loop) => updateActiveMotion({ loop })} /></Field></> : null}</> : null}
+        </> : null}
+        {/* 记录关键帧属于动画模式；属性与姿势页均可操作，不应藏在姿势分支里。 */}
+        {tab !== "motion" && capabilities.keyframes ? <>
+            <Button block icon={<Focus className="size-3.5" />} onClick={onAddKeyframe}>{selectedBone ? `在 ${playhead.toFixed(1)}s 记录骨骼` : `在 ${playhead.toFixed(1)}s 记录关键帧`}</Button>
+            <div className="text-[var(--fs-tiny)] opacity-50">Transform {object.keyframes.length} 个 · 骨骼 {object.boneTracks?.reduce((sum, track) => sum + track.keyframes.length, 0) || 0} 个</div>
+        </> : null}
+    </Inspector>;
+}
+
+function MultiObjectInspector({ objects, representative, rendered, playhead, capabilities, onTransformEdit, onUniformScaleChange, onUniformScaleCommit, onBoneRotationStage, onBoneRotationCommit, onUpdate }: { objects: DirectorObject[]; representative: DirectorObject; rendered: DirectorTransform; playhead: number; capabilities: DirectorModeCapabilities; onTransformEdit: (transform: DirectorTransform) => void; onUniformScaleChange: (value: number, baseValue: number, stage: boolean) => void; onUniformScaleCommit: () => void; onBoneRotationStage: (bone: DirectorHumanoidBone, from: DirectorQuat, to: DirectorQuat) => void; onBoneRotationCommit: () => void; onUpdate: (patch: Partial<DirectorObject>) => void }) {
+    const [tab, setTab] = useState<"properties" | "pose">("properties");
+    const [selectedBone, setSelectedBone] = useState<DirectorHumanoidBone | null>(null);
+    const isActorSelection = objects.every((object) => object.kind === "actor" || object.primitive === "character");
+    const allSamePose = objects.every((object) => object.pose === objects[0]?.pose && object.activeMotionClipId === objects[0]?.activeMotionClipId);
+    const commonBones = useMemo(() => {
+        const firstBones = Object.keys(objects[0]?.rig?.boneMap || {}) as DirectorHumanoidBone[];
+        return firstBones.filter((bone) => objects.every((object) => Boolean(object.rig?.boneMap[bone])));
+    }, [objects]);
+    useEffect(() => {
+        if (selectedBone && !commonBones.includes(selectedBone)) setSelectedBone(null);
+    }, [commonBones, selectedBone]);
+    const representativeScale = representative.uniformScale ?? 1;
+    const selectedBoneTrack = selectedBone ? representative.boneTracks?.find((track) => track.bone === selectedBone) : null;
+    const selectedBoneRotation = selectedBone ? resolveDirectorBoneRotation({ override: representative.boneOverrides?.[selectedBone], keyframes: selectedBoneTrack?.keyframes, time: playhead }) || [0, 0, 0, 1] as DirectorQuat : null;
+    const title = isActorSelection ? `角色 (${objects.length})` : `对象 (${objects.length})`;
+    return <div className="space-y-3 p-3">
+        <h3 className="text-sm font-medium">{title}</h3>
+        <div className="grid grid-cols-2 rounded-lg bg-black/5 p-0.5 dark:bg-white/5" role="tablist" aria-label="多选属性">
+            <button type="button" role="tab" aria-selected={tab === "properties"} className={`rounded-md px-3 py-1.5 text-xs transition ${tab === "properties" ? "bg-white shadow-sm dark:bg-white/10" : "opacity-65 hover:opacity-100"}`} onClick={() => setTab("properties")}>属性</button>
+            <button type="button" role="tab" aria-selected={tab === "pose"} disabled={!isActorSelection} className={`rounded-md px-3 py-1.5 text-xs transition disabled:cursor-not-allowed disabled:opacity-30 ${tab === "pose" ? "bg-white shadow-sm dark:bg-white/10" : "opacity-65 hover:opacity-100"}`} onClick={() => setTab("pose")}>姿势</button>
+        </div>
+        <p className="text-xs leading-relaxed opacity-60">已选中 {objects.length} 个{isActorSelection ? "角色" : "对象"}，修改将同步应用到全部选中对象</p>
+        {tab === "properties" ? <>
+            <TransformFields transform={rendered} onChange={onTransformEdit} />
+            <Field label="统一缩放"><div className="director-scale-row">
+                <input aria-label="多选统一缩放滑杆" type="range" min={0.1} max={10} step={0.05} value={representativeScale} className="director-scale-slider" style={{ "--director-scale-fill": directorScaleFill(representativeScale) } as CSSProperties} onPointerDown={(event) => { (event.currentTarget as HTMLInputElement).dataset.initialScale = String(representativeScale); }} onChange={(event) => onUniformScaleChange(Number(event.target.value), Number(event.currentTarget.dataset.initialScale || representativeScale), true)} onPointerUp={onUniformScaleCommit} onKeyUp={onUniformScaleCommit} onBlur={onUniformScaleCommit} />
+                <InputNumber aria-label="多选统一缩放数值" size="small" controls={false} min={0.1} max={10} step={0.05} value={representativeScale} className="director-scale-value" onChange={(value) => { if (value !== null) onUniformScaleChange(value, representativeScale, false); }} />
+            </div></Field>
+            <Field label="颜色"><ColorPicker value={representative.color} onChange={(_, color) => onUpdate({ color })} /></Field>
+        </> : isActorSelection ? <>
+            <section className="director-pose-section">
+                <div className="director-inspector-section-title"><span>姿势预设</span><span>{allSamePose ? directorPoseLabel(representative.pose || "stand") : "混合"}</span></div>
+                <div className="director-pose-grid">{poseOptions.map((option) => <button key={option.value} type="button" className={`director-pose-button ${allSamePose && representative.pose === option.value && !representative.activeMotionClipId ? "is-active" : ""}`} title={option.label} onClick={() => onUpdate({ pose: option.value, activeMotionClipId: undefined, boneOverrides: {} })}>{option.label}</button>)}</div>
+                <Button size="small" block onClick={() => onUpdate({ pose: "stand", activeMotionClipId: undefined, boneOverrides: {} })}>重置姿态</Button>
+            </section>
+            {capabilities.bones && commonBones.length ? <>
+                <Field label="共同骨骼"><Select className="w-full" allowClear value={selectedBone || undefined} placeholder="选择全部角色共有的骨骼" options={commonBones.map((bone) => ({ label: directorBoneLabel(bone), value: bone }))} onChange={(bone) => setSelectedBone(bone || null)} /></Field>
+                {selectedBone && selectedBoneRotation ? <><BoneRotationFields rotation={selectedBoneRotation} onChange={(rotation) => onBoneRotationStage(selectedBone, selectedBoneRotation, rotation)} onChangeComplete={onBoneRotationCommit} /><p className="text-xs opacity-55">骨骼旋转以代表角色为基准，按相同增量同步到其余选中角色。</p></> : null}
+            </> : capabilities.bones ? <p className="text-xs opacity-55">角色模型绑定完成后，可在此调整共同骨骼。</p> : !objects.every((object) => object.rig?.status === "ready") ? <p className="text-xs opacity-55">姿势预设已同步应用；精细骨骼调整可在“姿态”模式开放。</p> : null}
+        </> : null}
+        {capabilities.keyframes ? <p className="text-xs opacity-50">Transform 关键帧将按相同相对变化同步写入全部选中对象。</p> : null}
+    </div>;
+}
+
+function LightInspector({ light, onUpdate, onDelete }: { light: DirectorLight; onUpdate: (patch: Partial<DirectorLight>) => void; onDelete: () => void }) {
+    return <Inspector title={light.name} onTitleChange={(name) => onUpdate({ name })} onDelete={onDelete}><Field label="类型"><Select className="w-full" value={light.type} options={[{ label: "方向光", value: "directional" }, { label: "点光源", value: "point" }, { label: "聚光灯", value: "spot" }, { label: "环境光", value: "ambient" }]} onChange={(type) => onUpdate({ type })} /></Field><Vec3Field label="位置" value={light.transform.position} onChange={(position) => onUpdate({ transform: { ...light.transform, position } })} /><Field label="颜色"><ColorPicker value={light.color} onChange={(_, color) => onUpdate({ color })} /></Field><Field label="强度"><InputNumber className="w-full" min={0} max={20} step={0.1} value={light.intensity} onChange={(value) => onUpdate({ intensity: value || 0 })} /></Field><Field label="投射阴影"><Switch checked={light.castShadow} onChange={(castShadow) => onUpdate({ castShadow })} /></Field></Inspector>;
+}
+
+function ShotInspector({ shot, camera, cameras, capabilities, onUpdateShot, onUpdateCamera, onAddCameraKeyframe, onApplyCameraMove, onAlignCameraToView, onExportClay, recording, showScreenshots = true, showCameraPosition = true, showCameraSelection = true, onRemoveScreenshot }: { shot: DirectorShot; camera: DirectorCamera | null; cameras: DirectorScene["cameras"]; capabilities: DirectorModeCapabilities; onUpdateShot: (patch: Partial<DirectorShot>) => void; onUpdateCamera: (patch: Partial<DirectorCamera>) => void; onAddCameraKeyframe: () => void; onApplyCameraMove: () => void; onAlignCameraToView: () => void; onExportClay: () => void; recording: boolean; showScreenshots?: boolean; showCameraPosition?: boolean; showCameraSelection?: boolean; onRemoveScreenshot?: (screenshot: DirectorScreenshot) => void }) {
+    return <Inspector title={shot.name} onTitleChange={(name) => onUpdateShot({ name })}>
+        <DirectorGroup title="镜头参数" hint="SHOT">
+            {showCameraSelection ? <Field label="摄影机"><Select className="w-full" value={shot.cameraId} options={cameras.map((item) => ({ label: item.name, value: item.id }))} onChange={(cameraId) => onUpdateShot({ cameraId })} /></Field> : null}
+            <div className="dsp-two"><Field label="景别"><Select className="w-full" value={shot.shotSize} options={shotSizeOptions} onChange={(shotSize: DirectorShotSize) => onUpdateShot({ shotSize })} /></Field><Field label="帧率"><Select className="w-full" value={shot.fps} options={[24, 25, 30].map((fps) => ({ label: `${fps} fps`, value: fps }))} onChange={(fps: 24 | 25 | 30) => onUpdateShot({ fps })} /></Field></div>
+            <Field label="运镜"><Select className="w-full" value={shot.cameraMove} options={cameraMoveOptions} onChange={(cameraMove: DirectorCameraMove) => onUpdateShot({ cameraMove })} /></Field>
+            <Field label="时长"><InputNumber className="w-full" min={0.5} max={60} step={0.5} value={shot.duration} addonAfter="秒" onChange={(value) => onUpdateShot({ duration: value || 5 })} /></Field>
+            <Field label="镜头意图"><Input.TextArea autoSize={{ minRows: 3, maxRows: 7 }} value={shot.prompt} placeholder="人物表演、动作、叙事目标…" onChange={(event) => onUpdateShot({ prompt: event.target.value })} /></Field>
+        </DirectorGroup>
+        {camera ? <DirectorGroup title="光学" hint="OPTICS">
+            {showCameraPosition ? <><Vec3Field label="摄影机位置" value={camera.transform.position} onChange={(position) => onUpdateCamera({ transform: { ...camera.transform, position } })} /><Vec3Field label="焦点" value={camera.target} onChange={(target) => onUpdateCamera({ target })} /></> : null}
+            <Field label="焦距"><InputNumber className="w-full" min={12} max={200} value={camera.focalLength} addonAfter="mm" onChange={(focalLength) => onUpdateCamera({ focalLength: focalLength || 35, fov: directorFocalLengthToFov(focalLength || 35) })} /></Field>
+            <div className="dsp-two"><Field label="光圈"><InputNumber className="w-full" min={0.7} max={32} step={0.1} value={camera.aperture} addonBefore="f/" onChange={(aperture) => onUpdateCamera({ aperture: aperture || 2.8 })} /></Field><Field label="焦点距离"><InputNumber className="w-full" min={0.1} max={200} step={0.1} value={camera.focusDistance} addonAfter="m" onChange={(focusDistance) => onUpdateCamera({ focusDistance: focusDistance || 5 })} /></Field></div>
+        </DirectorGroup> : null}
+        <div className="dcp-actions">
+            <Button block icon={<Camera className="size-3.5" />} onClick={onAlignCameraToView}>摄影机对齐当前视图</Button>
+            <Button block icon={<Video className="size-3.5" />} onClick={onApplyCameraMove}>按运镜生成轨迹</Button>
+            {capabilities.keyframes ? <Button block icon={<Focus className="size-3.5" />} onClick={onAddCameraKeyframe}>记录摄影机关键帧</Button> : null}
+            <Button block type="primary" ghost icon={<Video className="size-3.5" />} loading={recording} onClick={onExportClay}>导出白膜视频</Button>
+        </div>
+        {showScreenshots ? <DirectorScreenshotGallery screenshots={shot.screenshots || []} onRemove={onRemoveScreenshot} /> : null}
+    </Inspector>;
+}
+
+function Inspector({ title, children, onTitleChange, onDelete, staticTitle = false }: { title: string; children: ReactNode; onTitleChange: (value: string) => void; onDelete?: () => void; staticTitle?: boolean }) {
+    return <div className={staticTitle ? "director-actor-inspector" : "space-y-3 p-3"}><div className="flex items-center gap-2">{staticTitle ? <h3 className="min-w-0 flex-1 text-sm font-medium">{title}</h3> : <Input variant="borderless" value={title} className="min-w-0 flex-1 px-0 font-medium" onChange={(event) => onTitleChange(event.target.value)} />}{onDelete ? <IconButton label="删除" onClick={onDelete}><Trash2 className="size-4" /></IconButton> : null}</div>{children}</div>;
+}
+
+function TransformFields({ transform, onChange }: { transform: DirectorTransform; onChange: (transform: DirectorTransform) => void }) {
+    return <><Vec3Field label="位置" value={transform.position} onChange={(position) => onChange({ ...transform, position })} /><Vec3Field label="旋转" value={transform.rotation} step={0.05} onChange={(rotation) => onChange({ ...transform, rotation })} /><Vec3Field label="缩放" value={transform.scale} step={0.1} onChange={(scale) => onChange({ ...transform, scale })} /></>;
+}
+
+function ActorTransformFields({ transform, onChange, onToggleKey, keyedAt }: { transform: DirectorTransform; onChange: (transform: DirectorTransform) => void; onToggleKey?: (channel: "position" | "rotation" | "scale") => void; keyedAt?: (channel: "position" | "rotation" | "scale") => boolean }) {
+    return <><ActorVec3Field label="位置" value={transform.position} step={0.1} onChange={(position) => onChange({ ...transform, position })} onToggleKey={onToggleKey ? () => onToggleKey("position") : undefined} keyed={keyedAt?.("position")} /><ActorVec3Field label="旋转" value={transform.rotation} step={1} onChange={(rotation) => onChange({ ...transform, rotation })} onToggleKey={onToggleKey ? () => onToggleKey("rotation") : undefined} keyed={keyedAt?.("rotation")} /><ActorVec3Field label="缩放" value={transform.scale} step={0.05} onChange={(scale) => onChange({ ...transform, scale })} onToggleKey={onToggleKey ? () => onToggleKey("scale") : undefined} keyed={keyedAt?.("scale")} /></>;
+}
+
+function ActorVec3Field({ label, value, step, onChange, onToggleKey, keyed = false }: { label: string; value: DirectorVec3; step: number; onChange: (value: DirectorVec3) => void; onToggleKey?: () => void; keyed?: boolean }) {
+    return <Field label={label}><div className="director-actor-axis-grid">{value.map((item, index) => <span key={index} className="director-actor-axis-input"><span aria-hidden="true">{["X", "Y", "Z"][index]}</span><ActorAxisInput label={`${label} ${["X", "Y", "Z"][index]}`} value={item} step={step} onChange={(next) => onChange(value.map((entry, itemIndex) => itemIndex === index ? next : entry) as DirectorVec3)} />{onToggleKey ? <button type="button" className="director-actor-axis-key" aria-label={`切换${label} ${["X", "Y", "Z"][index]} 关键帧`} aria-pressed={keyed} title={keyed ? "当前帧有关键帧" : "当前帧无关键帧"} onClick={onToggleKey}><span aria-hidden="true" /></button> : null}</span>)}</div></Field>;
+}
+
+function ActorAxisInput({ label, value, step, onChange }: { label: string; value: number; step: number; onChange: (value: number) => void }) {
+    const [draft, setDraft] = useState(String(Number(value.toFixed(2))));
+    const focused = useRef(false);
+    useEffect(() => { if (!focused.current) setDraft(String(Number(value.toFixed(2)))); }, [value]);
+    const parse = (text: string) => /^-?(?:\d+\.?\d*|\.\d+)$/.test(text) ? Number(text) : null;
+    return <input aria-label={label} aria-valuenow={value} role="spinbutton" type="text" inputMode="decimal" value={draft} onFocus={() => { focused.current = true; }} onChange={(event) => { const next = event.target.value; if (!/^-?(?:\d*\.?\d*)?$/.test(next)) return; setDraft(next); const parsed = parse(next); if (parsed !== null && Number.isFinite(parsed)) onChange(parsed); }} onBlur={() => { focused.current = false; const parsed = parse(draft); if (parsed !== null && Number.isFinite(parsed)) onChange(parsed); setDraft(String(Number((parsed ?? value).toFixed(2)))); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "ArrowUp" || event.key === "ArrowDown") { event.preventDefault(); const next = Number((value + (event.key === "ArrowUp" ? step : -step)).toFixed(2)); setDraft(String(next)); onChange(next); } }} />;
+}
+
+function ActorColorField({ color, onChange }: { color: string; onChange: (color: string) => void }) {
+    const [hexDraft, setHexDraft] = useState(color.replace(/^#/, "").toUpperCase());
+    useEffect(() => setHexDraft(color.replace(/^#/, "").toUpperCase()), [color]);
+    return <Field label="颜色"><div className="director-actor-color-input"><span className="director-actor-color-swatch" style={{ backgroundColor: color }}><input aria-label="颜色选择器" type="color" value={color} onChange={(event) => onChange(event.target.value)} /></span><span className="director-actor-hex-input"><span aria-hidden="true">#</span><input aria-label="颜色 HEX" type="text" maxLength={6} spellCheck={false} value={hexDraft} onChange={(event) => { const next = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6).toUpperCase(); setHexDraft(next); if (next.length === 6) onChange(`#${next}`); }} onBlur={() => { if (hexDraft.length !== 6) setHexDraft(color.replace(/^#/, "").toUpperCase()); }} /></span></div></Field>;
+}
+
+function BoneRotationFields({ rotation, label = "骨骼旋转（局部角度 °）", boneLabel, axes = ["X", "Y", "Z"], axisIndices = [0, 1, 2], axisDirections = [1, 1, 1], onChange, onChangeComplete }: { rotation: DirectorQuat; label?: string; boneLabel?: string; axes?: readonly [string, string, string]; axisIndices?: readonly number[]; axisDirections?: readonly number[]; onChange: (rotation: DirectorQuat) => void; onChangeComplete: () => void }) {
+    const initialDegrees = useMemo(() => {
+        const euler = new Euler().setFromQuaternion(new Quaternion(...rotation), "XYZ");
+        return [euler.x, euler.y, euler.z].map((value) => Number(((value * 180) / Math.PI).toFixed(1))) as DirectorVec3;
+    }, [rotation]);
+    const [degrees, setDegrees] = useState<DirectorVec3>(initialDegrees);
+    const lastEmittedRotation = useRef<DirectorQuat | null>(null);
+    useEffect(() => {
+        if (lastEmittedRotation.current && sameDirectorQuaternion(rotation, lastEmittedRotation.current)) {
+            lastEmittedRotation.current = null;
+            return;
+        }
+        setDegrees(initialDegrees);
+    }, [initialDegrees, rotation]);
+    const updateAxis = (index: number, value: number) => {
+        const next = degrees.map((entry, entryIndex) => entryIndex === index ? value : entry) as DirectorVec3;
+        const radians = next.map((entry) => (entry * Math.PI) / 180) as DirectorVec3;
+        const nextRotation = new Quaternion().setFromEuler(new Euler(radians[0], radians[1], radians[2], "XYZ")).toArray() as DirectorQuat;
+        setDegrees(next);
+        lastEmittedRotation.current = nextRotation;
+        onChange(nextRotation);
+    };
+    const controls = <div className="space-y-1.5">
+        {axisIndices.map((index) => {
+            const direction = axisDirections[index] ?? 1;
+            const controlValue = degrees[index] * direction;
+            return <div key={index} className="director-bone-axis-row grid grid-cols-[48px_minmax(0,1fr)_68px] items-center gap-2">
+            <span className="whitespace-nowrap text-[var(--fs-tiny)] font-medium opacity-65" title={axes[index]}>{axes[index]}</span>
+            <Slider className="m-0" min={-180} max={180} step={1} value={controlValue} onChange={(next) => updateAxis(index, (Array.isArray(next) ? next[0] ?? 0 : next) * direction)} onChangeComplete={onChangeComplete} />
+            <InputNumber aria-label={`${boneLabel || "骨骼"} ${axes[index]} 角度`} size="small" controls={false} min={-180} max={180} step={1} precision={1} value={controlValue} className="w-[64px]" onChange={(next) => { if (next !== null) updateAxis(index, next * direction); }} onBlur={onChangeComplete} />
+        </div>;
+        })}
+    </div>;
+    return label ? <Field label={label}>{controls}</Field> : controls;
+}
+
+function sameDirectorQuaternion(left: DirectorQuat, right: DirectorQuat) {
+    const directDistance = left.reduce((sum, value, index) => sum + Math.abs(value - right[index]), 0);
+    const inverseDistance = left.reduce((sum, value, index) => sum + Math.abs(value + right[index]), 0);
+    return Math.min(directDistance, inverseDistance) < 0.0001;
+}
+
+/** 三轴输入统一走 DirectorVecField：无步进按钮（窄格内会互相遮挡），样式与各检查器一致。 */
+function Vec3Field({ label, value, step = 0.1, onChange }: { label: string; value: DirectorVec3; step?: number; onChange: (value: DirectorVec3) => void }) {
+    return <DirectorVecField label={label} value={value} step={step} onChange={onChange} />;
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="director-field block"><span className="director-field-label">{label}</span>{children}</label>; }
+
+/** 统一缩放滑杆的已填充比例（0.1–10），交给 CSS 画进度条，避免依赖浏览器默认强调色。 */
+function directorScaleFill(value: number) {
+    const clamped = Math.min(10, Math.max(0.1, Number.isFinite(value) ? value : 1));
+    return `${Math.round(((clamped - 0.1) / 9.9) * 100)}%`;
+}
+function PanelTitle({ title, action, spacious = false }: { title: string; action?: ReactNode; spacious?: boolean }) { return <div className={`flex ${spacious ? "h-12" : "h-9"} items-center px-3 text-[var(--fs-tiny)] font-semibold uppercase opacity-55`}><span className="flex-1">{title}</span>{action}</div>; }
+
+/**
+ * 场景列表行。选择按钮点完必须释放焦点：
+ *「点选对象 -> 按 Delete」是 delete-selected 快捷键的主流程，
+ * 焦点留在按钮上会让守卫把 Delete 吃掉。
+ */
+function SceneRow({ active, icon, label, visible, locked, depth = 0, groupDisabled, expandIcon, onVisibilityChange, onLockChange, onClick, onFocus, onDuplicate, onGroup, onUngroup, onExpand, onDelete }: { active?: boolean; icon: ReactElement; label: string; visible?: boolean; locked?: boolean; depth?: number; groupDisabled?: boolean; expandIcon?: ReactElement; onVisibilityChange?: () => void; onLockChange?: () => void; onClick: (event: MouseEvent<HTMLButtonElement>) => void; onFocus?: () => void; onDuplicate?: () => void; onGroup?: () => void; onUngroup?: () => void; onExpand?: () => void; onDelete?: () => void }) {
+    const sceneActions = Boolean(onVisibilityChange || onLockChange || onFocus || onDuplicate || onGroup || onUngroup);
+    const row = <div data-director-scene-row="true" data-director-row-label={label} data-active={active ? "true" : "false"} className={`group flex h-8 w-full items-center gap-1 pr-1 text-left text-xs transition ${active ? "bg-black/10 dark:bg-white/10" : "hover:bg-black/5 dark:hover:bg-white/5"}`}>
+        <button type="button" className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left" style={{ paddingLeft: 8 + depth * 16 }} onClick={(event) => { onClick(event); releaseDirectorFocusAfterPointer(event); }}>
+            <span className="[&>svg]:size-3.5">{icon}</span>
+            <span className={`truncate ${visible === false ? "opacity-45" : ""}`}>{label}</span>
+        </button>
+        {onExpand ? <button type="button" aria-label={`${label}展开/折叠`} title="展开/折叠" className="grid size-6 shrink-0 place-items-center rounded opacity-60 transition hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10" onClick={(event) => { event.stopPropagation(); onExpand(); releaseDirectorFocusAfterPointer(event); }}>{expandIcon || icon}</button> : null}
+        {onFocus ? <button type="button" aria-label={`聚焦${label}`} title="聚焦" className={`grid size-6 shrink-0 place-items-center rounded transition hover:bg-black/5 dark:hover:bg-white/10 ${active ? "pointer-events-auto opacity-75" : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-75 group-focus-within:pointer-events-auto group-focus-within:opacity-75"}`} onClick={(event) => { event.stopPropagation(); onFocus(); releaseDirectorFocusAfterPointer(event); }}><Focus className="size-3.5" /></button> : null}
+        {onVisibilityChange ? <button type="button" aria-label={`${visible ? "隐藏" : "显示"}${label}`} aria-pressed={!visible} title={visible ? "隐藏" : "显示"} className={`grid size-6 shrink-0 place-items-center rounded transition hover:bg-black/5 dark:hover:bg-white/10 ${visible ? "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100" : "pointer-events-auto opacity-75"}`} onClick={(event) => { event.stopPropagation(); onVisibilityChange(); releaseDirectorFocusAfterPointer(event); }}>{visible ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}</button> : null}
+        {onLockChange ? <button type="button" aria-label={`${locked ? "解锁" : "锁定"}${label}`} aria-pressed={Boolean(locked)} title={locked ? "解锁" : "锁定"} className={`grid size-6 shrink-0 place-items-center rounded transition hover:bg-black/5 dark:hover:bg-white/10 ${locked ? "pointer-events-auto opacity-85" : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"}`} onClick={(event) => { event.stopPropagation(); onLockChange(); releaseDirectorFocusAfterPointer(event); }}>{locked ? <LockKeyhole className="size-3.5" /> : <LockKeyholeOpen className="size-3.5" />}</button> : null}
+        {onDelete && !sceneActions && !locked ? <button type="button" aria-label={`删除${label}`} title={`删除${label}`} className="grid size-6 shrink-0 place-items-center rounded opacity-60 transition hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10" onClick={(event) => { event.stopPropagation(); onDelete(); releaseDirectorFocusAfterPointer(event); }}><Trash2 className="size-3.5" /></button> : null}
+    </div>;
+    if (!sceneActions) return row;
+    const items: MenuProps["items"] = [
+        ...(onGroup ? [{ key: "group", icon: <Folder className="size-3.5" />, label: "打组", onClick: onGroup }] : []),
+        ...(groupDisabled ? [{ key: "group-disabled", icon: <Folder className="size-3.5" />, label: "打组", disabled: true }] : []),
+        ...(onUngroup ? [{ key: "ungroup", icon: <Folder className="size-3.5" />, label: "解组", onClick: onUngroup }] : []),
+        ...(onFocus ? [{ key: "focus", icon: <Focus className="size-3.5" />, label: "聚焦", onClick: onFocus }] : []),
+        ...(onVisibilityChange ? [{ key: "visibility", icon: visible ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />, label: "显示/隐藏", onClick: onVisibilityChange }] : []),
+        ...(onLockChange ? [{ key: "lock", icon: locked ? <LockKeyhole className="size-3.5" /> : <LockKeyholeOpen className="size-3.5" />, label: "锁定/解锁", onClick: onLockChange }] : []),
+        ...(onDuplicate ? [{ key: "duplicate", icon: <Copy className="size-3.5" />, label: "创建副本", onClick: onDuplicate }] : []),
+        ...(onDelete ? [{ key: "delete", icon: <Trash2 className="size-3.5" />, label: "删除", onClick: onDelete, danger: true }] : []),
+    ];
+    return <Dropdown trigger={["contextMenu"]} menu={{ items, style: { minWidth: 144 } }}>{row}</Dropdown>;
+}
+function AddMenuButton({ label, items, open, onOpenChange }: { label: string; items: MenuProps["items"]; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+    return <Dropdown open={open} onOpenChange={onOpenChange} trigger={["click"]} placement="bottomRight" menu={{ items }}><button type="button" aria-label={label} title={label} className="grid size-8 shrink-0 place-items-center rounded-md transition hover:bg-black/5 dark:hover:bg-white/10"><Plus className="size-3.5" /></button></Dropdown>;
+}
+function QuickAdd({ label, icon, onClick }: { label: string; icon: ReactElement; onClick: () => void }) { return <button type="button" className="flex h-8 items-center gap-1.5 border px-2 text-[var(--fs-tiny)] transition hover:bg-black/5 dark:hover:bg-white/5" onClick={(event) => { onClick(); releaseDirectorFocusAfterPointer(event); }}><span className="[&>svg]:size-3.5">{icon}</span><span className="truncate">{label}</span></button>; }
+function PanoramaAction({ label, icon, disabled, onClick }: { label: string; icon: ReactElement; disabled?: boolean; onClick: () => void }) { return <button type="button" disabled={disabled} className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm transition hover:bg-white/5 disabled:opacity-55" onClick={(event) => { onClick(); releaseDirectorFocusAfterPointer(event); }}><span className="[&>svg]:size-4">{icon}</span><span>{label}</span></button>; }
+function PanoramaHistoryThumbnail({ storageKey, fallback }: { storageKey?: string; fallback: string }) {
+    const [url, setUrl] = useState(fallback);
+    useEffect(() => {
+        let active = true;
+        void resolvePreviewImageUrl(storageKey, fallback, { cacheMiss: true }).then((resolved) => { if (active) setUrl(resolved); });
+        return () => { active = false; };
+    }, [storageKey, fallback]);
+    return <img src={url} alt="" className="aspect-video w-full object-cover" />;
+}
+function IconButton({ label, disabled, expanded, controls, children, onClick }: { label: string; disabled?: boolean; expanded?: boolean; controls?: string; children: ReactNode; onClick: () => void }) { return <button type="button" aria-label={label} aria-expanded={expanded} aria-controls={controls} title={label} disabled={disabled} className="grid size-8 shrink-0 place-items-center rounded-md transition hover:bg-black/5 disabled:opacity-30 dark:hover:bg-white/10" onClick={(event) => { onClick(); releaseDirectorFocusAfterPointer(event); }}>{children}</button>; }
+const poseOptions: Array<{ label: string; value: DirectorPose }> = [
+    { label: "站立", value: "stand" }, { label: "T型", value: "t_pose" }, { label: "行走", value: "walk" }, { label: "跑步", value: "run" },
+    { label: "坐姿", value: "sit" }, { label: "蹲下", value: "squat" }, { label: "单膝跪", value: "kneel_single" }, { label: "双膝跪", value: "kneel_double" },
+    { label: "叉腰", value: "hands_hips" }, { label: "倚靠", value: "lean" }, { label: "鞠躬", value: "bow" }, { label: "思考", value: "think" },
+    { label: "格斗", value: "fight" }, { label: "踢球", value: "kick" }, { label: "投掷", value: "throw" }, { label: "推进", value: "push" },
+    { label: "招手", value: "wave" }, { label: "伸手", value: "reach" }, { label: "抱臂", value: "arms_crossed" }, { label: "看手机", value: "phone" },
+];
+type DirectorBoneControlGroup = { label: string; bones: DirectorHumanoidBone[] };
+type DirectorPoseControlGroup = DirectorBoneControlGroup & { controls: Array<{ bone: DirectorHumanoidBone; axisIndex: number; label: string; direction?: number }> };
+const directorBoneControlGroups: DirectorBoneControlGroup[] = [
+    { label: "身体", bones: ["hips"] },
+    { label: "躯干", bones: ["spine", "chest"] },
+    { label: "头部", bones: ["neck", "head"] },
+    { label: "左臂", bones: ["leftShoulder", "leftUpperArm", "leftLowerArm", "leftHand"] },
+    { label: "右臂", bones: ["rightShoulder", "rightUpperArm", "rightLowerArm", "rightHand"] },
+    { label: "左腿", bones: ["leftUpperLeg", "leftLowerLeg", "leftFoot"] },
+    { label: "右腿", bones: ["rightUpperLeg", "rightLowerLeg", "rightFoot"] },
+];
+/** LibTV's paired, anatomy-first control layout for the built-in rig (25 controls, not 57 raw Euler axes). */
+const semanticAxes = (bone: DirectorHumanoidBone, labels: string[], axisIndices = [0, 1, 2], directions = [1, 1, 1]) => axisIndices.map((axisIndex, index) => ({ bone, axisIndex, label: labels[index], direction: directions[index] }));
+const pairedSemanticAxes = (left: DirectorHumanoidBone, right: DirectorHumanoidBone, labels: string[], axisIndices = [0, 1, 2], leftDirections = [1, 1, 1], rightDirections = [1, 1, 1]) => [...semanticAxes(left, labels, axisIndices, leftDirections), ...semanticAxes(right, labels, axisIndices, rightDirections)];
+const axisDirections = (index: number, direction = 1): [number, number, number] => [1, 1, 1].map((value, axis) => axis === index ? direction : value) as [number, number, number];
+const directorProceduralPoseControlGroups: DirectorPoseControlGroup[] = [
+    { label: "身体", bones: ["hips"], controls: semanticAxes("hips", ["前倾", "转身", "侧倾"]) },
+    { label: "躯干", bones: ["spine"], controls: semanticAxes("spine", ["前倾", "扭转", "侧倾"]) },
+    { label: "头部", bones: ["head"], controls: semanticAxes("head", ["点头", "转头", "歪头"]) },
+    { label: "手臂 — 肩", bones: ["leftUpperArm", "rightUpperArm"], controls: pairedSemanticAxes("leftUpperArm", "rightUpperArm", ["前举", "外展", "扭转"], [0, 2, 1], [-1, -1, 1], [-1, 1, 1]) },
+    { label: "肘部", bones: ["leftLowerArm", "rightLowerArm"], controls: pairedSemanticAxes("leftLowerArm", "rightLowerArm", ["弯曲"], [0]) },
+    { label: "腿部 — 髋", bones: ["leftUpperLeg", "rightUpperLeg"], controls: pairedSemanticAxes("leftUpperLeg", "rightUpperLeg", ["前抬", "外展", "扭转"], [0, 2, 1], [-1, -1, 1], [-1, 1, 1]) },
+    { label: "膝部", bones: ["leftLowerLeg", "rightLowerLeg"], controls: pairedSemanticAxes("leftLowerLeg", "rightLowerLeg", ["弯曲"], [0]) },
+];
+const shotSizeOptions = [{ label: "大远景", value: "extreme_wide" }, { label: "远景", value: "wide" }, { label: "全身景", value: "full" }, { label: "中景", value: "medium" }, { label: "近景", value: "close_up" }, { label: "大特写", value: "extreme_close_up" }];
+const cameraMoveOptions = [{ label: "固定", value: "static" }, { label: "推进", value: "push_in" }, { label: "拉远", value: "pull_out" }, { label: "左摇", value: "pan_left" }, { label: "右摇", value: "pan_right" }, { label: "上摇", value: "tilt_up" }, { label: "下摇", value: "tilt_down" }, { label: "左环绕", value: "orbit_left" }, { label: "右环绕", value: "orbit_right" }, { label: "手持", value: "handheld" }];
+const directorMotionPresetOptions: { kind: DirectorMotionPresetKind; label: string }[] = [
+    { kind: "orbit", label: "环绕" },
+    { kind: "half_arc", label: "半弧" },
+    { kind: "push_in", label: "推近" },
+    { kind: "pull_out", label: "拉远" },
+    { kind: "lift", label: "升降" },
+    { kind: "truck", label: "横移" },
+    { kind: "spiral", label: "螺旋上升" },
+];
+/** 渲染视图全集。实际可选项由当前模式的 capabilities.renderModes 过滤。 */
+
+
+========================================================================
+FILE: web/src/components/canvas/director/director-camera-properties.tsx
+LINES: 1-103
+========================================================================
+import { Input, Modal, Select } from "antd";
+import { Camera as CameraIcon, Expand } from "lucide-react";
+import { useState, type ReactNode } from "react";
+
+import { Group, SliderRow } from "@/components/canvas/director/director-scene-inspector";
+import { DirectorKeyToggle, DirectorVecField } from "@/components/canvas/director/director-vec-field";
+import { DIRECTOR_KEYFRAME_EPSILON, directorFovToFocalLength } from "@/lib/canvas/director/director-scene";
+import { snapDirectorTime } from "@/lib/canvas/director/director-animation-semantics";
+import { resolveDirectorCameraInspectorRotation, resolveDirectorCameraTrackValues, resolveDirectorCameraTransform } from "@/lib/canvas/director/director-view-modes";
+import type { DirectorCamera, DirectorObject, DirectorScene, DirectorShot, DirectorTransform, DirectorVec3 } from "@/types/director";
+
+type Props = {
+    scene: DirectorScene;
+    camera: DirectorCamera | null;
+    cameras: DirectorCamera[];
+    shot: DirectorShot;
+    objects: DirectorObject[];
+    onUpdateCamera: (patch: Partial<DirectorCamera>) => void;
+    playhead?: number;
+    onUpdateAnimated?: (patch: { transform?: DirectorTransform; target?: DirectorVec3; fov?: number }) => void;
+    onUpdateRotation?: (rotation: DirectorVec3) => void;
+    onToggleTrack?: (channel: "position" | "rotation" | "focus" | "fov") => void;
+    onChangeLookAtMode?: (mode: "coordinates" | "rotation" | `object:${string}`) => void;
+    onSelectCamera: (cameraId: string) => void;
+    onFollowObject: (objectId: string) => void;
+    children: ReactNode;
+};
+
+export function DirectorCameraProperties({ scene, camera, cameras, shot, objects, onUpdateCamera, onUpdateAnimated, onUpdateRotation, onToggleTrack, onChangeLookAtMode, playhead = 0, onSelectCamera, onFollowObject, children, previewUrl = null }: Props & { previewUrl?: string | null }) {
+    const [previewOpen, setPreviewOpen] = useState(false);
+    if (!camera) return <div className="dcp-root"><p className="dcp-empty">无可用机位</p></div>;
+    const renderedTransform = resolveDirectorCameraTransform(camera, playhead);
+    const renderedOptics = resolveDirectorCameraTrackValues(camera, playhead);
+    const displayedRotation = resolveDirectorCameraInspectorRotation(scene, camera, playhead);
+    const frame = camera.keyframes.find((key) => Math.abs(key.time - snapDirectorTime(playhead, shot.fps)) < DIRECTOR_KEYFRAME_EPSILON);
+    const positionKeyed = Boolean(frame && frame.positionKeyed !== false);
+    const rotationKeyed = Boolean(frame && frame.rotationKeyed !== false);
+    const focusKeyed = frame?.target !== undefined;
+    const fovKeyed = frame?.fov !== undefined;
+    const changePosition = (position: DirectorVec3) => {
+        const transform = { ...renderedTransform, position };
+        if (onUpdateAnimated) onUpdateAnimated({ transform });
+        else onUpdateCamera({ transform });
+    };
+    const changeTarget = (target: DirectorVec3) => {
+        if (onUpdateAnimated) onUpdateAnimated({ target });
+        else onUpdateCamera({ target });
+    };
+    const changeFov = (value: number) => {
+        const fov = Math.max(15, Math.min(90, value));
+        if (onUpdateAnimated) onUpdateAnimated({ fov });
+        else onUpdateCamera({ fov, focalLength: directorFovToFocalLength(fov) });
+    };
+    const changeRotation = (degrees: DirectorVec3) => {
+        if (camera.lookAtMode !== "rotation") return;
+        const rotation: DirectorVec3 = [-degrees[0] * Math.PI / 180, (degrees[1] - 180) * Math.PI / 180, degrees[2] * Math.PI / 180];
+        if (onUpdateRotation) onUpdateRotation(rotation);
+        else onUpdateCamera({ transform: { ...renderedTransform, rotation } });
+    };
+    const lookAtValue = camera.lookAtMode === "rotation" ? "rotation"
+        : camera.lookAtMode !== "coordinates" && objects.some((item) => item.id === camera.lookAtObjectId) ? `object:${camera.lookAtObjectId}` : "coordinates";
+    const followValue = objects.some((item) => item.id === camera.followObjectId) ? camera.followObjectId : "";
+    return <div className="dcp-root">
+        <div aria-label="摄影机预览" className="dcp-preview">
+            {previewUrl ? <img src={previewUrl} alt="" draggable={false} /> : <div className="dcp-preview-empty"><span className="flex items-center gap-2"><CameraIcon className="size-3.5" />正在生成机位预览</span></div>}
+            <span className="dcp-preview-badge">FOV {Math.round(renderedOptics.fov)}°</span>
+            <button type="button" aria-label="放大摄影机预览" title="放大预览" disabled={!previewUrl} onClick={() => setPreviewOpen(true)} className="dcp-preview-expand"><Expand className="size-3.5" /></button>
+        </div>
+        <Modal open={previewOpen} title={`${camera.name} · 预览`} footer={null} onCancel={() => setPreviewOpen(false)} width={960} destroyOnHidden>
+            {previewUrl ? <img src={previewUrl} alt={`${camera.name}画面预览`} className="max-h-[72vh] w-full rounded-lg bg-black object-contain" /> : null}
+        </Modal>
+        <Group title="机位" hint="CAMERA">
+            <Field label="名称"><Input size="small" variant="borderless" value={camera.name} onChange={(event) => onUpdateCamera({ name: event.target.value })} /></Field>
+            <Field label="切换机位"><Select size="small" variant="borderless" className="w-full" value={shot.cameraId} options={cameras.map((item) => ({ label: item.name, value: item.id }))} onChange={onSelectCamera} /></Field>
+        </Group>
+        <Group title="变换" hint="TRANSFORM">
+            <DirectorVecField label="位置" value={renderedTransform.position} step={0.1} precision={2} keyed={positionKeyed} onToggleKey={onToggleTrack ? () => onToggleTrack("position") : undefined} onChange={changePosition} />
+            <DirectorVecField label="旋转" value={displayedRotation} step={1} precision={1} keyed={rotationKeyed} onToggleKey={onToggleTrack ? () => onToggleTrack("rotation") : undefined} onChange={changeRotation} />
+        </Group>
+        <Group title="注视与跟随" hint="TRACKING">
+            <Field label="跟随目标"><Select size="small" variant="borderless" className="w-full" value={followValue} options={[{ label: "不跟随", value: "" }, ...objects.map((item) => ({ label: item.name, value: item.id }))]} onChange={onFollowObject} /></Field>
+            <Field label="注视目标"><Select size="small" variant="borderless" className="w-full" value={lookAtValue} options={[{ label: "手动坐标", value: "coordinates" }, { label: "手动旋转", value: "rotation" }, ...objects.map((item) => ({ label: item.name, value: `object:${item.id}` }))]} onChange={(value) => onChangeLookAtMode ? onChangeLookAtMode(value as "coordinates" | "rotation" | `object:${string}`) : onUpdateCamera(value.startsWith("object:") ? { lookAtMode: "object", lookAtObjectId: value.slice(7) } : { lookAtMode: value as "coordinates" | "rotation", lookAtObjectId: undefined })} /></Field>
+            {lookAtValue === "coordinates" ? <DirectorVecField label="注视坐标" value={renderedOptics.target} step={0.1} precision={2} keyed={focusKeyed} onToggleKey={onToggleTrack ? () => onToggleTrack("focus") : undefined} onChange={changeTarget} /> : null}
+        </Group>
+        <Group title="镜头" hint="LENS">
+            <div className="dsp-field">
+                <div className="dvec-head">
+                    <span className="dvec-head-label">视野角度 (FOV)</span>
+                    {onToggleTrack ? <DirectorKeyToggle keyed={fovKeyed} label="切换视野角度关键帧" onToggle={() => onToggleTrack("fov")} /> : null}
+                </div>
+                <SliderRow label="视野角度" value={Math.min(90, Math.max(15, renderedOptics.fov))} min={15} max={90} step={1} onCommit={changeFov} input={{ min: 15, max: 90, step: 1, suffix: "°" }} />
+            </div>
+        </Group>
+        <details className="dcp-advanced">
+            <summary>镜头高级参数</summary>
+            <div className="dcp-advanced-body">{children}</div>
+        </details>
+    </div>;
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+    return <label className="dsp-field"><span className="dsp-field-label">{label}</span>{children}</label>;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/director/director-camera-screenshot-tabs.tsx
+LINES: 1-34
+========================================================================
+import type { ReactNode } from "react";
+
+import { DirectorScreenshotGallery } from "@/components/canvas/director/director-screenshot-gallery";
+import { releaseDirectorFocusAfterPointer } from "@/lib/canvas/director/director-shortcuts";
+import type { DirectorScene, DirectorScreenshot } from "@/types/director";
+
+export type DirectorCameraInspectorTab = "properties" | "motion" | "screenshots";
+
+/** 截图属于镜头，但截图页按摄影机展示；同一机位的多个镜头不可丢失。 */
+export function groupDirectorCameraScreenshots(scene: Pick<DirectorScene, "cameras" | "shots">): Array<{ cameraId: string; cameraName: string; screenshots: DirectorScreenshot[] }> {
+    return scene.cameras.map((camera) => ({
+        cameraId: camera.id,
+        cameraName: camera.name,
+        screenshots: scene.shots.filter((shot) => shot.cameraId === camera.id).flatMap((shot) => shot.screenshots || []),
+    })).filter((group) => group.screenshots.length > 0);
+}
+
+export function DirectorCameraScreenshotTabs({ scene, tab = "properties", motionTabVisible = true, onTabChange, motionContent, onRemoveScreenshot, children }: { scene: Pick<DirectorScene, "cameras" | "shots">; tab?: DirectorCameraInspectorTab; motionTabVisible?: boolean; onTabChange?: (tab: DirectorCameraInspectorTab) => void; motionContent?: ReactNode; onRemoveScreenshot?: (screenshot: DirectorScreenshot) => void; children: ReactNode }) {
+    const groups = groupDirectorCameraScreenshots(scene);
+    const tabs = [
+        { key: "properties" as const, label: "属性" },
+        ...(motionTabVisible ? [{ key: "motion" as const, label: "运动轨迹" }] : []),
+        { key: "screenshots" as const, label: "截图" },
+    ];
+    return <div className="min-h-full" aria-label="摄像机检查器">
+        <header className="dcp-tabs-head"><h2>摄像机</h2></header>
+        <div role="tablist" aria-label="摄像机面板" className="dcp-tablist">
+            {tabs.map((item) => <button key={item.key} type="button" role="tab" aria-selected={tab === item.key} className={`dcp-tab${tab === item.key ? " is-active" : ""}`} onClick={(event) => { onTabChange?.(item.key); releaseDirectorFocusAfterPointer(event); }}>{item.label}</button>)}
+        </div>
+        <div role="tabpanel" className={tab === "properties" || tab === "motion" ? "dcp-tabpanel" : undefined} aria-label={tab === "properties" ? "属性" : tab === "motion" ? "运动轨迹" : "截图"}>
+            {tab === "properties" ? children : tab === "motion" ? motionContent : <div className="dcp-tabpanel-empty">{groups.length ? groups.map((group) => <DirectorScreenshotGallery key={group.cameraId} title={`${group.cameraName}截图`} screenshots={group.screenshots} compact onRemove={onRemoveScreenshot} />) : <p>暂无截图</p>}</div>}
+        </div>
+    </div>;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/director/director-export-notice.tsx
+LINES: 1-10
+========================================================================
+import { CheckCircle2, CircleAlert } from "lucide-react";
+
+export function DirectorExportNotice({ kind, text, background }: { kind: "success" | "warning" | "error"; text: string; background?: string }) {
+    const success = kind === "success";
+    const warning = kind === "warning";
+    return <div role={success || warning ? "status" : "alert"} aria-live={success || warning ? "polite" : "assertive"} className="director-workbench-topbar-group max-w-[min(480px,calc(100vw-300px))] gap-2 truncate px-3 text-xs" style={{ background, color: success ? "var(--status-success)" : warning ? "var(--status-warning)" : "var(--status-error)" }}>
+        {success ? <CheckCircle2 className="size-4 shrink-0" aria-hidden /> : <CircleAlert className="size-4 shrink-0" aria-hidden />}
+        <span className="truncate">{text}</span>
+    </div>;
+}
 
 
 ========================================================================
@@ -1978,193 +2461,6 @@ export function DirectorVecField({ label, value, step = 0.1, precision = 2, keye
                 ))}
             </div>
         </div>
-    );
-}
-
-
-========================================================================
-FILE: web/src/components/canvas/director/director-view-toolbar.tsx
-LINES: 1-52
-========================================================================
-import { useMemo, type MouseEvent } from "react";
-import { Tooltip } from "@/components/ui/base/tooltip";
-import { directorAxisHeads, directorOrientationForMode, type DirectorOrientation } from "@/lib/canvas/director/director-orientation-gizmo";
-import { releaseDirectorFocusAfterPointer } from "@/lib/canvas/director/director-shortcuts";
-import { DIRECTOR_VIEW_MODES, type DirectorViewMode } from "@/lib/canvas/director/director-view-modes";
-
-type DirectorViewToolbarProps = {
-    viewMode: DirectorViewMode;
-    orientation?: DirectorOrientation;
-    onViewModeChange: (mode: DirectorViewMode) => void;
-    onResetView?: () => void;
-};
-
-const primaryModes = new Set<DirectorViewMode>(["free", "camera"]);
-const primaryLabels: Record<"free" | "camera", string> = { free: "导演视角", camera: "机位视角" };
-const axisColors: Record<string, string> = { "x+": "bg-rose-400", "x-": "bg-rose-400", "y+": "bg-emerald-400", "y-": "bg-emerald-400", "z+": "bg-blue-500", "z-": "bg-blue-500" };
-
-/** View selection changes only the observer camera, never scene content or undo history. */
-export function DirectorViewToolbar({ viewMode, orientation = [0, 0, 0, 1], onViewModeChange, onResetView }: DirectorViewToolbarProps) {
-    const primary = DIRECTOR_VIEW_MODES.filter((item) => primaryModes.has(item.mode));
-    const heads = useMemo(() => directorAxisHeads(directorOrientationForMode(viewMode, orientation)), [viewMode, orientation]);
-    const chooseMode = (mode: DirectorViewMode, event: MouseEvent<HTMLButtonElement>) => {
-        onViewModeChange(mode);
-        releaseDirectorFocusAfterPointer(event);
-    };
-
-    return <div className="pointer-events-none absolute inset-0 z-[var(--z-toolbar)]">
-        {/* 顶栏（52px）中间没有内容、且背景透明，切换组若挂在其下方会显得上方空白过大；
-            这里直接与左侧「3D导演台」标题同一行居中（(52-42)/2 ≈ 5px，取 6px），读作顶栏的一部分。 */}
-        <div role="group" aria-label="导演台取景模式" className="pointer-events-auto absolute left-1/2 top-1.5 inline-flex -translate-x-1/2 items-center gap-1 rounded-[var(--r-lg)] border p-1 shadow-xl backdrop-blur" style={{ borderColor: "var(--director-sequencer-border)", background: "var(--director-dock-surface)", color: "var(--director-dock-fg)" }}>
-            {primary.map((item) => {
-                const active = viewMode === item.mode;
-                const label = primaryLabels[item.mode as "free" | "camera"];
-                return <Tooltip key={item.mode} title={item.hint} placement="bottom"><button type="button" aria-pressed={active} aria-label={label} title={item.hint} className="inline-flex h-8 min-w-20 items-center justify-center whitespace-nowrap rounded-[var(--r-md)] px-3 text-[var(--fs-tiny)] font-medium transition-colors hover:bg-[var(--director-control-hover)] hover:text-[var(--director-dock-fg-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--control-focus-ring)] motion-reduce:transition-none" style={active ? { background: "var(--director-dock-active-surface)", color: "var(--director-dock-fg-strong)" } : undefined} onClick={(event) => chooseMode(item.mode, event)}>{label}</button></Tooltip>;
-            })}
-        </div>
-        <div className="pointer-events-auto absolute bottom-3 right-3 flex w-[72px] flex-col items-center gap-1.5" role="group" aria-label="方向球">
-            <div className="relative size-[72px] rounded-full bg-neutral-900/90 shadow-lg" aria-label="点击轴向切换正交视角">
-                <svg aria-hidden="true" className="pointer-events-none absolute inset-0 size-full" viewBox="0 0 72 72">
-                    {heads.map((head) => <line key={head.id} x1="36" y1="36" x2={head.x} y2={head.y} className="stroke-white/20" strokeWidth="1" />)}
-                </svg>
-                {heads.map((head) => {
-                    const style = { left: head.x, top: head.y, zIndex: Math.round((head.depth + 1) * 10) };
-                    if (!head.mode) return <span key={head.id} aria-hidden="true" className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-neutral-600" style={style} />;
-                    const emphasized = head.depth > 0.15 || (head.id.endsWith("+") && head.depth >= -0.15);
-                    return <button key={head.id} type="button" aria-label={head.label} aria-pressed={viewMode === head.mode} title={head.label} onClick={(event) => chooseMode(head.mode!, event)} className={`absolute flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-[10px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--control-focus-ring)] ${emphasized ? axisColors[head.id] : "bg-neutral-600"}`} style={style}>{emphasized ? head.id[0].toUpperCase() : ""}</button>;
-                })}
-            </div>
-            <button type="button" aria-label="重置视角" onClick={(event) => { onResetView?.(); releaseDirectorFocusAfterPointer(event); }} className="w-full rounded-md bg-neutral-900/90 py-0.5 text-[11px] text-white/70 transition-colors hover:bg-neutral-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--control-focus-ring)] motion-reduce:transition-none">重置视角</button>
-        </div>
-    </div>;
-}
-
-
-========================================================================
-FILE: web/src/components/canvas/director/director-viewport-dock.tsx
-LINES: 1-123
-========================================================================
-import { Dropdown, type MenuProps } from "antd";
-// sundas 没有直接依赖 rc-menu；这里只用到 onClick 回调里的原生事件，本地声明即可。
-type MenuInfo = { domEvent: MouseEvent };
-
-import { Bone, Camera, Clapperboard, Compass, Layers, LoaderCircle, MousePointer2, Palette, Rotate3D, RotateCcw, Save, Scaling, Video } from "lucide-react";
-import { useState, type ReactNode } from "react";
-
-import { releaseDirectorFocusAfterPointer } from "@/lib/canvas/director/director-shortcuts";
-import { DIRECTOR_MODES, type DirectorMode } from "@/lib/canvas/director/director-modes";
-import type { DirectorRenderMode } from "@/types/director";
-
-type DirectorViewportDockProps = {
-    transformMode: "translate" | "rotate" | "scale";
-    renderMode: DirectorRenderMode;
-    /** 当前模式允许的渲染视图。dock 只展示这些，避免成为绕过模式门控的第二条路径。 */
-    renderModes: DirectorRenderMode[];
-    onTransformModeChange: (mode: DirectorViewportDockProps["transformMode"]) => void;
-    onRenderModeChange: (mode: DirectorRenderMode) => void;
-    timelineOpen: boolean;
-    onToggleTimeline: () => void;
-    captureBusy: boolean;
-    captureReady: boolean;
-    onCapture: () => void;
-    onExportClay: () => void;
-    exportBusy: boolean;
-    onApplyToCanvas: () => void;
-    applyBusy: boolean;
-    saveRetryable: boolean;
-    saveRetryBusy: boolean;
-    onRetrySave: () => void;
-    mode?: DirectorMode;
-    onModeChange?: (mode: DirectorMode) => void;
-    workspaceView?: "scene" | "preview";
-    onWorkspaceViewChange?: (view: "scene" | "preview") => void;
-    canUndo?: boolean;
-    canRedo?: boolean;
-    onUndo?: () => void;
-    onRedo?: () => void;
-};
-
-/** 渲染视图按钮的展示顺序与图标。实际可见项由 renderModes 过滤。 */
-const RENDER_VIEW_BUTTONS: Array<{ mode: DirectorRenderMode; label: string; icon: ReactNode }> = [
-    { mode: "beauty", label: "构图预览", icon: <Camera /> },
-    { mode: "clay", label: "彩色白膜", icon: <Palette /> },
-    { mode: "pose", label: "骨骼视图", icon: <Bone /> },
-    { mode: "depth", label: "深度视图", icon: <Layers /> },
-    { mode: "normal", label: "法线视图", icon: <Compass /> },
-];
-
-const TRANSFORM_BUTTONS = [
-    { mode: "translate", label: "移动", shortcut: "V", icon: <MousePointer2 /> },
-    { mode: "rotate", label: "旋转", shortcut: "R", icon: <Rotate3D /> },
-    { mode: "scale", label: "缩放", shortcut: "F", icon: <Scaling /> },
-] as const;
-
-export function DirectorViewportDock({ transformMode, renderMode, renderModes, onTransformModeChange, onRenderModeChange, timelineOpen, onToggleTimeline, captureBusy, captureReady, onCapture, onExportClay, exportBusy, onApplyToCanvas, applyBusy, saveRetryable, saveRetryBusy, onRetrySave, mode = "layout", onModeChange = () => {}, workspaceView = "scene", onWorkspaceViewChange = () => {}, canUndo = false, canRedo = false, onUndo = () => {}, onRedo = () => {} }: DirectorViewportDockProps) {
-    const [advancedMenu, setAdvancedMenu] = useState(false);
-    const activeTransform = TRANSFORM_BUTTONS.find((item) => item.mode === transformMode) ?? TRANSFORM_BUTTONS[0];
-    const releaseMenuFocus = (detail: number) => releaseDirectorFocusAfterPointer({ detail, currentTarget: document.activeElement as HTMLElement });
-    // antd 6 的 Menu.Item 不再支持逐项 onClick，这里把动作收敛成 key -> 处理函数，
-    // 由 menu.onClick 统一分发，行为与 BeefTV 的逐项点击一致。
-    const menuActions: Record<string, () => void> = {};
-    const toolMenuItems: NonNullable<MenuProps["items"]> = [
-        { type: "group" as const, key: "render", label: "视图模式", children: RENDER_VIEW_BUTTONS.filter((item) => renderModes.includes(item.mode)).map((item) => {
-            menuActions[`render-${item.mode}`] = () => onRenderModeChange(item.mode);
-            return { key: `render-${item.mode}`, icon: item.icon, label: item.label };
-        }) },
-        { type: "group" as const, key: "workbench", label: "工作台", children: [
-            (() => { menuActions["export-clay"] = onExportClay; return { key: "export-clay", icon: exportBusy ? <LoaderCircle className="animate-spin" /> : <Video />, label: exportBusy ? "正在导出白膜视频" : "导出白膜视频", disabled: exportBusy }; })(),
-            (() => { menuActions["apply-to-canvas"] = onApplyToCanvas; return { key: "apply-to-canvas", icon: applyBusy ? <LoaderCircle className="animate-spin" /> : <Save />, label: applyBusy ? "正在应用到镜头" : "应用到镜头", disabled: applyBusy }; })(),
-            ...(saveRetryable ? [(() => { menuActions["retry-save"] = onRetrySave; return { key: "retry-save", icon: saveRetryBusy ? <LoaderCircle className="animate-spin" /> : <RotateCcw />, label: saveRetryBusy ? "正在重试保存" : "重试保存", disabled: saveRetryBusy }; })()] : []),
-        ] },
-        { key: "director-navigation", label: "导演台导航", icon: <Layers />, children: [
-            { type: "group" as const, key: "director-mode", label: "导演台模式", children: DIRECTOR_MODES.map((item) => {
-                menuActions[`director-mode-${item.mode}`] = () => onModeChange(item.mode);
-                return { key: `director-mode-${item.mode}`, label: item.label, title: item.hint };
-            }) },
-            { type: "group" as const, key: "workspace-view", label: "工作区视图", children: [
-                (() => { menuActions["workspace-scene"] = () => onWorkspaceViewChange("scene"); return { key: "workspace-scene", label: "场景调度" }; })(),
-                (() => { menuActions["workspace-preview"] = () => onWorkspaceViewChange("preview"); return { key: "workspace-preview", label: "成片预演" }; })(),
-            ] },
-            { type: "group" as const, key: "history", label: "编辑历史", children: [
-                (() => { menuActions.undo = onUndo; return { key: "undo", icon: <RotateCcw />, label: "撤销", disabled: !canUndo }; })(),
-                (() => { menuActions.redo = onRedo; return { key: "redo", icon: <RotateCcw className="scale-x-[-1]" />, label: "重做", disabled: !canRedo }; })(),
-            ] },
-        ] },
-    ];
-    const transformMenuItems: NonNullable<MenuProps["items"]> = TRANSFORM_BUTTONS.map((item) => {
-        menuActions[item.mode] = () => onTransformModeChange(item.mode);
-        return {
-            key: item.mode,
-            icon: item.icon,
-            label: <span className="flex min-w-24 items-center justify-between gap-5"><span>{item.label}</span><span className="text-xs opacity-60">{item.shortcut}</span></span>,
-        };
-    });
-    const handleMenuClick: MenuProps["onClick"] = ({ key, domEvent }) => {
-        menuActions[key]?.();
-        // antd 的 domEvent 可能是键盘事件，只有鼠标事件才带 detail
-        releaseMenuFocus("detail" in domEvent ? domEvent.detail : 0);
-    };
-
-    return (
-        <nav className="director-viewport-dock" aria-label="导演台视口工具" data-director-mode={mode} data-workspace-view={workspaceView}>
-            <Dropdown
-                trigger={["click", "contextMenu"]}
-                placement="topLeft"
-                menu={{
-                    selectable: true,
-                    selectedKeys: [transformMode, `render-${renderMode}`, `director-mode-${mode}`, `workspace-${workspaceView}`],
-                    items: advancedMenu ? toolMenuItems : transformMenuItems,
-                    onClick: handleMenuClick,
-                }}
-            >
-                <button type="button" className="director-viewport-dock-button is-active" aria-label={activeTransform.label} aria-haspopup="menu" title={`${activeTransform.label} (${activeTransform.shortcut}) · 右键更多工具`} onClick={() => setAdvancedMenu(false)} onContextMenu={() => setAdvancedMenu(true)}>
-                    {activeTransform.icon}
-                </button>
-            </Dropdown>
-            <button type="button" className="director-viewport-dock-button disabled:opacity-40" aria-label="截图" disabled={captureBusy || !captureReady} title={captureBusy ? "正在保存截图" : captureReady ? "截图" : "视口加载中"} onClick={(event) => { onCapture(); releaseDirectorFocusAfterPointer(event); }}>{captureBusy ? <LoaderCircle className="animate-spin" /> : <Camera />}</button>
-            <button type="button" className="director-viewport-dock-button disabled:opacity-40" aria-label={applyBusy ? "正在应用到镜头" : "应用到镜头"} title={applyBusy ? "正在应用到镜头" : "应用到镜头（把当前机位画面回写成画布节点）"} disabled={applyBusy} onClick={(event) => { onApplyToCanvas(); releaseDirectorFocusAfterPointer(event); }}>{applyBusy ? <LoaderCircle className="animate-spin" /> : <Save />}</button>
-            <button type="button" className={`director-viewport-dock-button ${timelineOpen ? "is-active" : ""}`} aria-label="动画时间轴" aria-pressed={timelineOpen} onClick={(event) => { onToggleTimeline(); releaseDirectorFocusAfterPointer(event); }}><Clapperboard /></button>
-        </nav>
     );
 }
 

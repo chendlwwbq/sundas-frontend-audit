@@ -26,7 +26,8 @@ main.home-landing .landing-welcome h1 {
 }
 main.home-landing .landing-intro { margin-top: 12px; font-size: 14px; line-height: 22px; color: var(--text-3); }
 main.home-landing .landing-switch { margin-top: 28px; border-radius: 999px; }
-main.home-landing .landing-switch a { border-radius: 999px; font-size: 14px; }
+main.home-landing .landing-switch > a,
+main.home-landing .landing-switch > button { border-radius: 999px; font-size: 14px; }
 
 /* 宽度与下方「灵感大厅」区块对齐：吃满 .home-content 的内容宽度，不再单独收窄 */
 main.home-landing .home-composer {

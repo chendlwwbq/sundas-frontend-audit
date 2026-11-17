@@ -38,6 +38,7 @@ export function canvasProductionApi(projectId: string, signal?: AbortSignal) {
         list: () => request<{ runs: ProductionRun[] }>('/runs'),
         detail: (id: string) => request<ProductionRunDetail>(`/runs/${encodeURIComponent(id)}`),
         resume: (id: string) => request<ProductionRunDetail>(`/runs/${encodeURIComponent(id)}/resume`, 'POST', {}),
+        cancel: (id: string) => request<ProductionRunDetail>(`/runs/${encodeURIComponent(id)}/cancel`, 'POST', {}),
         pause: (id: string) => request<ProductionRunDetail>(`/runs/${encodeURIComponent(id)}/pause`, 'POST', {}),
         adopt: (input: { clientRequestId: string; expectedVersion: number; command: { type: 'adopt'; runId: string; stepId: string; resultIndex?: number; allowStale?: boolean } }) => request<{ project: AgentProject; receipt: Record<string, unknown> }>('/commands', 'POST', input),
         restore: (input: { clientRequestId: string; expectedVersion: number; command: { type: 'restore'; requestId: string } }) => request<{ project: AgentProject; receipt: Record<string, unknown> }>('/commands', 'POST', input),

@@ -1,378 +1,7 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
-
-
-========================================================================
-FILE: web/src/services/api/canvas-storyboard.ts
-LINES: 1-41
-========================================================================
-import { apiRequest } from "./client";
-
-export type StoryboardShot = {
-    index: number;
-    duration: number;
-    shotSize: string;
-    cameraMove: string;
-    subject: string;
-    action: string;
-    lighting: string;
-    prompt: string;
-    videoPrompt: string;
-    dialogue: string;
-};
-
-export type StoryboardResult = {
-    title: string;
-    style: string;
-    logline: string;
-    durationSeconds: number;
-    shots: StoryboardShot[];
-    scriptText: string;
-    model: string;
-    creditsCharged: number;
-};
-
-export type StoryboardRequest = {
-    brief: string;
-    duration: number;
-    shotCount: number;
-    style?: string;
-    aspectRatio?: string;
-    model: string;
-};
-
-export function generateStoryboard(input: StoryboardRequest) {
-    return apiRequest<StoryboardResult>("/api/canvas/storyboard", {
-        method: "POST",
-        json: input,
-    });
-}
-
-
-========================================================================
-FILE: web/src/services/api/canvas-upscale.ts
-LINES: 1-42
-========================================================================
-import { apiRequest } from './client';
-
-export type UpscaleTarget = { id: string; label: string; scale?: number; width?: number; height?: number };
-export type UpscaleModel = {
-    id: string; name: string; mediaKind: 'image' | 'video'; inputMimeTypes: string[];
-    targets: UpscaleTarget[]; available: boolean; reason: string | null;
-};
-export type UpscaleCapabilities = { models: UpscaleModel[]; available: boolean; reason: string };
-export type UpscaleRun = {
-    id: string; sourceNodeId: string; purpose: 'image_upscale' | 'video_upscale';
-    source: { objectKey: string; mime: string; bytes: string; durationMs: number | null; info?: { width: number; height: number; duration?: number; fps?: number; hasAudio?: boolean } };
-    modelId: string | null; modelName: string | null; parameters: { target?: UpscaleTarget };
-    taskId: string | null; status: 'draft' | 'queued' | 'running' | 'succeeded' | 'failed' | 'review' | 'result_unavailable';
-    creditsHeld: number | null; creditsCharged: number | null; resultUrl: string | null; error: string | null;
-    result: { width: number; height: number; bytes: number; duration?: number; fps?: number; hasAudio?: boolean; mime: string } | null; createdAt: string;
-};
-export type UpscaleDraft = {
-    id: string; sourceNodeId: string; sourceObjectKey: string; mediaKind: 'image' | 'video'; modelId?: string; targetId?: string;
-};
-type Session = { userId: string; signal: AbortSignal };
-const options = ({ userId, signal }: Session) => ({ signal, headers: { 'X-Sundas-User': userId } });
-const runsPath = (projectId: string) => `/api/canvas/projects/${encodeURIComponent(projectId)}/upscale-runs`;
-
-export function getUpscaleCapabilities(kind: 'image' | 'video', session: Session) {
-    return apiRequest<UpscaleCapabilities>(`/api/canvas/upscale/capabilities?kind=${kind}`, options(session));
-}
-export function getUpscaleRuns(projectId: string, sourceNodeId: string, session: Session) {
-    return apiRequest<{ runs: UpscaleRun[] }>(`${runsPath(projectId)}?${new URLSearchParams({ sourceNodeId })}`, options(session));
-}
-export function saveUpscaleDraft(projectId: string, draft: UpscaleDraft, session: Session) {
-    return apiRequest<{ run: UpscaleRun }>(runsPath(projectId), { ...options(session), method: 'POST', json: draft });
-}
-export type UpscaleQuote = { credits: number; routeId: string; target: { width: number; height: number }; unit: string; quantity: number };
-export function quoteUpscaleRun(projectId: string, runId: string, session: Session) {
-    return apiRequest<UpscaleQuote>(`${runsPath(projectId)}/${encodeURIComponent(runId)}/quote`, { ...options(session), method: 'POST' });
-}
-export function submitUpscaleRun(projectId: string, runId: string, quote: UpscaleQuote, session: Session) {
-    return apiRequest<{ run: UpscaleRun }>(`${runsPath(projectId)}/${encodeURIComponent(runId)}/submit`, { ...options(session), method: 'POST', json: { expectedCredits: quote.credits, routeId: quote.routeId } });
-}
-export function resumeUpscaleRun(projectId: string, runId: string, session: Session) {
-    return apiRequest<{ run: UpscaleRun }>(`${runsPath(projectId)}/${encodeURIComponent(runId)}/resume`, { ...options(session), method: 'POST' });
-}
-
-
-========================================================================
-FILE: web/src/services/api/character-workflow.ts
-LINES: 1-26
-========================================================================
-import { apiRequest, type ApiRequestInit } from "./client";
-import { useAuthStore } from "@/stores/use-auth-store";
-
-export type CharacterInput = {
-    sourceKey: string; characterKey: string; target: string; instructions: string;
-    imageModel: string; videoModel: string; imageSize?: string; resolution: string; ratio: string;
-    start: number; end: number | null; keepAudio: boolean;
-};
-export type CharacterMedia = { key: string; kind: "image" | "video"; url?: string; mime?: string; bytes?: number; width?: number; height?: number; duration?: number };
-export type CharacterStepName = "prepare" | "image" | "video" | "assemble";
-export type CharacterStep = {
-    id: string; name: CharacterStepName; attempt: number; status: "queued" | "running" | "succeeded" | "failed" | "review";
-    taskIds: string[]; error?: string; output: { media?: CharacterMedia[]; range?: { start: number; end: number; duration: number }; frame?: CharacterMedia; clip?: CharacterMedia };
-};
-export type CharacterRun = { id: string; projectId: string; input: CharacterInput; selectedKey?: string; paused: boolean; createdAt: string; steps?: CharacterStep[] };
-
-export function characterRequest<T>(path: string, init: ApiRequestInit = {}) {
-    const auth = useAuthStore.getState();
-    if (!auth.user) return Promise.reject(new Error("请先登录"));
-    const owner = auth.user.id, epoch = auth.sessionEpoch;
-    return apiRequest<T>(`/api/canvas/character-runs${path}`, { ...init, headers: { ...init.headers, "X-Sundas-User": owner } }).then(result => {
-        const current = useAuthStore.getState();
-        if (current.user?.id !== owner || current.sessionEpoch !== epoch) throw new DOMException("登录账户已变化", "AbortError");
-        return result;
-    });
-}
-
-
-========================================================================
-FILE: web/src/services/api/client.ts
-LINES: 1-6
-========================================================================
-import { demoRequest } from '@/audit/demo';
-export type ApiRequestInit = RequestInit & { json?: unknown };
-export class ApiError extends Error {
- constructor(message:string,public status:number,public errorCode?:string){super(message);}
-}
-export async function apiRequest<T=unknown>(path:string,init:ApiRequestInit={}):Promise<T>{return demoRequest(path,init) as Promise<T>;}
-
-
-========================================================================
-FILE: web/src/services/api/creative-agent.ts
-LINES: 1-69
-========================================================================
-import { apiRequest } from './client';
-import { AGENT_CAPABILITIES_HEADER, DIRECTOR_AGENT_CAPABILITY } from '../../../../shared/agent-capabilities';
-import { useAuthStore } from '@/stores/use-auth-store';
-import type { CanvasConnection, CanvasNodeData } from '@/types/canvas';
-
-export type AgentProject = { id: string; title: string; content: { nodes: CanvasNodeData[]; connections: CanvasConnection[]; [key: string]: unknown }; version: number; updatedAt: string };
-export type CreativeSkill = { id: string; source: 'builtin' | 'personal'; enabled: boolean; version: number; name: string; description: string; content: string; requirements: string[] };
-export type SkillDraft = Pick<CreativeSkill, 'name' | 'description' | 'content' | 'requirements'>;
-export type SkillVersion = SkillDraft & { version: number; createdAt: string };
-export type CreativeAgentOperation =
-    | { type: 'media_inspect'; modelId: string; renderRequestId?: string; captureItemId?: string; frames: number[]; instructions: string }
-    | { type: 'production_capture'; runId: string; frames: number[] }
-    | { type: 'production_edit'; commands: Array<{ type: string; [key: string]: unknown }> }
-    | { type: 'director_capture'; sceneId: string; parameters: import('./canvas-director').DirectorRenderParameters }
-    | { type: 'director_command'; sceneId: string; commands: import('../../../../shared/director-commands').DirectorCommand[] }
-    | { type: 'add_node'; id: string; nodeType: 'text' | 'image' | 'video' | 'audio' | 'group'; title: string; position: { x: number; y: number }; text?: string; prompt?: string }
-    | { type: 'move_node'; nodeId: string; position: { x: number; y: number } }
-    | { type: 'update_prompt'; nodeId: string; prompt: string }
-    | { type: 'connect_nodes'; fromNodeId: string; toNodeId: string }
-    | { type: 'generate'; nodeId: string; mode: 'text' | 'image' | 'video' | 'audio'; modelId: string; prompt: string; referenceNodeIds: string[]; seconds?: number; size?: string; resolution?: string; voice?: string }
-    | { type: 'creative_tool'; tool: 'upscale' | 'character_replacement'; nodeId: string; referenceNodeIds: string[]; instructions: string }
-    | { type: 'production_tool'; action: 'script' | 'images' | 'narration' | 'check' | 'preview'; modelId?: string; shotIds?: string[]; narrationIds?: string[]; prompt?: string; voice?: string };
-export type AgentQuote = { minCredits: number | null; maxCredits: number | null; message: string };
-export type CreativeToolHandoff = { tool: 'upscale' | 'character_replacement'; projectId: string; projectVersion: number; operationId: string; nodeId: string; referenceNodeIds: string[]; instructions: string; sourceKey: string; referenceKeys: string[] };
-export type AgentTurn = { id: string; threadId: string; status: 'planning' | 'ready' | 'executing' | 'paused' | 'completed' | 'failed' | 'review'; currentVersion: number; baseVersion: number; prompt: string; planningTaskId: string; planningCredits: number; error?: string; plan?: { reply: string; operations: CreativeAgentOperation[]; quotes: AgentQuote[] }; skillSnapshots: Array<{ id: string; version: number; name: string }>; createdAt: string };
-export type AgentItem = { itemId: string; threadId: string; turnId: string; position: number; role: 'user' | 'assistant' | 'tool'; status: 'pending' | 'executing' | 'submitted' | 'succeeded' | 'failed' | 'review'; content: { text?: string; operation?: CreativeAgentOperation; quote?: AgentQuote }; receipt?: { renderReceipt?: { outputs?: Array<{ objectKey: string; frame?: number }> }; inspectedFrames?: Array<{ frame: number; url: string }>; message?: string; toolHandoff?: CreativeToolHandoff; taskIds?: string[]; creditsCharged?: number; outputs?: Array<{ id: string; kind: string; url?: string; text?: string; frame?: number; timeSeconds?: number }>; [key: string]: unknown }; taskIds: string[] };
-export type AgentThread = { id: string; title: string; createdAt: string; updatedAt: string };
-export type AgentState = { protocolVersion: number; storageVersion: number; thread: AgentThread & { projectId: string }; turns: AgentTurn[]; items: AgentItem[]; project: AgentProject };
-export type AgentCatalog = { models: Array<{ id: string; name: string; credits: number }>; generationModels: Array<{ id: string; name: string; capability: string }>; contextMode: 'text'; tools: Array<{ name: string; description: string }> };
-export type AgentTurnInput = { clientRequestId: string; modelId: string; expectedVersion: number; prompt: string; selectedNodeIds: string[]; skills: Array<{ id: string; version: number }>; acceptedPlanningCredits: number };
-
-/** Captures account and epoch once; both request and response must belong to this session. */
-export function creativeAgentApi(signal?: AbortSignal) {
-    const session = useAuthStore.getState();
-    const owner = session.user?.id;
-    const epoch = session.sessionEpoch;
-    const current = () => owner && useAuthStore.getState().user?.id === owner && useAuthStore.getState().sessionEpoch === epoch;
-    async function request<T>(path: string, method = 'GET', json?: unknown): Promise<T> {
-        if (!current()) throw new Error('登录账户已变化，请重新打开创作助手');
-        const result = await apiRequest<T>(path, { method, json, signal, headers: { 'X-Sundas-User': owner!, [AGENT_CAPABILITIES_HEADER]: DIRECTOR_AGENT_CAPABILITY } });
-        if (!current() || signal?.aborted) throw new Error('画布会话已变化，本次结果未回填');
-        return result;
-    }
-    async function state(path: string, method = 'GET', json?: unknown) {
-        const value = await request<AgentState>(path, method, json);
-        if (value.protocolVersion !== 1 || value.storageVersion !== 1) throw new Error('助手数据版本不受支持，请更新应用；原记录已保留');
-        if (value.items.some(item => item.threadId !== value.thread.id || !value.turns.some(turn => turn.id === item.turnId && turn.threadId === item.threadId))) throw new Error('助手消息归属不一致，请重新加载');
-        return value;
-    }
-    return {
-        undoDirector: (projectId: string, commandId: string, expectedVersion: number) => request<{ project: AgentProject }>(`/api/canvas/projects/${encodeURIComponent(projectId)}/director/commands/${encodeURIComponent(commandId)}/undo`, 'POST', { expectedVersion }),
-        catalog: () => request<AgentCatalog>('/api/canvas-agent/models'),
-        threads: (projectId: string) => request<{ threads: AgentThread[] }>(`/api/canvas-agent/threads?projectId=${encodeURIComponent(projectId)}`),
-        createThread: (projectId: string, title: string) => state('/api/canvas-agent/threads', 'POST', { projectId, title }),
-        thread: (id: string) => state(`/api/canvas-agent/threads/${encodeURIComponent(id)}`),
-        plan: (id: string, input: AgentTurnInput) => state(`/api/canvas-agent/threads/${encodeURIComponent(id)}/turns`, 'POST', input),
-        confirm: (id: string, expectedVersion: number) => state(`/api/canvas-agent/turns/${encodeURIComponent(id)}/confirm`, 'POST', { confirmed: true, expectedVersion }),
-        step: (id: string, itemId: string, expectedVersion: number) => state(`/api/canvas-agent/turns/${encodeURIComponent(id)}/steps/${encodeURIComponent(itemId)}`, 'POST', { expectedVersion }),
-        pause: (id: string) => state(`/api/canvas-agent/turns/${encodeURIComponent(id)}/pause`, 'POST', {}),
-        refresh: (id: string) => state(`/api/canvas-agent/turns/${encodeURIComponent(id)}/refresh`, 'POST', {}),
-        skills: () => request<{ skills: CreativeSkill[] }>('/api/creative-skills'),
-        versions: (id: string) => request<{ versions: SkillVersion[] }>(`/api/creative-skills/${id}/versions`),
-        createSkill: (value: SkillDraft) => request<{ id: string; version: number }>('/api/creative-skills', 'POST', value),
-        editSkill: (id: string, value: SkillDraft, expectedVersion: number) => request(`/api/creative-skills/${id}`, 'PUT', { ...value, expectedVersion }),
-        enableSkill: (id: string, enabled: boolean) => request(`/api/creative-skills/${id}`, 'PATCH', { enabled }),
-        copySkill: (id: string, version: number) => request<{ id: string; version: number }>(`/api/creative-skills/${id}/copy`, 'POST', { version }),
-        restoreSkill: (id: string, version: number, expectedVersion: number) => request(`/api/creative-skills/${id}/restore`, 'POST', { version, expectedVersion }),
-    };
-}
-
-
-========================================================================
-FILE: web/src/services/api/generation-history.ts
-LINES: 1-131
-========================================================================
-import { apiRequest } from './client';
-
-type HistoryMedia = { id:string;kind:string;url:string;mime:string;bytes:number };
-type HistoryTask = { id:string;type:string;modelId:string|null;modelName:string;routeId?:string|null;params:Record<string,unknown>;status:string;error:string|null;createdAt:string;finishedAt:string|null;creditsCharged?:number;reconciliationRequired?:boolean;media:HistoryMedia[] };
-export type RestoredLog = {
-    id:string;serverTaskIds:string[];createdAt:number;title:string;prompt:string;time:string;model:string;
-    config:Record<string,string>;references:[];durationMs:number;size:string;resolution:string;seconds:string;
-    status:'success'|'failed'|'pending'|'unavailable';error?:string;
-    task?:{id:string;provider:'openai';model:string};
-    images:{id:string;dataUrl:string;storageKey?:string;width:number;height:number;bytes:number;mimeType:string;durationMs:number}[];
-    video?:{id:string;url:string;storageKey:string;width:number;height:number;bytes:number;mimeType:string;durationMs:number};
-    successCount:number;failCount:number;imageCount:number;
-    creditsCharged?:number;reconciliationRequired?:boolean;referenceCount?:number;referenceHistoryUnknown?:boolean;
-};
-export async function fetchRecentGenerationHistory(owner:string,type:'image'|'video') {
-    const data=await apiRequest<{items:HistoryTask[]}>(`/api/generations/history?type=${type}&page=1`,{headers:{'X-Sundas-User':owner}});
-    return data.items.map(row=>({id:row.id,title:String(row.params.prompt??'').replace(/^参考图片编号：[^\n]*\n+/, '').replace(/^Reference image labels:[^\n]*\n+/i, '').trim().slice(0,80)||row.modelName,createdAt:new Date(row.createdAt).getTime(),mode:type}));
-}
-export async function fetchGenerationHistory(owner:string,type:'image'|'video',page=1, filter: { id?: string; active?: boolean } = {}) {
-    const params = new URLSearchParams({ type, page: String(page), ...(filter.id ? { id: filter.id } : {}), ...(filter.active ? { active: 'true' } : {}) });
-    const data=await apiRequest<{items:HistoryTask[];hasMore:boolean;hiddenTaskIds:string[]}>(`/api/generations/history?${params}`,{headers:{'X-Sundas-User':owner}});
-    const logs:RestoredLog[]=data.items.map(row=>{
-        const modelId=row.modelId??'';
-        const createdAt=new Date(row.createdAt).getTime();
-        const durationMs=row.finishedAt?Math.max(0,new Date(row.finishedAt).getTime()-createdAt):0;
-        const prompt=String(row.params.prompt??'').replace(/^参考图片编号：[^\n]*\n+/, '').replace(/^Reference image labels:[^\n]*\n+/i, '').trim();
-        const images=row.media.filter(m=>m.kind==='image').map(m=>({id:m.id,dataUrl:m.url,width:0,height:0,bytes:Number(m.bytes),mimeType:m.mime,durationMs}));
-        const media=row.media.find(m=>m.kind==='video');
-        const status=row.status==='succeeded'?(row.media.length?'success':'unavailable'):row.status==='failed'?'failed':'pending';
-        return {id:row.id,serverTaskIds:[row.id],createdAt,title:prompt.slice(0,80)||row.modelName,prompt,time:new Date(createdAt).toLocaleString(),model:row.modelName,
-            config:{model:modelId,imageModel:modelId,videoModel:modelId,videoRouteId:row.routeId??'',size:String(row.params.size??''),vquality:String(row.params.resolution??''),videoSeconds:String(row.params.seconds??''),videoMode:String(row.params.mode??''),videoGenerateAudio:String(row.params.generateAudio??row.params.generate_audio??''),videoWatermark:String(row.params.watermark??''),count:String(images.length||1),quality:String(row.params.quality??''),background:String(row.params.background??'')},
-            references:[],durationMs,size:String(row.params.size??''),resolution:String(row.params.resolution??''),seconds:String(row.params.seconds??''),status,
-            error:row.error??(status==='unavailable'?'生成结果文件暂不可用':undefined),task:type==='video'?{id:row.id,provider:'openai',model:modelId}:undefined,
-            images,video:media?{id:media.id,url:media.url,storageKey:'',width:0,height:0,bytes:Number(media.bytes),mimeType:media.mime,durationMs}:undefined,
-            successCount:images.length,failCount:status==='failed'?1:0,imageCount:images.length,
-            creditsCharged:!row.reconciliationRequired && ['succeeded','failed'].includes(row.status) && row.creditsCharged != null ? Number(row.creditsCharged) : undefined,
-            reconciliationRequired:row.reconciliationRequired,referenceCount:Array.isArray(row.params.referenceInputs)?row.params.referenceInputs.length:undefined,
-            referenceHistoryUnknown:type==='image' && (!Array.isArray(row.params.referenceInputs) || row.params.referenceInputs.length>0)};
-    });
-    return {logs,hiddenTaskIds:data.hiddenTaskIds,hasMore:data.hasMore};
-}
-
-// Keep previously opened pages while refreshing the newest page after a task
-// update. Requests are serialized so a refresh and an older-page load cannot
-// overwrite one another.
-export class GenerationHistoryPager {
-    private records = new Map<string, RestoredLog>();
-    private activeIds = new Set<string>();
-    private hidden: string[] = [];
-    private nextPage = 1;
-    private more = true;
-    private queue: Promise<unknown> = Promise.resolve();
-
-    constructor(private owner: string, private type: 'image' | 'video') {}
-
-    private enqueue<T>(run: () => Promise<T>): Promise<T> {
-        const result = this.queue.then(run, run);
-        this.queue = result.catch(() => undefined);
-        return result;
-    }
-
-    private async fetch(page: number) {
-        const data = await fetchGenerationHistory(this.owner, this.type, page);
-        this.hidden = data.hiddenTaskIds;
-        for (const id of this.hidden) this.records.delete(id);
-        for (const log of data.logs) this.records.set(log.id, log);
-        if (page >= this.nextPage) {
-            this.nextPage = page + 1;
-            this.more = data.hasMore;
-        }
-        return this.snapshot();
-    }
-
-    refresh() { return this.enqueue(async () => {
-        await this.fetch(1);
-        const active = new Set<string>();
-        for (let page = 1; ; page++) {
-            const result = await fetchGenerationHistory(this.owner, this.type, page, { active: true });
-            for (const log of result.logs) { active.add(log.id); this.records.set(log.id, log); }
-            if (!result.hasMore) break;
-        }
-        for (const id of this.activeIds) {
-            if (!active.has(id)) await this.readRecord(id);
-        }
-        this.activeIds = active;
-        return this.snapshot();
-    }); }
-    private async readRecord(id: string) {
-        const result = await fetchGenerationHistory(this.owner, this.type, 1, { id });
-        this.hidden = result.hiddenTaskIds;
-        for (const hidden of this.hidden) this.records.delete(hidden);
-        if (!result.logs.length) this.records.delete(id);
-        for (const log of result.logs) this.records.set(log.id, log);
-        return this.snapshot();
-    }
-    loadRecord(id: string) { return this.enqueue(() => this.readRecord(id)); }
-    loadMore() { return this.enqueue(() => this.more ? this.fetch(this.nextPage) : Promise.resolve(this.snapshot())); }
-    snapshot() { return { logs: [...this.records.values()], hiddenTaskIds: this.hidden, hasMore: this.more }; }
-}
-type MergeLog = {id:string;createdAt:number;serverTaskIds?:string[];task?:{id:string};images?:{dataUrl:string}[];video?:unknown;references?:unknown[];config?:unknown;prompt?:string;model?:string;status?:string;creditsCharged?:number;reconciliationRequired?:boolean;referenceHistoryUnknown?:boolean};
-function plainPrompt(log: MergeLog) {
-    return (log.prompt ?? '').replace(/^参考图片编号：[^\n]*\n+/, '').replace(/^Reference image labels:[^\n]*\n+/i, '').trim();
-}
-function mergeVideoConfig(local: unknown, remote: unknown) {
-    if (!local || typeof local !== 'object') return remote;
-    if (!remote || typeof remote !== 'object') return local;
-    const remoteConfig = remote as Record<string, unknown>;
-    const localValues = Object.fromEntries(Object.entries(local).filter(([, value]) => value !== '' && value != null));
-    return { ...remoteConfig, ...localValues, ...(remoteConfig.videoRouteId ? { videoRouteId: remoteConfig.videoRouteId } : {}) };
-}
-export function generationTaskIds(log:MergeLog) { return log.serverTaskIds??(log.task?[log.task.id]:[]); }
-export function mergeGenerationHistory<T extends MergeLog>(local:T[],remote:T[],hidden:string[]) {
-    const remaining=new Map(remote.map(log=>[log.id,log]));
-    const merged:T[]=[];
-    for(const log of local) {
-        const ids=generationTaskIds(log);
-        if(ids.some(id=>hidden.includes(id)))continue;
-        const matches=remote.filter(item=>ids.includes(item.id)||log.images?.some(image=>item.images?.some(remoteImage=>image.dataUrl===remoteImage.dataUrl))||(!ids.length&&!log.images?.length&&item.status==='failed'&&log.status==='failed'&&log.model===item.model&&plainPrompt(log)&&plainPrompt(log)===plainPrompt(item)&&Math.abs(item.createdAt-log.createdAt)<=15_000));
-        const match=matches[0];
-        if(match) {
-            matches.forEach(item=>remaining.delete(item.id));
-            const value=log.task?{...log,...match,id:log.id,references:log.references??match.references,config:mergeVideoConfig(log.config,match.config),video:match.video??log.video,status:match.status==='pending' && log.status && log.status!=='pending'?log.status:match.status}:{...match,...log};
-            const completeMatch=ids.length ? ids.every(id=>matches.some(item=>item.id===id)) : (log.images?.length??0)<=1 && matches.length===1;
-            merged.push({...value,...(!log.task && Array.isArray(log.references)?{referenceHistoryUnknown:false}:{}),serverTaskIds:[...new Set([...ids,...matches.map(item=>item.id)])],reconciliationRequired:matches.some(item=>item.reconciliationRequired),creditsCharged:completeMatch && matches.every(item=>item.creditsCharged != null)?matches.reduce((sum,item)=>sum+(item.creditsCharged??0),0):undefined});
-        } else merged.push(log);
-    }
-    return [...merged,...remaining.values()].sort((a,b)=>b.createdAt-a.createdAt);
-}
-export async function hideGenerationHistory(owner:string,ids:string[]) {
-    await Promise.all([...new Set(ids)].map(id=>apiRequest(`/api/generations/history/${encodeURIComponent(id)}`,{method:'DELETE',headers:{'X-Sundas-User':owner}})));
-}
-
-
-========================================================================
-FILE: web/src/services/api/generation-wallet.ts
-LINES: 1-9
-========================================================================
-import { useAuthStore } from "@/stores/use-auth-store";
-
-export function refreshGenerationWallet(owner?: string) {
-    const auth = useAuthStore.getState();
-    if (owner && auth.ready && auth.user?.id === owner) {
-        void auth.refreshWallet().catch(() => undefined);
-        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('sundas:generation-updated', { detail: { owner } }));
-    }
-}
-
 
 ========================================================================
 FILE: web/src/services/api/image.ts
-LINES: 1-954
+LINES: 1-957
 ========================================================================
 import axios from "axios";
 
@@ -511,6 +140,7 @@ export function imageTaskIdFromError(error: unknown) {
 }
 
 async function resolvePendingImage(payload: ImageApiResponse, config: AiConfig, options?: RequestOptions): Promise<ImageApiResponse> {
+    if (payload.status === 'review') throw Object.assign(new Error(readApiErrorMessage(payload.error) || '原图片任务待核对，请勿重复生成'), { taskId: payload.taskId });
     if (payload.status !== 'pending' || !payload.taskId) return payload;
     const url = aiApiUrl(config, `/images/${encodeURIComponent(payload.taskId)}`);
     for (;;) {
@@ -523,7 +153,7 @@ async function resolvePendingImage(payload: ImageApiResponse, config: AiConfig, 
             if (axios.isAxiosError(error) && [401, 403, 404].includes(error.response?.status ?? 0)) throw error;
         }
         if (state?.status === 'completed') return state;
-        if (state?.status === 'failed') throw Object.assign(new Error(readApiErrorMessage(state.error) || '图片生成失败'), { taskId: payload.taskId });
+        if (state?.status === 'failed' || state?.status === 'review') throw Object.assign(new Error(readApiErrorMessage(state.error) || '图片生成失败'), { taskId: payload.taskId });
         await new Promise<void>((resolve, reject) => {
             if (options?.signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'));
             const abort = () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
@@ -1182,6 +812,7 @@ async function requestGenerationInner(config: AiConfig, prompt: string, options?
         const images = parseImagePayload(await resolvePendingImage(response.data, requestConfig, options));
         return images;
     } catch (error) {
+        if (imageTaskIdFromError(error)) throw error;
         throw new Error(readAxiosError(error, apiText("requestFailed")));
     }
 }
@@ -1250,6 +881,7 @@ async function requestEditInner(config: AiConfig, prompt: string, references: Re
         const images = parseImagePayload(await resolvePendingImage(response.data, requestConfig, options));
         return images;
     } catch (error) {
+        if (imageTaskIdFromError(error)) throw error;
         throw new Error(readAxiosError(error, apiText("requestFailed")));
     }
 }
@@ -2759,7 +2391,7 @@ export function copyOf(value: unknown, fallback: string) {
 
 ========================================================================
 FILE: web/src/services/api/storage.ts
-LINES: 1-47
+LINES: 1-55
 ========================================================================
 import { apiRequest } from "./client";
 
@@ -2797,8 +2429,8 @@ export function fetchStorageSummary() {
     return apiRequest<StorageSummary>("/api/storage");
 }
 
-export function fetchStorageItems(category: StorageCategoryKey, page = 1, pageSize = 20) {
-    return apiRequest<StoragePage>(`/api/storage/items?${new URLSearchParams({ category, page: String(page), pageSize: String(pageSize) })}`);
+export function fetchStorageItems(category: StorageCategoryKey, page = 1, pageSize = 20, protectedOnly = false) {
+    return apiRequest<StoragePage>(`/api/storage/items?${new URLSearchParams({ category, page: String(page), pageSize: String(pageSize), protected: String(protectedOnly) })}`);
 }
 
 export function deleteStorageMedia(id: string) {
@@ -2807,6 +2439,14 @@ export function deleteStorageMedia(id: string) {
 
 export function cleanupHistoryStorage() {
     return apiRequest<{ deleted: number; bytes: number; failed: number }>("/api/storage/cleanup-history", { method: "POST" });
+}
+
+export type StorageSource = {kind:string;owner:string;project:string|null;title:string;releasable:boolean;draft:boolean};
+export function storageSources(id:string) {
+    return apiRequest<{sources:StorageSource[];pinned:boolean;active:boolean;disputed:boolean}>(`/api/storage/media/${encodeURIComponent(id)}/sources`);
+}
+export function releaseStorageSource(id:string, source:StorageSource) {
+    return apiRequest(`/api/storage/media/${encodeURIComponent(id)}/sources/release`, {method:'POST',json:{kind:source.kind,owner:source.owner,project:source.project}});
 }
 
 
@@ -3811,5 +3451,706 @@ function readAudioMeta(url: string) {
         audio.preload = "metadata";
         audio.src = url;
     });
+}
+
+
+========================================================================
+FILE: web/src/services/image-storage.ts
+LINES: 1-361
+========================================================================
+
+import { nanoid } from "nanoid";
+import i18n from "@/i18n";
+import { assertLocalMediaOwner, assertMediaOwner, currentMediaOwner, isOwnMediaUrl, localMediaKey, notifyLocalMediaOnly, StorageQuotaError, uploadBlobToServer } from "@/services/cloud-media";
+import { lazyStore } from "@/lib/localforage-store";
+import { withLocalProxy } from "@/stores/use-config-store";
+import { createImageThumbnail } from "@/lib/image-thumbnail";
+import { MediaObjectUrls, registerSessionMediaCache } from "@/lib/media-object-urls";
+
+export type UploadedImage = {
+    url: string;
+    storageKey?: string;
+    width: number;
+    height: number;
+    bytes: number;
+    mimeType: string;
+    /** 仅为兼容从 BeefTV 平移过来的调用方：sundas 没有远端待上传态，恒为 false。 */
+    pendingRemoteUpload?: boolean;
+};
+
+const store = lazyStore("image_files");
+const previewStore = lazyStore("image_previews");
+const imageLogStore = lazyStore("image_generation_logs");
+const videoLogStore = lazyStore("video_generation_logs");
+const objectUrls = registerSessionMediaCache(new MediaObjectUrls());
+const previewUrls = registerSessionMediaCache(new MediaObjectUrls(() => {
+    previewRevision += 1;
+    previewListeners.forEach((listener) => listener());
+}));
+const previewListeners = new Set<() => void>();
+let previewRevision = 0;
+let previewQueue: Promise<unknown> = Promise.resolve();
+const IMAGE_PREVIEW_VERSION = 1;
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
+const IMAGE_REMOTE_LOAD_TIMEOUT_MS = 10 * 60_000;
+const IMAGE_DECODE_TIMEOUT_MS = 10_000;
+const IMAGE_RESPONSE_ERROR = "ImageResponseError";
+const IMAGE_TIMEOUT_ERROR = "ImageTimeoutError";
+
+type StoredImagePreview = { version: number; blob?: Blob };
+
+type ImageReadOptions = { signal?: AbortSignal; expectedOwner?: string | null; onProgress?: (progress: number) => void };
+
+export async function uploadImage(input: string | Blob, options?: ImageReadOptions): Promise<UploadedImage> {
+    const owner = options?.expectedOwner === undefined ? currentMediaOwner() : options.expectedOwner;
+    assertMediaOwner(owner, options?.signal);
+    options = { ...options, expectedOwner: owner };
+    if (typeof input !== "string") {
+        try {
+            return await storeImage(input, options);
+        } catch (error) {
+            if (error instanceof StorageQuotaError) throw error;
+            const uploaded = await uploadBlobToServer(input, "image", owner, options?.signal, true, false, options?.onProgress).catch(() => null);
+            if (!uploaded) throw error;
+            const meta = await loadImageMeta(uploaded.url, options).catch(() => null);
+            return { url: uploaded.url, width: meta?.width ?? 0, height: meta?.height ?? 0, bytes: uploaded.bytes, mimeType: uploaded.mime };
+        }
+    }
+    if (isOwnMediaUrl(input)) {
+        const meta = await loadImageMeta(input, options);
+        assertMediaOwner(owner, options?.signal);
+        if (!meta) throw new Error(i18n.t("common.imageReadFailed"));
+        return { url: input, width: meta.width, height: meta.height, bytes: 0, mimeType: "" };
+    }
+
+    let blob: Blob;
+    try {
+        blob = await fetchImageBlob(input, options);
+    } catch (error) {
+        if (options?.signal?.aborted || isNamedError(error, IMAGE_RESPONSE_ERROR) || isNamedError(error, IMAGE_TIMEOUT_ERROR) || !/^https?:\/\//i.test(input)) throw error;
+        const meta = await loadImageMeta(input, options, IMAGE_REMOTE_LOAD_TIMEOUT_MS);
+        if (!meta) throw error;
+        assertMediaOwner(owner, options?.signal);
+        return { url: input, width: meta.width, height: meta.height, bytes: 0, mimeType: "" };
+    }
+    return storeImage(blob, options);
+}
+
+async function storeImage(blob: Blob, options?: ImageReadOptions): Promise<UploadedImage> {
+    const owner = options?.expectedOwner === undefined ? currentMediaOwner() : options.expectedOwner;
+    assertMediaOwner(owner, options?.signal);
+    const storageKey = localMediaKey("image", owner, nanoid());
+    const url = URL.createObjectURL(blob);
+    try {
+        const meta = await loadImageMeta(url, options);
+        if (!meta) throw new Error(i18n.t("common.imageReadFailed"));
+        throwIfAborted(options?.signal);
+
+        const uploaded = await uploadBlobToServer(blob, "image", owner, options?.signal, false, false, options?.onProgress).catch((error) => { if (error instanceof StorageQuotaError) throw error; return null; });
+        assertMediaOwner(owner, options?.signal);
+        if (uploaded) {
+            URL.revokeObjectURL(url);
+            return { url: uploaded.url, width: meta.width, height: meta.height, bytes: blob.size, mimeType: blob.type.startsWith("image/") ? blob.type : "" };
+        }
+
+        await store.setItem(storageKey, blob);
+        assertMediaOwner(owner, options?.signal);
+        throwIfAborted(options?.signal);
+        objectUrls.set(storageKey, url);
+        await storeImagePreview(storageKey, blob);
+        assertMediaOwner(owner, options?.signal);
+        notifyLocalMediaOnly(owner);
+        return { url, storageKey, width: meta.width, height: meta.height, bytes: blob.size, mimeType: blob.type.startsWith("image/") ? blob.type : "" };
+    } catch (error) {
+        objectUrls.delete(storageKey);
+        URL.revokeObjectURL(url);
+        await deleteImagePreview(storageKey);
+        await store.removeItem(storageKey).catch(() => undefined);
+        throw error;
+    }
+}
+
+async function fetchImageBlob(url: string, options?: ImageReadOptions) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const abort = () => controller.abort();
+    if (options?.signal?.aborted) abort();
+    else options?.signal?.addEventListener("abort", abort, { once: true });
+    const timer = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, IMAGE_DOWNLOAD_TIMEOUT_MS);
+    try {
+        const response = await fetch(withLocalProxy(url), { signal: controller.signal });
+        if (!response.ok) throw namedError(IMAGE_RESPONSE_ERROR);
+        return await response.blob();
+    } catch (error) {
+        if (timedOut) throw namedError(IMAGE_TIMEOUT_ERROR);
+        if (options?.signal?.aborted) throw abortReason(options.signal);
+        throw error;
+    } finally {
+        window.clearTimeout(timer);
+        options?.signal?.removeEventListener("abort", abort);
+    }
+}
+
+function loadImageMeta(url: string, options?: ImageReadOptions, timeoutMs = IMAGE_DECODE_TIMEOUT_MS) {
+    return new Promise<{ width: number; height: number } | null>((resolve, reject) => {
+        if (options?.signal?.aborted) return reject(abortReason(options.signal));
+        const image = new Image();
+        let settled = false;
+        const finish = (value: { width: number; height: number } | null) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            options?.signal?.removeEventListener("abort", abort);
+            image.onload = null;
+            image.onerror = null;
+            resolve(value);
+        };
+        const abort = () => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            image.onload = null;
+            image.onerror = null;
+            reject(abortReason(options!.signal!));
+        };
+        const timer = window.setTimeout(() => finish(null), timeoutMs);
+        options?.signal?.addEventListener("abort", abort, { once: true });
+        image.onload = () => finish(image.naturalWidth && image.naturalHeight ? { width: image.naturalWidth, height: image.naturalHeight } : null);
+        image.onerror = () => finish(null);
+        image.src = url;
+    });
+}
+
+function namedError(name: string) {
+    const error = new Error(i18n.t("common.imageReadFailed"));
+    error.name = name;
+    return error;
+}
+
+function isNamedError(error: unknown, name: string) {
+    return error instanceof Error && error.name === name;
+}
+
+function abortReason(signal: AbortSignal) {
+    return signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError");
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+    if (signal?.aborted) throw abortReason(signal);
+}
+
+type ImageHydration = { owner?: string; isActive?: () => boolean; cacheMiss?: boolean };
+
+export async function resolveImageUrl(storageKey?: string, fallback = "", hydration?: ImageHydration) {
+    if (!storageKey) return fallback;
+    const owner = hydration?.owner ?? currentMediaOwner();
+    assertLocalMediaOwner(storageKey, owner);
+    const assertActive = () => {
+        if (hydration?.isActive) {
+            if (!hydration.isActive()) throw new DOMException("账户数据加载已中断", "AbortError");
+        } else assertMediaOwner(owner);
+    };
+    assertActive();
+    // Refresh a stale cover URL while concurrent refreshes still share one read.
+    if (hydration?.cacheMiss && objectUrls.get(storageKey)) objectUrls.delete(storageKey);
+    const url = await objectUrls.resolve(storageKey, async () => {
+        const blob = await store.getItem<Blob>(storageKey);
+        assertActive();
+        return blob;
+    });
+    assertActive();
+    return url || fallback;
+}
+
+/** 优先返回本地缩略图，没有则回落到原图 URL —— 对齐 BeefTV 的封面解析语义。 */
+export async function resolvePreviewImageUrl(storageKey?: string, fallback = "", hydration?: ImageHydration) {
+    if (!storageKey) return fallback;
+    const owner = hydration?.owner ?? currentMediaOwner();
+    assertLocalMediaOwner(storageKey, owner);
+    if (hydration?.isActive) {
+        if (!hydration.isActive()) throw new DOMException("账户数据加载已中断", "AbortError");
+    } else assertMediaOwner(owner);
+    const preview = hydration?.cacheMiss ? undefined : previewUrlFor(storageKey);
+    if (preview) return preview;
+    return resolveImageUrl(storageKey, fallback, hydration);
+}
+
+export async function getImageBlob(storageKey: string) {
+    const owner = currentMediaOwner();
+    assertLocalMediaOwner(storageKey, owner);
+    const blob = await store.getItem<Blob>(storageKey);
+    assertMediaOwner(owner);
+    return blob;
+}
+
+// 缩略图按图片的 storageKey 另存一份 WebP，只放在本地 IndexedDB 里，不写进节点数据，也不参与导出。
+export function previewUrlFor(storageKey?: string) {
+    if (!storageKey) return undefined;
+    try { assertLocalMediaOwner(storageKey); } catch { return undefined; }
+    return previewUrls.get(storageKey);
+}
+
+// 缩略图在后台补，生成完成后再让用到它的界面重渲染一次。
+export function subscribeImagePreviews(listener: () => void) {
+    previewListeners.add(listener);
+    return () => {
+        previewListeners.delete(listener);
+    };
+}
+
+export function getImagePreviewRevision() {
+    return previewRevision;
+}
+
+export async function ensureImagePreview(storageKey?: string) {
+    if (!storageKey) return undefined;
+    const owner = currentMediaOwner();
+    try { assertLocalMediaOwner(storageKey, owner); } catch { return undefined; }
+    return previewUrls.resolve(storageKey, async (isCurrent) => {
+        const stored = await previewStore.getItem<StoredImagePreview>(storageKey).catch(() => null);
+        if (currentMediaOwner() !== owner || !isCurrent()) return undefined;
+        if (stored?.version === IMAGE_PREVIEW_VERSION) return stored.blob;
+        // Keep the existing serial decoder queue; duplicate requests share this complete operation.
+        const result = previewQueue.then(async () => {
+            if (currentMediaOwner() !== owner || !isCurrent()) return undefined;
+            const original = await getImageBlob(storageKey);
+            return original ? createStoredImagePreview(storageKey, original, () => currentMediaOwner() === owner && isCurrent()) : undefined;
+        });
+        previewQueue = result.catch(() => undefined);
+        return result;
+    }).catch(() => undefined);
+}
+
+async function storeImagePreview(storageKey: string, original: Blob) {
+    const owner = currentMediaOwner();
+    return previewUrls.resolve(storageKey, (isCurrent) => createStoredImagePreview(storageKey, original, () => currentMediaOwner() === owner && isCurrent())).catch(() => undefined);
+}
+
+async function createStoredImagePreview(storageKey: string, original: Blob, isCurrent: () => boolean) {
+    // Decode errors must remain retryable rather than being persisted as a successful empty preview.
+    const preview = await createImageThumbnail(original);
+    if (!isCurrent()) return undefined;
+    await previewStore.setItem<StoredImagePreview>(storageKey, { version: IMAGE_PREVIEW_VERSION, blob: preview }).catch(() => undefined);
+    return isCurrent() ? preview : undefined;
+}
+
+async function deleteImagePreview(storageKey: string) {
+    previewUrls.delete(storageKey);
+    await previewStore.removeItem(storageKey).catch(() => undefined);
+}
+
+export async function setImageBlob(storageKey: string, blob: Blob) {
+    await store.setItem(storageKey, blob);
+    await deleteImagePreview(storageKey);
+    await storeImagePreview(storageKey, blob);
+    const url = URL.createObjectURL(blob);
+    objectUrls.set(storageKey, url);
+    return url;
+}
+
+export async function retryLocalImage(storageKey: string, options?: ImageReadOptions): Promise<UploadedImage> {
+    const owner = options?.expectedOwner === undefined ? currentMediaOwner() : options.expectedOwner;
+    assertMediaOwner(owner, options?.signal);
+    const blob = await getImageBlob(storageKey);
+    if (!blob?.size) throw new Error(i18n.t("common.imageReadFailed"));
+    const uploaded = await uploadBlobToServer(blob, "image", owner, options?.signal, true, false, options?.onProgress);
+    if (!uploaded) throw new Error(i18n.t("common.imageReadFailed"));
+    const meta = await loadImageMeta(uploaded.url, options).catch(() => null);
+    return { url: uploaded.url, width: meta?.width ?? 0, height: meta?.height ?? 0, bytes: uploaded.bytes, mimeType: uploaded.mime };
+}
+
+export async function imageToDataUrl(image: { url?: string; dataUrl?: string; storageKey?: string }, options?: ImageReadOptions) {
+    const owner = options?.expectedOwner === undefined ? currentMediaOwner() : options.expectedOwner;
+    assertMediaOwner(owner, options?.signal);
+    if (image.storageKey) assertLocalMediaOwner(image.storageKey, owner);
+    const url = image.dataUrl || (await resolveImageUrl(image.storageKey, image.url || ""));
+    if (!url || url.startsWith("data:")) { assertMediaOwner(owner, options?.signal); return url; }
+    const result = await blobToDataUrl(await fetchImageBlob(url, options));
+    assertMediaOwner(owner, options?.signal);
+    return result;
+}
+
+export async function deleteStoredImages(keys: Iterable<string>) {
+    await Promise.all(
+        Array.from(new Set(keys)).map(async (key) => {
+            objectUrls.delete(key);
+            await deleteImagePreview(key);
+            await store.removeItem(key);
+        }),
+    );
+}
+
+export async function cleanupUnusedImages(usedData: unknown) {
+    const usedKeys = collectImageStorageKeys(usedData);
+    await Promise.all([
+        imageLogStore.iterate((value) => {
+            collectImageStorageKeys(value, usedKeys);
+        }),
+        videoLogStore.iterate((value) => {
+            collectImageStorageKeys(value, usedKeys);
+        }),
+    ]);
+    const unused: string[] = [];
+    await store.iterate((_value, key) => {
+        if (!usedKeys.has(key)) unused.push(key);
+    });
+    const orphanPreviews: string[] = [];
+    await previewStore.iterate((_value, key) => {
+        if (!usedKeys.has(key)) orphanPreviews.push(key);
+    });
+    await Promise.all([deleteStoredImages(unused), ...orphanPreviews.map(deleteImagePreview)]);
+}
+
+export function collectImageStorageKeys(value: unknown, keys = new Set<string>()) {
+    if (!value || typeof value !== "object") return keys;
+    if ("storageKey" in value && typeof value.storageKey === "string" && value.storageKey.startsWith("image:")) keys.add(value.storageKey);
+    Object.values(value).forEach((item) => (Array.isArray(item) ? item.forEach((child) => collectImageStorageKeys(child, keys)) : collectImageStorageKeys(item, keys)));
+    return keys;
+}
+
+function blobToDataUrl(blob: Blob) {
+    return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error(i18n.t("common.imageReadFailed")));
+        reader.readAsDataURL(blob);
+    });
+}
+
+
+========================================================================
+FILE: web/src/services/local-storage-usage.ts
+LINES: 1-64
+========================================================================
+export type IndexedDbStoreUsage = { name: string; records: number; bytes: number };
+export type IndexedDbDatabaseUsage = { name: string; version: number; bytes: number; stores: IndexedDbStoreUsage[] };
+export type LocalStorageUsage = { usage: number; quota: number | null; contentBytes: number; databases: IndexedDbDatabaseUsage[] };
+
+export async function readLocalStorageUsage(): Promise<LocalStorageUsage> {
+    const [estimate, database] = await Promise.all([readStorageEstimate(), readDatabaseUsage("sundas")]);
+    return { usage: estimate?.usage ?? database.bytes, quota: estimate?.quota ?? null, contentBytes: database.bytes, databases: [database] };
+}
+
+async function readStorageEstimate() {
+    if (typeof navigator === "undefined" || !navigator.storage?.estimate) return null;
+    try {
+        return await navigator.storage.estimate();
+    } catch {
+        return null;
+    }
+}
+
+function readDatabaseUsage(name: string) {
+    return new Promise<IndexedDbDatabaseUsage>((resolve, reject) => {
+        const request = indexedDB.open(name);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+            const database = request.result;
+            const names = Array.from(database.objectStoreNames);
+            if (!names.length) {
+                database.close();
+                resolve({ name, version: database.version, bytes: 0, stores: [] });
+                return;
+            }
+            const transaction = database.transaction(names, "readonly");
+            Promise.all(names.map((storeName) => readStoreUsage(transaction.objectStore(storeName))))
+                .then((stores) => resolve({ name, version: database.version, bytes: stores.reduce((total, store) => total + store.bytes, 0), stores: stores.sort((a, b) => b.bytes - a.bytes) }))
+                .catch(reject)
+                .finally(() => database.close());
+        };
+    });
+}
+
+function readStoreUsage(store: IDBObjectStore) {
+    return new Promise<IndexedDbStoreUsage>((resolve, reject) => {
+        let records = 0;
+        let bytes = 0;
+        const request = store.openCursor();
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+            const cursor = request.result;
+            if (!cursor) {
+                resolve({ name: store.name, records, bytes });
+                return;
+            }
+            records += 1;
+            bytes += valueBytes(cursor.value);
+            cursor.continue();
+        };
+    });
+}
+
+function valueBytes(value: unknown) {
+    if (value instanceof Blob) return value.size;
+    if (value instanceof ArrayBuffer) return value.byteLength;
+    if (ArrayBuffer.isView(value)) return value.byteLength;
+    return new TextEncoder().encode(typeof value === "string" ? value : JSON.stringify(value)).byteLength;
+}
+
+
+========================================================================
+FILE: web/src/services/media-download.ts
+LINES: 1-34
+========================================================================
+/** 返回 true 表示已使用同源授权下载；其他 URL 继续原有下载行为。 */
+export function downloadCloudMedia(value: string, filename: string) {
+    const url = new URL(value, window.location.origin);
+    if (url.origin !== window.location.origin || !url.pathname.startsWith('/media/private/')) return false;
+    url.searchParams.set('download', filename);
+    const anchor = document.createElement('a');
+    anchor.href = url.toString();
+    anchor.download = filename;
+    anchor.rel = 'noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    return true;
+}
+
+const pendingMediaRefresh = new WeakMap<HTMLMediaElement | HTMLImageElement, string>();
+
+/** 只重取本站私有媒体；同一次失败不循环重试，读取成功后允许之后再次过期恢复。 */
+export function refreshExpiredMedia(event: { currentTarget: HTMLMediaElement | HTMLImageElement }) {
+    const video = event.currentTarget;
+    const src = new URL(video.getAttribute('src') || '', window.location.origin);
+    if (src.origin !== window.location.origin || !src.pathname.startsWith('/media/private/') || (video instanceof HTMLMediaElement && video.error && [1, 3].includes(video.error.code))) return;
+    src.searchParams.delete('_refresh');
+    const source = src.toString();
+    if (pendingMediaRefresh.get(video) === source) return;
+    pendingMediaRefresh.set(video, source);
+    const position = video instanceof HTMLMediaElement ? video.currentTime : 0;
+    src.searchParams.set('_refresh', String(Date.now()));
+    const refreshedUrl = src.toString();
+    if (video instanceof HTMLMediaElement) video.addEventListener('loadedmetadata', () => { if (video.src === refreshedUrl && position > 0) video.currentTime = position; }, { once: true });
+    video.addEventListener(video instanceof HTMLMediaElement ? 'loadeddata' : 'load', () => { if (pendingMediaRefresh.get(video) === source) pendingMediaRefresh.delete(video); }, { once: true });
+    video.src = refreshedUrl;
+    if (video instanceof HTMLMediaElement) video.load();
+}
+
+
+========================================================================
+FILE: web/src/stores/canvas/use-canvas-store.ts
+LINES: 1-218
+========================================================================
+import { create } from "zustand";
+import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
+
+import i18n from "@/i18n";
+import { localForageStorage } from "@/lib/localforage-storage";
+import { nextUpdatedAt } from "@/lib/next-updated-at";
+import { createSerializedWriter } from "@/lib/serialized-writer";
+import type { DirectorScene } from "@/types/director";
+import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
+import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "@/types/canvas";
+import type { ProductionDocument } from "../../../../shared/production";
+
+export type CanvasProject = {
+    id: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+    nodes: CanvasNodeData[];
+    connections: CanvasConnection[];
+    chatSessions: CanvasAssistantSession[];
+    activeChatId: string | null;
+    backgroundMode: CanvasBackgroundMode;
+    showImageInfo: boolean;
+    viewport: ViewportTransform;
+    production?: ProductionDocument;
+    /** 导演台场景：跟随画布项目一起持久化，一个项目可存多条镜头场景。 */
+    directorScenes?: DirectorScene[];
+};
+
+export type CanvasDeletedProject = {
+    id: string;
+    deletedAt: string;
+};
+
+type CanvasStore = {
+    hydrated: boolean;
+    projects: CanvasProject[];
+    deletedProjects: CanvasDeletedProject[];
+    createProject: (title?: string) => string;
+    importProject: (project: Partial<CanvasProject>) => string;
+    openProject: (id: string) => CanvasProject | null;
+    renameProject: (id: string, title: string) => void;
+    deleteProjects: (ids: string[]) => void;
+    clearDeletedProjects: (ids: string[]) => void;
+    replaceProjects: (projects: CanvasProject[], deletedProjects?: CanvasDeletedProject[]) => void;
+    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport" | "production" | "directorScenes">>) => void;
+};
+
+const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
+const CANVAS_STORE_KEY = "sundas:canvas_store";
+export function isCanvasAccountActive(userId: string | null) {
+    return useCanvasStore.persist.getOptions().name === (userId ? `${CANVAS_STORE_KEY}:${userId}` : CANVAS_STORE_KEY);
+}
+type PersistedCanvasState = Pick<CanvasStore, "projects" | "deletedProjects">;
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let queuedPersistState: PersistedCanvasState | null = null;
+let switchingCanvas = false;
+let canvasHydrationError: unknown;
+const canvasWrites = createSerializedWriter();
+
+function writeCanvas(name: string, value: string) {
+    return canvasWrites.write(() => localForageStorage.setItem(name, value));
+}
+
+const canvasStorage: PersistStorage<CanvasStore> = {
+    getItem: async (name) => {
+        const value = await localForageStorage.getItem(name);
+        if (!value) return null;
+        const parsed = JSON.parse(value) as StorageValue<CanvasStore>;
+        queuedPersistState = parsed.state as PersistedCanvasState;
+        return parsed;
+    },
+    setItem: (name, value) => {
+        if (switchingCanvas) return;
+        const nextState = value.state as PersistedCanvasState;
+        if (queuedPersistState && queuedPersistState.projects === nextState.projects && queuedPersistState.deletedProjects === nextState.deletedProjects) return;
+        const deletedChanged = Boolean(queuedPersistState && queuedPersistState.deletedProjects !== nextState.deletedProjects);
+        queuedPersistState = nextState;
+        if (saveTimer) clearTimeout(saveTimer);
+        if (deletedChanged) {
+            saveTimer = null;
+            void writeCanvas(name, JSON.stringify(value)).catch((error) => console.error("画布本地保存失败", error));
+            return;
+        }
+        saveTimer = setTimeout(() => {
+            saveTimer = null;
+            void writeCanvas(name, JSON.stringify(value)).catch((error) => console.error("画布本地保存失败", error));
+        }, 400);
+    },
+    removeItem: (name) => localForageStorage.removeItem(name),
+};
+
+function nextProjectTitle(projects: CanvasProject[]) {
+    let highest = 0;
+    for (const project of projects) {
+        const match = project.title.match(/(\d+)\s*$/);
+        if (match) highest = Math.max(highest, Number(match[1]));
+    }
+    return i18n.t("canvas.defaultTitle", { count: Math.max(projects.length + 1, highest + 1) });
+}
+
+export const useCanvasStore = create<CanvasStore>()(
+    persist(
+        (set, get) => ({
+            hydrated: false,
+            projects: [],
+            deletedProjects: [],
+            createProject: (title) => {
+                const now = new Date().toISOString();
+                const id = crypto.randomUUID();
+                const project: CanvasProject = {
+                    id,
+                    title: title?.trim() || nextProjectTitle(get().projects),
+                    createdAt: now,
+                    updatedAt: now,
+                    nodes: [],
+                    connections: [],
+                    chatSessions: [],
+                    activeChatId: null,
+                    backgroundMode: "dots",
+                    showImageInfo: false,
+                    viewport: initialViewport,
+                };
+                set((state) => ({ projects: [project, ...state.projects] }));
+                return id;
+            },
+            importProject: (source) => {
+                const now = new Date().toISOString();
+                const project: CanvasProject = {
+                    id: crypto.randomUUID(),
+                    title: source.title || i18n.t("canvas.project.imported"),
+                    createdAt: source.createdAt || now,
+                    updatedAt: now,
+                    nodes: source.nodes || [],
+                    connections: source.connections || [],
+                    chatSessions: source.chatSessions || [],
+                    activeChatId: source.activeChatId || null,
+                    backgroundMode: source.backgroundMode || "dots",
+                    showImageInfo: source.showImageInfo || false,
+                    viewport: source.viewport || initialViewport,
+                    ...(source.production ? { production: source.production } : {}),
+                    ...(source.directorScenes ? { directorScenes: source.directorScenes } : {}),
+                };
+                set((state) => ({ projects: [project, ...state.projects] }));
+                return project.id;
+            },
+            openProject: (id) => {
+                return get().projects.find((item) => item.id === id) || null;
+            },
+            renameProject: (id, title) =>
+                set((state) => ({
+                    projects: state.projects.map((project) => (project.id === id ? { ...project, title: title.trim() || project.title, updatedAt: nextUpdatedAt(project.updatedAt) } : project)),
+                })),
+            deleteProjects: (ids) =>
+                set((state) => {
+                    const now = new Date().toISOString();
+                    const removing = new Set(ids);
+                    const projects = state.projects.filter((project) => !removing.has(project.id));
+                    const deletedProjects = [...state.deletedProjects.filter((item) => !removing.has(item.id)), ...ids.map((id) => ({ id, deletedAt: now }))];
+                    return { projects, deletedProjects };
+                }),
+            clearDeletedProjects: (ids) =>
+                set((state) => {
+                    const removing = new Set(ids);
+                    return { deletedProjects: state.deletedProjects.filter((item) => !removing.has(item.id)) };
+                }),
+            replaceProjects: (projects, deletedProjects = []) => set({ projects, deletedProjects }),
+            updateProject: (id, patch) =>
+                set((state) => {
+                    const current = state.projects.find(project => project.id === id);
+                    if (!current || Object.entries(patch).every(([key, value]) => current[key as keyof CanvasProject] === value)) return state;
+                    return { projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch, updatedAt: nextUpdatedAt(project.updatedAt) } : project)) };
+                }),
+        }),
+        {
+            name: CANVAS_STORE_KEY,
+            skipHydration: true,
+            storage: canvasStorage,
+            partialize: (state) =>
+                ({
+                    projects: state.projects,
+                    deletedProjects: state.deletedProjects,
+                }) as StorageValue<CanvasStore>["state"],
+            onRehydrateStorage: () => (_state, error) => {
+                canvasHydrationError = error;
+                if (!error) useCanvasStore.setState({ hydrated: true });
+            },
+        },
+    ),
+);
+
+export async function flushCanvasAccount() {
+    const previous = useCanvasStore.persist.getOptions().name;
+    if (!previous?.trim()) throw new Error("画布缓存标识缺失，已停止保存和切换账户");
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = null;
+    await canvasWrites.flush();
+    if (previous !== CANVAS_STORE_KEY && queuedPersistState) {
+        await writeCanvas(previous, JSON.stringify({ state: queuedPersistState, version: 0 }));
+    }
+}
+
+export async function switchCanvasAccount(userId: string | null, alreadyFlushed = false) {
+    if (!alreadyFlushed) await flushCanvasAccount();
+    switchingCanvas = true;
+    try {
+        queuedPersistState = null;
+        useCanvasStore.setState({ projects: [], deletedProjects: [], hydrated: false });
+        useCanvasStore.persist.setOptions({ name: userId ? `${CANVAS_STORE_KEY}:${userId}` : CANVAS_STORE_KEY });
+        if (userId) {
+            canvasHydrationError = undefined;
+            await useCanvasStore.persist.rehydrate();
+            if (canvasHydrationError) throw canvasHydrationError;
+        }
+    } finally {
+        switchingCanvas = false;
+    }
 }
 

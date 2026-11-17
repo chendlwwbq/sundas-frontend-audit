@@ -1,7 +1,942 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+========================================================================
+FILE: web/src/pages/account/index.tsx
+LINES: 1-880
+========================================================================
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { App as AntApp, Alert, Button, Input, InputNumber, Segmented, Spin, Table, Tabs, Tag } from "antd";
+import type { TableColumnsType } from "antd";
+import dayjs from "dayjs";
+import { ArrowUpRight, Check, Crown, Gift, ImagePlus, Inbox, Layers, Receipt, RefreshCw, Sparkles, Ticket } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
+
+import { BrandName } from "@/components/brand/brand-wordmark";
+import { apiRequest } from "@/services/api/client";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { matchesCanvasSession } from "@/lib/canvas/canvas-session";
+import { formatGenerationDiscount } from "@/lib/membership";
+import { availablePaymentProviders, paymentClient, type PaymentClient } from '@/lib/payment-client';
+import "./account.css";
+
+type Plan = { id: string; name: string; days: number; priceCents: number; monthlyCredits: number; tierId: string | null; tierName: string | null; tierLevel: number | null; description: string; generationDiscount: number; grantCredits: number };
+type RechargePackage = { id: string; name: string; credits: number; priceCents: number; originalPriceCents: number | null; description: string; sort: number };
+type SiteInfo = { creditPriceCents: number; minCredits: number; payTypes: string[]; providers: string[]; alipayProducts?: PaymentClient[] };
+type OrderRow = { orderNo: string; type: string; credits: number; amountCents: number; refundAmountCents: number | null; fulfillmentIssue: string | null; provider: string; payType: string; status: string; createdAt: string; paidAt: string | null };
+type LedgerRow = { id: number; type: string; amount: number; balanceAfter: number; remark: string | null; createdAt: string };
+
+const formatTime = (value?: string | null) => (value ? dayjs(value).format("YYYY-MM-DD HH:mm") : "-");
+
+export default function AccountPage() {
+    const userId = useAuthStore((state) => state.user?.id ?? null);
+    const epoch = useAuthStore((state) => state.sessionEpoch);
+    const ready = useAuthStore((state) => state.ready);
+    if (!ready || !userId) return null;
+    return <AccountContent key={`${epoch}:${userId}`} />;
+}
+
+function useAccountScope() {
+    const owner = useAuthStore((state) => state.user?.id ?? null);
+    const epoch = useAuthStore((state) => state.sessionEpoch);
+    return { owner, current: () => Boolean(owner && matchesCanvasSession(owner, epoch, useAuthStore.getState())) };
+}
+
+/* 所有二级页共用同一个面板骨架：标题 15/600 + 说明 12 + 右上操作。 */
+function Panel({ title, desc, extra, bodyClassName, className, children }: {
+    title?: ReactNode;
+    desc?: ReactNode;
+    extra?: ReactNode;
+    bodyClassName?: string;
+    className?: string;
+    children: ReactNode;
+}) {
+    return (
+        <section className={className ? `acct-panel ${className}` : "acct-panel"}>
+            {title || extra ? (
+                <header className="acct-panel-head">
+                    <div className="min-w-0">
+                        {title ? <h2 className="acct-panel-title">{title}</h2> : null}
+                        {desc ? <p className="acct-panel-desc">{desc}</p> : null}
+                    </div>
+                    {extra ? <div className="acct-panel-extra">{extra}</div> : null}
+                </header>
+            ) : null}
+            <div className={bodyClassName ? `acct-panel-body ${bodyClassName}` : "acct-panel-body"}>{children}</div>
+        </section>
+    );
+}
+
+function Loading() {
+    return <div className="acct-loading"><Spin /></div>;
+}
+
+function RefreshAction({ loading, onRefresh }: { loading: boolean; onRefresh: () => void }) {
+    const { t } = useTranslation();
+    return (
+        <Button type="text" size="small" icon={<RefreshCw className="size-3.5" />} loading={loading} onClick={onRefresh}>
+            {t("account.refresh")}
+        </Button>
+    );
+}
+
+function AccountContent() {
+    const { t } = useTranslation();
+    const user = useAuthStore((state) => state.user);
+    const refreshWallet = useAuthStore((state) => state.refreshWallet);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const requestedTab = searchParams.get("tab");
+    const tab = ["overview", "membership", "recharge", "orders", "ledger", "redeem", "invite", "settings"].includes(requestedTab ?? "") ? requestedTab! : "overview";
+    const setTab = (next: string) => setSearchParams({ tab: next });
+
+    useEffect(() => {
+        void refreshWallet();
+    }, [refreshWallet]);
+
+    return (
+        // 外层必须是定高 flex 列：.jm-page 靠 flex:1 + overflow-y 自己滚。
+        // 少了这层，.jm-page 的 flex:1 没有 flex 父级，高度退化成内容高，
+        // 会被 layout 的 overflow-hidden 直接裁掉——表现就是二级页内容多了却没有滚动条。
+        <div className="page-surface flex h-full flex-col overflow-hidden bg-background text-foreground">
+            <main className="account-page jm-page">
+                <div className="jm-page-inner">
+                    <header className="jm-page-head">
+                        <div className="min-w-0">
+                            <h1 className="jm-page-title">{t("account.title")}</h1>
+                            <p className="jm-page-desc truncate">{user?.email}</p>
+                        </div>
+                    </header>
+                    <Tabs
+                        className="account-tabs"
+                        activeKey={tab}
+                        onChange={setTab}
+                        items={[
+                            { key: "overview", label: t("account.overview"), children: <Overview onTab={setTab} /> },
+                            { key: "membership", label: t("account.membership"), children: <Recharge membershipOnly /> },
+                            { key: "recharge", label: t("account.recharge"), children: <Recharge /> },
+                            { key: "orders", label: t("account.orders"), children: <Orders /> },
+                            { key: "ledger", label: t("account.ledger"), children: <Ledger /> },
+                            { key: "redeem", label: t("account.redeem"), children: <Redeem /> },
+                            { key: "invite", label: t("account.invite"), children: <Invite /> },
+                            { key: "settings", label: t("account.settings"), children: <Settings /> },
+                        ]}
+                    />
+                </div>
+            </main>
+        </div>
+    );
+}
+
+function Overview({ onTab }: { onTab: (tab: string) => void }) {
+    const { t } = useTranslation();
+    const wallet = useAuthStore((state) => state.wallet);
+    const active = Boolean(wallet?.member);
+    const available = wallet?.availableCredits ?? wallet?.balance ?? 0;
+
+    const shortcuts = [
+        { key: "orders", icon: Receipt, title: t("account.orders"), desc: t("account.quickOrdersDesc") },
+        { key: "ledger", icon: Layers, title: t("account.ledger"), desc: t("account.quickLedgerDesc") },
+        { key: "redeem", icon: Ticket, title: t("account.redeem"), desc: t("account.quickRedeemDesc") },
+        { key: "invite", icon: Gift, title: t("account.invite"), desc: t("account.quickInviteDesc") },
+    ];
+
+    return (
+        <div className="acct-stack">
+            <div className="acct-overview-grid">
+                <section className="acct-panel">
+                    <div className="acct-panel-body">
+                        <div className="acct-row-between">
+                            <span className="acct-label">{t("account.balance")}</span>
+                            <span className="acct-chip">{t("account.held")} · {wallet?.held ?? 0}</span>
+                        </div>
+                        <div className="acct-metric mt-3.5">{available}</div>
+                        <p className="acct-note mt-2.5">{t("account.overviewHint")}</p>
+                        <div className="acct-actions">
+                            <button type="button" className="jm-btn jm-btn-primary" onClick={() => onTab("recharge")}>
+                                {t("account.goRecharge")}
+                            </button>
+                            <button type="button" className="jm-btn jm-btn-secondary" onClick={() => onTab("ledger")}>
+                                {t("account.ledger")}
+                            </button>
+                        </div>
+                    </div>
+                </section>
+                <section className="acct-panel">
+                    <div className="acct-panel-body">
+                        <span className="acct-label">{t("account.member")}</span>
+                        <div className="acct-member-name">
+                            <span className={`acct-dot ${active ? "is-on" : ""}`} />
+                            {active ? wallet?.tierName || wallet?.planName || t("account.member") : t("account.nonMember")}
+                        </div>
+                        <p className="acct-note mt-2">
+                            {active ? t("account.memberUntil", { date: formatTime(wallet?.memberUntil) }) : t("account.freePlanHint")}
+                        </p>
+                        <div className="acct-kv">
+                            <span>{t("account.discountLabel")}</span>
+                            <span className="acct-kv-value">{formatGenerationDiscount(wallet?.generationDiscount)}</span>
+                        </div>
+                        <div className="acct-actions">
+                            <Button block size="large" onClick={() => onTab("membership")}>
+                                {active ? t("account.membership") : t("account.goMembership")}
+                            </Button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <Panel title={t("account.quickEntry")} bodyClassName="is-flush">
+                <div className="acct-quick-grid">
+                    {shortcuts.map(({ key, icon: Icon, title, desc }) => (
+                        <button key={key} type="button" className="acct-tile" onClick={() => onTab(key)}>
+                            <span className="acct-tile-icon"><Icon aria-hidden /></span>
+                            <span className="acct-tile-body">
+                                <span className="acct-tile-title">{title}</span>
+                                <span className="acct-tile-desc">{desc}</span>
+                            </span>
+                        </button>
+                    ))}
+                </div>
+            </Panel>
+        </div>
+    );
+}
+
+function Recharge({ membershipOnly = false }: { membershipOnly?: boolean }) {
+    const { t } = useTranslation();
+    const { message, modal } = AntApp.useApp();
+    const scope = useAccountScope();
+    const wallet = useAuthStore((state) => state.wallet);
+    const member = wallet?.member;
+    const [site, setSite] = useState<SiteInfo | null>(null);
+    const [plans, setPlans] = useState<Plan[]>([]);
+    const [packages, setPackages] = useState<RechargePackage[]>([]);
+    const [packageId, setPackageId] = useState("");
+    const [credits, setCredits] = useState(100);
+    const [payType, setPayType] = useState("");
+    const [provider, setProvider] = useState("");
+    const [paying, setPaying] = useState(false);
+
+    useEffect(() => {
+        void Promise.all([
+            apiRequest<SiteInfo>("/api/site"),
+            membershipOnly ? apiRequest<{ plans: Plan[] }>("/api/plans") : Promise.resolve({ plans: [] }),
+            membershipOnly ? Promise.resolve({ packages: [] }) : apiRequest<{ packages: RechargePackage[] }>("/api/recharge-packages"),
+        ])
+            .then(([siteData, planData, packageData]) => {
+                if (!scope.current()) return;
+                setSite(siteData);
+                setPlans(planData.plans);
+                setPackages(packageData.packages);
+                const provider = availablePaymentProviders(siteData, paymentClient())[0] ?? '';
+                setProvider(provider);
+                setPayType(siteData.payTypes.find((value) => provider !== 'alipay' || value === 'alipay') ?? "");
+            })
+            .catch((error: unknown) => { if (scope.current()) message.error(error instanceof Error ? error.message : String(error)); });
+    }, [message, membershipOnly]);
+
+    if (!site) return <Loading />;
+
+    const selected = packages.find((item) => item.id === packageId) ?? null;
+    const price = selected ? selected.priceCents / 100 : ((credits || 0) * site.creditPriceCents) / 100;
+    const payTypes = site.payTypes.filter((value) => provider !== 'alipay' || value === 'alipay').map((value) => ({ value, label: value === "wxpay" ? t("account.wxpay") : t("account.alipay") }));
+    const providers = availablePaymentProviders(site, paymentClient()).map((value) => ({ value, label: value === 'alipay' ? t('account.alipayOfficial') : value === "zpay" ? t("account.zpay") : t("account.epay") }));
+    const payDisabled = site.providers.length === 0 || payTypes.length === 0;
+    function selectProvider(value: string) {
+        setProvider(value);
+        setPayType(site!.payTypes.find((type) => (value !== 'alipay' || type === 'alipay') && type === payType) ?? site!.payTypes.find((type) => value !== 'alipay' || type === 'alipay') ?? '');
+    }
+
+    async function submit(payload: { type: "credits" | "plan"; credits?: number; planId?: string; packageId?: string }) {
+        if (!scope.current()) return;
+        if (!provider || !providers.some(item => item.value === provider) || !payTypes.some((type) => type.value === payType)) {
+            message.error(t("account.payNotConfigured"));
+            return;
+        }
+        const auth = useAuthStore.getState();
+        const owner = auth.ready ? auth.user?.id : undefined;
+        const session = auth.sessionEpoch;
+        if (!owner) { message.error(t("account.paymentAccountChanged")); return; }
+        const sameAccount = () => useAuthStore.getState().ready && useAuthStore.getState().user?.id === owner && useAuthStore.getState().sessionEpoch === session;
+        setPaying(true);
+        try {
+            const order = await apiRequest<{ orderNo: string; payUrl: string; amountCents: number; credits: number; planDays: number | null; planName: string | null; upgradeQuote: { previousEndsAt: string } | null }>("/api/orders", { method: "POST", headers: { "X-Sundas-User": owner }, json: { ...payload, provider, payType, paymentClient: paymentClient() } });
+            if (!sameAccount()) throw new Error(t("account.paymentAccountChanged"));
+            const amount = (order.amountCents / 100).toFixed(2);
+            const content = order.upgradeQuote
+                ? t("account.upgradeConfirm", { amount, end: formatTime(order.upgradeQuote.previousEndsAt) })
+                : payload.type === "plan"
+                    ? t("account.planOrderConfirm", { amount, name: order.planName, days: order.planDays, credits: order.credits })
+                    : t("account.creditOrderConfirm", { amount, credits: order.credits });
+            let cancelled = false;
+            modal.confirm({ title: t(order.upgradeQuote ? "account.upgradeConfirmTitle" : "account.orderConfirmTitle"), content, okText: t("account.upgradePay"), cancelText: t("account.upgradeCancel"), onOk: async () => {
+                try {
+                    if (!sameAccount()) throw new Error(t("account.paymentAccountChanged"));
+                    const status = await apiRequest<{ order: { payable: boolean } }>(`/api/orders/${encodeURIComponent(order.orderNo)}`, { headers: { "X-Sundas-User": owner } });
+                    if (cancelled) return;
+                    if (!sameAccount()) throw new Error(t("account.paymentAccountChanged"));
+                    if (!status.order.payable) throw new Error(t("account.paymentOrderUnavailable"));
+                    window.location.href = order.payUrl;
+                } catch (error) { setPaying(false); if (!cancelled) message.error(error instanceof Error ? error.message : String(error)); }
+            }, onCancel: () => { cancelled = true; setPaying(false); } });
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+            setPaying(false);
+        }
+    }
+
+    const benefits = [
+        { icon: Sparkles, title: t("account.benefitCredits"), text: t("account.benefitCreditsDesc") },
+        { icon: ImagePlus, title: t("account.benefitModalities"), text: t("account.benefitModalitiesDesc") },
+        { icon: Layers, title: t("account.benefitShared"), text: t("account.benefitSharedDesc") },
+    ];
+
+    const payTypeControl = (
+        <div className="flex flex-wrap items-center gap-2">
+            <span className="acct-label">{t("account.payType")}</span>
+            {payTypes.length ? (
+                <Segmented options={payTypes} value={payType} onChange={(value) => setPayType(String(value))} />
+            ) : (
+                <span className="acct-note">{t("account.payNotConfigured")}</span>
+            )}
+            {providers.length > 1 ? (
+                <Segmented options={providers} value={provider} onChange={(value) => selectProvider(String(value))} />
+            ) : null}
+        </div>
+    );
+
+    return (
+        <div className="acct-stack">
+            {membershipOnly && (
+                <section className="acct-panel acct-hero">
+                    <div className="acct-hero-body">
+                        <div className="min-w-0">
+                            <div className="acct-eyebrow">
+                                <Crown className="size-4" />
+                                <BrandName text="SUNDAS MEMBERSHIP" imageClassName="opacity-70" />
+                            </div>
+                            <h2 className="acct-hero-title">{t("account.membershipHeroTitle")}</h2>
+                            <p className="acct-hero-desc">{t("account.membershipHeroDesc")}</p>
+                        </div>
+                        <div className="acct-hero-aside">
+                            <span className="acct-label">{t("account.currentMember")}</span>
+                            <div className="acct-member-name">
+                                <span className={`acct-dot ${member ? "is-on" : ""}`} />
+                                {member ? wallet?.tierName || wallet?.planName || t("account.member") : t("account.nonMember")}
+                            </div>
+                            <div className="acct-kv">
+                                <span>{t("account.discountLabel")}</span>
+                                <span className="acct-kv-value">{formatGenerationDiscount(wallet?.generationDiscount)}</span>
+                            </div>
+                            <p className="acct-note mt-3.5">
+                                {member ? t("account.memberUntil", { date: formatTime(wallet?.memberUntil) }) : t("account.memberActiveHint")}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="acct-benefit-grid">
+                        {benefits.map(({ icon: Icon, title, text }) => (
+                            <div key={title}>
+                                <Icon aria-hidden className="size-4 text-foreground" />
+                                <h3 className="acct-benefit-title">{title}</h3>
+                                <p className="acct-benefit-desc">{text}</p>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {payDisabled ? <Alert type="warning" showIcon message={t("account.payNotConfigured")} /> : null}
+
+            {!membershipOnly && (
+                <div className="acct-split">
+                    <Panel title={t("account.recharge")} desc={t("account.priceHint", { price: (site.creditPriceCents / 100).toFixed(2), min: site.minCredits })}>
+                        {packages.length ? (
+                            <div className="acct-package-grid">
+                                {packages.map((item) => (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        onClick={() => setPackageId((current) => (current === item.id ? "" : item.id))}
+                                        className={`acct-package ${packageId === item.id ? "is-active" : ""}`}
+                                        aria-pressed={packageId === item.id}
+                                    >
+                                        <span className="acct-package-name">{item.name}</span>
+                                        <span className="acct-package-price">
+                                            ¥{(item.priceCents / 100).toFixed(2)}
+                                            {item.originalPriceCents && item.originalPriceCents > item.priceCents ? (
+                                                <span className="acct-package-origin">¥{(item.originalPriceCents / 100).toFixed(2)}</span>
+                                            ) : null}
+                                        </span>
+                                        <span className="acct-package-meta">{t("account.packageCredits", { credits: item.credits })}</span>
+                                        {item.description ? <span className="acct-package-desc">{item.description}</span> : null}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null}
+
+                        <div className={`acct-amount-row ${packages.length ? "" : "is-first"}`}>
+                            <div>
+                                <label className="acct-label mb-2" htmlFor="account-credits">
+                                    {t("account.customAmount")}
+                                    <span className="acct-hint">{t("account.customCreditsHint", { min: site.minCredits })}</span>
+                                </label>
+                                <InputNumber
+                                    id="account-credits"
+                                    size="large"
+                                    min={site.minCredits}
+                                    step={10}
+                                    value={credits}
+                                    onChange={(value) => { setCredits(Number(value) || site.minCredits); setPackageId(""); }}
+                                />
+                            </div>
+                        </div>
+                    </Panel>
+
+                    <Panel title={t("account.payInfo")} desc={t("account.paySummaryHint")}>
+                        <span className="acct-label">{t("account.payAmount")}</span>
+                        <div className="acct-pay-amount">¥{price.toFixed(2)}</div>
+                        <p className="acct-note mt-2">
+                            {selected ? t("account.selectedPackage", { name: selected.name, credits: selected.credits }) : t("account.packageCredits", { credits })}
+                        </p>
+                        <div className="acct-pay-block">
+                            <span className="acct-label">{t("account.payType")}</span>
+                            {payTypes.length ? (
+                                <Segmented block options={payTypes} value={payType} onChange={(value) => setPayType(String(value))} />
+                            ) : (
+                                <span className="acct-note">{t("account.payNotConfigured")}</span>
+                            )}
+                        </div>
+                        {providers.length > 1 ? (
+                            <div className="acct-pay-block">
+                                <span className="acct-label">{t("account.provider")}</span>
+                                <Segmented block options={providers} value={provider} onChange={(value) => selectProvider(String(value))} />
+                            </div>
+                        ) : null}
+                        <div className="acct-pay-footer">
+                            <Button
+                                type="primary"
+                                size="large"
+                                block
+                                loading={paying}
+                                disabled={payDisabled}
+                                onClick={() => void submit(selected ? { type: "credits", packageId: selected.id } : { type: "credits", credits })}
+                            >
+                                {t("account.payNow")}
+                            </Button>
+                        </div>
+                    </Panel>
+                </div>
+            )}
+
+            {membershipOnly && (plans.length ? (
+                <>
+                    <Panel title={t("account.membershipPlans")} desc={t("account.membershipPlansDesc")} extra={payTypeControl}>
+                        {member && <p className="acct-note mb-4">{t("account.renewalCurrentTerms")}</p>}
+                        <div className="acct-plan-grid">
+                            {plans.map((plan) => {
+                                const current = wallet?.planId === plan.id;
+                                return (
+                                    <div key={plan.id} className={`acct-plan ${current ? "is-current" : ""}`}>
+                                        <div className="acct-plan-meta">
+                                            <span>{plan.tierLevel ? `LV.${plan.tierLevel} · ${plan.tierName}` : t("account.plans")}</span>
+                                            {current ? <span className="acct-plan-badge">{t("account.currentPlan")}</span> : null}
+                                        </div>
+                                        <h3 className="acct-plan-name">{plan.name}</h3>
+                                        <p className="acct-plan-desc">{plan.description || t("account.membershipPlansDesc")}</p>
+                                        <div className="acct-plan-price">
+                                            ¥{(plan.priceCents / 100).toFixed(2)}
+                                            <span>/ {t("account.planDays", { days: plan.days })}</span>
+                                        </div>
+                                        <div className="acct-plan-discount">
+                                            <span className="acct-label">{t("account.discountLabel")}</span>
+                                            <div className="acct-plan-discount-value">{formatGenerationDiscount(plan.generationDiscount)}</div>
+                                            <p className="acct-note mt-1.5">基础报价 100 积分，折后 {Math.ceil(100 * plan.generationDiscount)} 积分</p>
+                                            <p className="acct-note">仅演示会员折扣，实际按模型及活动报价计费。</p>
+                                        </div>
+                                        <ul className="acct-plan-features">
+                                            <li><Check aria-hidden className="size-3.5" />{t("account.planMonthly", { credits: plan.monthlyCredits })}</li>
+                                            {plan.grantCredits > 0 && <li><Check aria-hidden className="size-3.5" />开通赠送 {plan.grantCredits} 积分</li>}
+                                            <li><Check aria-hidden className="size-3.5" />工作台与画布共享会员折扣</li>
+                                            <li><Check aria-hidden className="size-3.5" />有效期 {t("account.planDays", { days: plan.days })}</li>
+                                        </ul>
+                                        <Button
+                                            type={current ? "primary" : "default"}
+                                            loading={paying}
+                                            disabled={payDisabled}
+                                            onClick={() => void submit({ type: "plan", planId: plan.id })}
+                                        >
+                                            {current ? "续费当前套餐" : member ? "选择此套餐" : "开通会员"}
+                                            <ArrowUpRight className="size-4" />
+                                        </Button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </Panel>
+
+                    <section className="acct-panel">
+                        <div className="acct-panel-body grid gap-6 sm:grid-cols-2">
+                            <div>
+                                <h3 className="acct-benefit-title mt-0">折扣如何生效？</h3>
+                                <p className="acct-benefit-desc">开通后自动用于生成报价与扣费；最终积分向上取整，单次最低 1 积分。当前会员按购买时的折扣执行，新购或续费以订单确认的权益为准。</p>
+                            </div>
+                            <div>
+                                <h3 className="acct-benefit-title mt-0">升级与续费如何计算？</h3>
+                                <p className="acct-benefit-desc">同套餐续费延长有效期；升档仅覆盖原会员剩余时间，按新旧套餐价差及剩余时间比例计算，积分按周期差额折算。具体以订单确认信息为准。</p>
+                            </div>
+                        </div>
+                    </section>
+                </>
+            ) : <Panel title={t("account.membershipPlans")}><EmptyState text="暂无可购买的会员套餐，请稍后再来。" /></Panel>)}
+        </div>
+    );
+}
+
+function EmptyState({ text }: { text: string }) {
+    return (
+        <div className="jm-empty">
+            <span className="jm-empty-icon"><Inbox className="size-6" strokeWidth={1.5} /></span>
+            <p className="jm-empty-title">{text}</p>
+        </div>
+    );
+}
+
+function Orders() {
+    const { t } = useTranslation();
+    const { message } = AntApp.useApp();
+    const scope = useAccountScope();
+    const [rows, setRows] = useState<OrderRow[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    async function load() {
+        if (!scope.owner || !scope.current()) return;
+        setLoading(true);
+        try {
+            const data = await apiRequest<{ items: OrderRow[] }>("/api/orders?page=1&pageSize=20", { headers: { "X-Sundas-User": scope.owner } });
+            if (scope.current()) setRows(data.items);
+        } catch (error) {
+            if (scope.current()) message.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            if (scope.current()) setLoading(false);
+        }
+    }
+
+    useEffect(() => {
+        void load();
+    }, []);
+
+    const statusMap: Record<string, { label: string; color: string }> = {
+        pending: { label: t("account.orderPending"), color: "gold" },
+        paid: { label: t("account.orderPaid"), color: "green" },
+        closed: { label: t("account.orderClosed"), color: "default" },
+        refunded: { label: t("account.orderRefunded"), color: "red" },
+    };
+
+    const columns: TableColumnsType<OrderRow> = [
+        { title: t("account.orderNo"), dataIndex: "orderNo" },
+        { title: t("account.type"), dataIndex: "type", render: (value: string) => (value === "plan" ? t("account.typePlan") : t("account.typeCredits")) },
+        { title: t("account.amount"), dataIndex: "amountCents", align: "right", width: 116, render: (value: number) => `¥${(value / 100).toFixed(2)}` },
+        { title: t("account.refundAmount"), dataIndex: "refundAmountCents", align: "right", width: 116, render: (value: number | null) => value == null ? "—" : `¥${(value / 100).toFixed(2)}` },
+        { title: t("account.credits"), dataIndex: "credits", align: "right", width: 108 },
+        { title: t("account.status"), dataIndex: "status", width: 210, render: (value: string, row) => <Tag color={row.fulfillmentIssue ? "orange" : statusMap[value]?.color}>{row.fulfillmentIssue ? t("account.orderReview") : statusMap[value]?.label ?? value}</Tag> },
+        { title: t("account.createdAt"), dataIndex: "createdAt", width: 160, render: formatTime },
+    ];
+
+    return (
+        <Panel
+            title={t("account.ordersTitle")}
+            desc={rows.some((row) => row.refundAmountCents != null) ? t("account.refundHint") : t("account.orderHint")}
+            bodyClassName="is-flush"
+            extra={<RefreshAction loading={loading} onRefresh={() => void load()} />}
+        >
+            <Table<OrderRow>
+                className="account-table"
+                rowKey="orderNo"
+                size="middle"
+                loading={loading}
+                dataSource={rows}
+                columns={columns}
+                pagination={false}
+                scroll={{ x: 860 }}
+                locale={{ emptyText: <EmptyState text={t("account.noOrders")} /> }}
+            />
+        </Panel>
+    );
+}
+
+function Ledger() {
+    const { t } = useTranslation();
+    const { message } = AntApp.useApp();
+    const scope = useAccountScope();
+    const [rows, setRows] = useState<LedgerRow[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    async function load() {
+        if (!scope.owner || !scope.current()) return;
+        setLoading(true);
+        try {
+            const data = await apiRequest<{ items: LedgerRow[] }>("/api/ledger?page=1&pageSize=30", { headers: { "X-Sundas-User": scope.owner } });
+            if (scope.current()) setRows(data.items);
+        } catch (error) {
+            if (scope.current()) message.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            if (scope.current()) setLoading(false);
+        }
+    }
+
+    useEffect(() => {
+        void load();
+    }, []);
+
+    const typeMap: Record<string, string> = {
+        grant: t("account.ledgerGrant"),
+        consume: t("account.ledgerConsume"),
+        refund: t("account.ledgerRefund"),
+        expire: t("account.ledgerExpire"),
+        adjust: t("account.ledgerAdjust"),
+    };
+
+    const columns: TableColumnsType<LedgerRow> = [
+        { title: t("account.type"), dataIndex: "type", width: 120, render: (value: string) => typeMap[value] ?? value },
+        { title: t("account.amount"), dataIndex: "amount", align: "right", width: 120, render: (value: number) => <span className={value > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>{value > 0 ? `+${value}` : value}</span> },
+        { title: t("account.balanceAfter"), dataIndex: "balanceAfter", align: "right", width: 140 },
+        { title: t("account.remark"), dataIndex: "remark", render: (value: string | null) => value ?? "-" },
+        { title: t("account.createdAt"), dataIndex: "createdAt", width: 160, render: formatTime },
+    ];
+
+    return (
+        <Panel
+            title={t("account.ledgerTitle")}
+            desc={t("account.records", { count: rows.length })}
+            bodyClassName="is-flush"
+            extra={<RefreshAction loading={loading} onRefresh={() => void load()} />}
+        >
+            <Table<LedgerRow>
+                className="account-table"
+                rowKey="id"
+                size="middle"
+                loading={loading}
+                dataSource={rows}
+                columns={columns}
+                pagination={false}
+                scroll={{ x: 720 }}
+                locale={{ emptyText: <EmptyState text={t("account.noLedger")} /> }}
+            />
+        </Panel>
+    );
+}
+
+function Redeem() {
+    const { t } = useTranslation();
+    const { message } = AntApp.useApp();
+    const scope = useAccountScope();
+    const refreshWallet = useAuthStore((state) => state.refreshWallet);
+    const [code, setCode] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    async function submit() {
+        if (!code.trim() || !scope.owner || !scope.current()) return;
+        setLoading(true);
+        try {
+            const data = await apiRequest<{ credits: number }>("/api/redeem", { method: "POST", headers: { "X-Sundas-User": scope.owner }, json: { code: code.trim() } });
+            if (!scope.current()) return;
+            message.success(t("account.redeemSuccess", { credits: data.credits }));
+            setCode("");
+            await refreshWallet();
+        } catch (error) {
+            if (scope.current()) message.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            if (scope.current()) setLoading(false);
+        }
+    }
+
+    return (
+        <div className="acct-split">
+            <Panel title={t("account.redeemTitle")} desc={t("account.redeemHint")}>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                    <Input
+                        size="large"
+                        className="sm:flex-1"
+                        value={code}
+                        onChange={(event) => setCode(event.target.value)}
+                        placeholder={t("account.redeemPlaceholder")}
+                        onPressEnter={() => void submit()}
+                    />
+                    <Button type="primary" size="large" className="sm:w-[112px]" loading={loading} onClick={() => void submit()}>
+                        {t("account.redeemButton")}
+                    </Button>
+                </div>
+            </Panel>
+            <Panel title={t("account.redeemNotes")}>
+                <ol className="acct-note-list">
+                    <li className="acct-note-item">{t("account.redeemNote1")}</li>
+                    <li className="acct-note-item">{t("account.redeemNote2")}</li>
+                    <li className="acct-note-item">{t("account.redeemNote3")}</li>
+                </ol>
+            </Panel>
+        </div>
+    );
+}
+
+function Invite() {
+    const { t } = useTranslation();
+    const { message } = AntApp.useApp();
+    const scope = useAccountScope();
+    const [data, setData] = useState<{
+        code: string;
+        invitees: number;
+        rebateCredits: number;
+        revokedCredits: number;
+        rebates: { orderNo: string; inviteeEmail: string; rebateCredits: number; rebatePercent: number; status: string; createdAt: string }[];
+        invited: { email: string; status: string; totalRebate: number; createdAt: string }[];
+    } | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    async function load() {
+        if (!scope.owner || !scope.current()) return;
+        setLoading(true);
+        try {
+            const result = await apiRequest<NonNullable<typeof data>>("/api/invite", { headers: { "X-Sundas-User": scope.owner } });
+            // 后端在新账户 / 灰度环境下可能缺字段，补齐再用，避免整页白屏
+            if (scope.current()) setData({
+                code: result?.code ?? "",
+                invitees: result?.invitees ?? 0,
+                rebateCredits: result?.rebateCredits ?? 0,
+                revokedCredits: result?.revokedCredits ?? 0,
+                rebates: result?.rebates ?? [],
+                invited: result?.invited ?? [],
+            });
+        } catch (error) {
+            if (scope.current()) message.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            if (scope.current()) setLoading(false);
+        }
+    }
+
+    useEffect(() => {
+        void load();
+    }, []);
+
+    async function copy(value: string, okText: string) {
+        if (!scope.current()) return;
+        await navigator.clipboard?.writeText(value);
+        if (scope.current()) message.success(okText);
+    }
+
+    if (loading && !data) return <Loading />;
+    if (!data) return null;
+
+    const inviteLink = `${window.location.origin}/register?invite=${data.code}`;
+
+    const invitedColumns: TableColumnsType<(typeof data.invited)[number]> = [
+        { title: t("account.inviteeEmail"), dataIndex: "email" },
+        { title: t("account.rebateAmount"), dataIndex: "totalRebate", align: "right", width: 140, render: (value: number) => <span className="tabular-nums">{value}</span> },
+        { title: t("account.status"), dataIndex: "status", width: 120, render: (value: string) => <Tag color={value === "active" ? "green" : "default"}>{value === "active" ? "正常" : "已禁用"}</Tag> },
+        { title: t("account.createdAt"), dataIndex: "createdAt", width: 160, render: formatTime },
+    ];
+
+    const rebateColumns: TableColumnsType<(typeof data.rebates)[number]> = [
+        { title: t("account.orderNo"), dataIndex: "orderNo" },
+        { title: t("account.inviteeEmail"), dataIndex: "inviteeEmail" },
+        { title: t("account.rebateAmount"), dataIndex: "rebateCredits", align: "right", width: 140, render: (value: number) => <span className="tabular-nums">{value}</span> },
+        {
+            title: t("account.status"),
+            dataIndex: "status",
+            width: 120,
+            render: (value: string) => <Tag color={value === "granted" ? "green" : "red"}>{value === "granted" ? "已发放" : t("account.rebateRevoked")}</Tag>,
+        },
+        { title: t("account.createdAt"), dataIndex: "createdAt", width: 160, render: formatTime },
+    ];
+
+    return (
+        <div className="acct-stack">
+            <Panel title={t("account.inviteTitle")} desc={t("account.inviteHint")}>
+                <div className="acct-code-row">
+                    <span className="acct-code">{data.code}</span>
+                    <Button onClick={() => void copy(data.code, t("account.copied"))}>{t("account.copyCode")}</Button>
+                </div>
+                <div className="acct-link-row">
+                    <span className="acct-link">{inviteLink}</span>
+                    <Button onClick={() => void copy(inviteLink, t("account.copiedLink"))}>{t("account.copyLink")}</Button>
+                </div>
+                <div className="acct-stat-grid">
+                    <div className="acct-stat">
+                        <span className="acct-label">{t("account.inviteesTotal")}</span>
+                        <div className="acct-stat-value">{data.invitees}</div>
+                    </div>
+                    <div className="acct-stat">
+                        <span className="acct-label">{t("account.rebateTotal")}</span>
+                        <div className="acct-stat-value">{data.rebateCredits}</div>
+                    </div>
+                    <div className="acct-stat">
+                        <span className="acct-label">{t("account.rebateRevoked")}</span>
+                        <div className="acct-stat-value text-muted-foreground">{data.revokedCredits}</div>
+                    </div>
+                </div>
+            </Panel>
+
+            <Panel title={t("account.inviteFriends")} desc={t("account.records", { count: data.invited.length })} bodyClassName="is-flush">
+                <Table
+                    className="account-table"
+                    rowKey="email"
+                    size="middle"
+                    dataSource={data.invited}
+                    columns={invitedColumns}
+                    pagination={false}
+                    scroll={{ x: 640 }}
+                    locale={{ emptyText: <EmptyState text={t("account.inviteEmpty")} /> }}
+                />
+            </Panel>
+
+            <Panel title={t("account.inviteRebates")} desc={t("account.records", { count: data.rebates.length })} bodyClassName="is-flush">
+                <Table
+                    className="account-table"
+                    rowKey="orderNo"
+                    size="middle"
+                    dataSource={data.rebates}
+                    columns={rebateColumns}
+                    pagination={false}
+                    scroll={{ x: 720 }}
+                    locale={{ emptyText: <EmptyState text={t("account.rebateEmpty")} /> }}
+                />
+            </Panel>
+        </div>
+    );
+}
+
+function Settings() {
+    const { t } = useTranslation();
+    const { message } = AntApp.useApp();
+    const scope = useAccountScope();
+    const user = useAuthStore((state) => state.user);
+    const wallet = useAuthStore((state) => state.wallet);
+    const changePassword = useAuthStore((state) => state.changePassword);
+    const [oldPassword, setOldPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [confirm, setConfirm] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    async function submit() {
+        if (!scope.owner || !scope.current()) return;
+        if (newPassword.length < 8) {
+            message.error(t("auth.passwordTooShort"));
+            return;
+        }
+        if (newPassword !== confirm) {
+            message.error(t("auth.passwordMismatch"));
+            return;
+        }
+        setLoading(true);
+        try {
+            await changePassword(oldPassword, newPassword, scope.owner);
+            if (!scope.current()) return;
+            message.success(t("account.passwordChanged"));
+            setOldPassword("");
+            setNewPassword("");
+            setConfirm("");
+        } catch (error) {
+            if (scope.current()) message.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            if (scope.current()) setLoading(false);
+        }
+    }
+
+    return (
+        <div className="acct-settings-grid">
+            <Panel title={t("account.accountInfo")} desc={t("account.accountInfoHint")}>
+                <div className="acct-info-row">
+                    <span className="acct-label">{t("account.emailLabel")}</span>
+                    <span className="acct-info-value">{user?.email}</span>
+                </div>
+                <div className="acct-info-row">
+                    <span className="acct-label">{t("account.member")}</span>
+                    <span className="acct-info-value">
+                        {wallet?.member ? (wallet?.tierName || wallet?.planName || t("account.member")) : t("account.nonMember")}
+                    </span>
+                </div>
+                <div className="acct-info-row">
+                    <span className="acct-label">{t("account.balance")}</span>
+                    <span className="acct-info-value tabular-nums">{wallet?.availableCredits ?? wallet?.balance ?? 0}</span>
+                </div>
+            </Panel>
+
+            <Panel title={t("account.changePassword")} desc={t("account.passwordHint")}>
+                <div className="acct-field-grid">
+                    <label className="acct-field">
+                        <span className="acct-label">{t("account.oldPassword")}</span>
+                        <Input.Password size="large" value={oldPassword} onChange={(event) => setOldPassword(event.target.value)} autoComplete="current-password" />
+                    </label>
+                    <label className="acct-field">
+                        <span className="acct-label">{t("account.newPassword")}</span>
+                        <Input.Password size="large" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" />
+                    </label>
+                    <label className="acct-field">
+                        <span className="acct-label">{t("account.confirmNewPassword")}</span>
+                        <Input.Password size="large" value={confirm} onChange={(event) => setConfirm(event.target.value)} autoComplete="new-password" />
+                    </label>
+                </div>
+                <div className="acct-form-footer is-end">
+                    <Button type="primary" size="large" loading={loading} onClick={() => void submit()}>
+                        {t("account.savePassword")}
+                    </Button>
+                </div>
+            </Panel>
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/pages/admin/access/index.tsx
+LINES: 1-48
+========================================================================
+import { useEffect, useState } from "react";
+import { App, Button, Checkbox, Input, Modal, Select, Table } from "antd";
+import type { TableColumnsType } from "antd";
+import { accessApi, type AdminRole, type Administrator } from "@/services/api/admin/access";
+import { useAdminRequest } from "../use-admin-request";
+import { AdminField, AdminPanel } from "../components/ui";
+
+type RoleDraft = { id?: string; code: string; name: string; description: string; permissions: string[] };
+const emptyRole = (): RoleDraft => ({ code: "", name: "", description: "", permissions: [] });
+const sections: Record<string, string> = { media: "用户私有素材", dashboard: "看板", prompts: "提示词源", users: "用户", credits: "积分", tasks: "任务", channels: "渠道", models: "模型", invites: "邀请返佣", orders: "订单", catalog: "套餐", announcements: "公告", promo: "宣发", redeem: "兑换码", settings: "系统设置", admins: "管理员", audit: "审计日志" };
+const actions: Record<string, string> = { read: "查看", manage: "管理", sync: "同步", "reset-password": "重置密码", adjust: "调整积分", review: "登记核对", resolve: "处理冻结", export: "导出" };
+function permissionLabel(value: string) {
+    const [section, action] = value.split(".");
+    return `${sections[section] ?? section}：${actions[action] ?? action}`;
+}
+export function AccessTab() {
+    const request = useAdminRequest(); const api = accessApi(request); const { message, modal } = App.useApp();
+    const [roles, setRoles] = useState<AdminRole[]>([]); const [all, setAll] = useState<string[]>([]); const [admins, setAdmins] = useState<Administrator[]>([]);
+    const [loading, setLoading] = useState(false); const [saving, setSaving] = useState(false);
+    const [role, setRole] = useState<RoleDraft | null>(null); const [assignment, setAssignment] = useState<{ id?: string; userId: string; roles: string[] } | null>(null);
+    const report = (error: unknown) => message.error(error instanceof Error ? error.message : String(error));
+    async function load() { setLoading(true); try { const [a, b] = await Promise.all([api.roles(), api.administrators()]); setRoles(a.roles); setAll(a.permissions); setAdmins(b.administrators); } catch (e) { report(e); } finally { setLoading(false); } }
+    useEffect(() => { void load(); }, [request]);
+    async function saveRole() { if (!role) return; setSaving(true); try { await api.saveRole(role.id, role); setRole(null); message.success("角色已保存"); await load(); } catch (e) { report(e); } finally { setSaving(false); } }
+    async function saveAdmin() { if (!assignment) return; setSaving(true); try { if (assignment.id) await api.assign(assignment.id, assignment.roles); else await api.addAdmin(assignment.userId, assignment.roles); setAssignment(null); message.success("管理员角色已保存"); await load(); } catch (e) { report(e); } finally { setSaving(false); } }
+    function removeRole(item: AdminRole) { modal.confirm({ title: `删除角色 ${item.name}？`, onOk: async () => { try { await api.deleteRole(item.id); await load(); } catch (e) { report(e); } } }); }
+    function removeAdmin(item: Administrator) { modal.confirm({ title: `撤销 ${item.email} 的管理员身份？`, onOk: async () => { try { await api.remove(item.id); await load(); } catch (e) { report(e); } } }); }
+    const roleColumns: TableColumnsType<AdminRole> = [
+        { title: "角色", dataIndex: "name" }, { title: "代码", dataIndex: "code" }, { title: "管理员数", dataIndex: "userCount" },
+        { title: "权限", render: (_, row) => row.code === "super_admin" ? "全部权限" : row.permissions.map(permissionLabel).join("、") || "无" },
+        { title: "操作", render: (_, row) => <div className="flex gap-2"><Button size="small" disabled={row.code === "super_admin"} onClick={() => setRole({ id: row.id, code: row.code, name: row.name, description: row.description, permissions: row.permissions })}>编辑</Button><Button size="small" disabled={row.isSystem} onClick={() => removeRole(row)}>删除</Button></div> },
+    ];
+    const adminColumns: TableColumnsType<Administrator> = [
+        { title: "账号", dataIndex: "email" }, { title: "昵称", dataIndex: "displayName" }, { title: "状态", dataIndex: "status", render: (v: string) => v === "active" ? "正常" : "已禁用" },
+        { title: "角色", render: (_, row) => row.roleNames.join("、") || "未分配" },
+        { title: "操作", render: (_, row) => <div className="flex gap-2"><Button size="small" onClick={() => setAssignment({ id: row.id, userId: row.id, roles: row.roleIds })}>分配角色</Button><Button size="small" danger onClick={() => removeAdmin(row)}>撤销</Button></div> },
+    ];
+    return <div className="space-y-5">
+        <AdminPanel title="管理员" actions={<div className="flex gap-2"><Button onClick={() => void load()} loading={loading}>刷新</Button><Button type="primary" onClick={() => setAssignment({ userId: "", roles: [] })}>添加管理员</Button></div>} flush><Table rowKey="id" dataSource={admins} columns={adminColumns} loading={loading} pagination={false} scroll={{ x: 700 }} /></AdminPanel>
+        <AdminPanel title="角色权限" actions={<Button onClick={() => setRole(emptyRole())}>新增角色</Button>} flush><Table rowKey="id" dataSource={roles} columns={roleColumns} loading={loading} pagination={false} scroll={{ x: 800 }} /></AdminPanel>
+        <Modal title={role?.id ? "编辑角色" : "新增角色"} open={Boolean(role)} onCancel={() => setRole(null)} onOk={() => void saveRole()} confirmLoading={saving} width={760}>
+            {role && <div className="space-y-3"><AdminField label="角色名称"><Input value={role.name} onChange={e => setRole({ ...role, name: e.target.value })} /></AdminField><AdminField label="角色代码"><Input disabled={Boolean(role.id)} value={role.code} onChange={e => setRole({ ...role, code: e.target.value })} /></AdminField><AdminField label="说明"><Input value={role.description} onChange={e => setRole({ ...role, description: e.target.value })} /></AdminField><AdminField label="权限"><Checkbox.Group value={role.permissions} onChange={values => setRole({ ...role, permissions: values as string[] })}><div className="space-y-2">{Object.entries(sections).map(([section, title]) => { const values = all.filter(value => value.startsWith(`${section}.`)); return values.length ? <div key={section} className="flex flex-wrap gap-x-3 gap-y-1"><span className="min-w-20 font-medium">{title}</span>{values.map(value => <Checkbox key={value} value={value}>{actions[value.split(".")[1]] ?? value}</Checkbox>)}</div> : null; })}</div></Checkbox.Group></AdminField></div>}
+        </Modal>
+        <Modal title={assignment?.id ? "分配角色" : "添加管理员"} open={Boolean(assignment)} onCancel={() => setAssignment(null)} onOk={() => void saveAdmin()} confirmLoading={saving}>
+            {assignment && <div className="space-y-3">{!assignment.id && <AdminField label="已有用户 ID"><Input value={assignment.userId} onChange={e => setAssignment({ ...assignment, userId: e.target.value })} /></AdminField>}<AdminField label="角色"><Select mode="multiple" className="w-full" value={assignment.roles} options={roles.map(item => ({ value: item.id, label: item.name }))} onChange={value => setAssignment({ ...assignment, roles: value })} /></AdminField></div>}
+        </Modal>
+    </div>;
+}
 
 
 ========================================================================
@@ -623,7 +1558,7 @@ export function AuditTab() {
 
 ========================================================================
 FILE: web/src/pages/admin/components/catalog.tsx
-LINES: 1-608
+LINES: 1-609
 ========================================================================
 import { useEffect, useState } from "react";
 import { App as AntApp, Button, Input, InputNumber, Modal, Select, Switch, Table, Tabs } from "antd";
@@ -688,7 +1623,7 @@ export function CatalogTab() {
     const [activeTab, setActiveTab] = useState(() => permissions.includes("channels.read") ? "channels" : permissions.includes("models.read") ? "models" : "tiers");
     const permissionKey = permissions.join("|");
 
-    const [channelModal, setChannelModal] = useState<{ open: boolean; id?: string; name: string; textMode: string; baseUrl: string; apiKey: string; protocol?: string; accessKeyId?: string; accessKeySecret?: string }>({ open: false, name: "", textMode: "responses", baseUrl: "", apiKey: "" });
+    const [channelModal, setChannelModal] = useState<{ open: boolean; id?: string; name: string; textMode: string; baseUrl: string; apiKey: string; protocol?: string; accessKeyId?: string; accessKeySecret?: string; sameAccountRotation?:boolean }>({ open: false, name: "", textMode: "responses", baseUrl: "", apiKey: "" });
     const [testingChannel, setTestingChannel] = useState(false);
     const [channelModels, setChannelModels] = useState<string[]>([]);
     const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
@@ -746,7 +1681,7 @@ export function CatalogTab() {
         const aliyun = channelModal.protocol === 'aliyun-viapi';
         if (aliyun && (channelModal.accessKeyId || channelModal.accessKeySecret) && (!channelModal.accessKeyId || !channelModal.accessKeySecret)) { message.error('请同时填写 AccessKey ID 和 Secret'); return; }
         const apiKey = aliyun ? (channelModal.accessKeyId && channelModal.accessKeySecret ? JSON.stringify({ accessKeyId: channelModal.accessKeyId, accessKeySecret: channelModal.accessKeySecret }) : '') : channelModal.apiKey;
-        const payload = { name: channelModal.name, protocol: channelModal.protocol || 'openai', textMode: channelModal.textMode, baseUrl: channelModal.baseUrl, ...(apiKey ? { apiKey } : {}) };
+        const payload = { sameAccountRotation:channelModal.sameAccountRotation === true, name: channelModal.name, protocol: channelModal.protocol || 'openai', textMode: channelModal.textMode, baseUrl: channelModal.baseUrl, ...(apiKey ? { apiKey } : {}) };
         try {
             await apiRequest(channelModal.id ? `/api/admin/channels/${channelModal.id}` : "/api/admin/channels", { method: channelModal.id ? "PATCH" : "POST", json: payload });
             setChannelModal({ open: false, name: "", textMode: "responses", baseUrl: "", apiKey: "" });
@@ -1108,6 +2043,7 @@ export function CatalogTab() {
                         </div>
                     ) : null}
                 </div>
+            {channelModal.id && <label><input type="checkbox" checked={!!channelModal.sameAccountRotation} onChange={e=>setChannelModal({...channelModal,sameAccountRotation:e.target.checked})}/> 同一上游账户换钥，同时更新历史任务使用的凭据</label>}
             </Modal>
 
             <Modal title={familyModal.id ? "编辑模型族" : "新增模型族"} open={familyModal.open} onCancel={() => setFamilyModal({ ...familyModal, open: false })} onOk={() => void saveFamily()} okText="保存" width={500}>
@@ -1501,7 +2437,7 @@ import { AdminPanel } from "./ui";
 import { CreditReview } from "../tasks/credit-review";
 import { useAdminPermissions } from "../permissions";
 
-type HeldTask = { id: string; type: string; status: string; modelName: string; upstreamId: string | null; email: string; heldCredits: number | null; reservationMismatch: boolean; reservationIssue: string | null; createdAt: string; reconciliationRequired: boolean; imageRecheckable: boolean | null; error: string | null };
+type HeldTask = { id: string; type: string; status: string; modelName: string; upstreamId: string | null; submissionReference?: string | null; submissionRequests?: Record<string, string | null>; email: string; heldCredits: number | null; reservationMismatch: boolean; reservationIssue: string | null; createdAt: string; reconciliationRequired: boolean; imageRecheckable: boolean | null; error: string | null };
 type LatestReview = {state:string;note:string;createdAt:string} | null;
 type ExpiryIssue = { id: string; userId: string; email: string; amount: number; remaining: number; balance: number | null; expiresAt: string | null; latestReview:LatestReview };
 type WalletIssue = { userId: string; email: string; balance: number | null; held: number | null; lotTotal: string; reservationTotal: string; latestReview:LatestReview };
@@ -1675,7 +2611,7 @@ export function HeldTasksTab() {
         { title: "创建时间", dataIndex: "createdAt", render: (value: string) => dayjs(value).format("YYYY-MM-DD HH:mm:ss") },
         { title: "处理", render: (_value, row) => row.heldCredits === null || row.reservationMismatch ? "请人工核对账目" : !["queued", "running"].includes(row.status) ? permissions.includes("tasks.resolve") ? <Button size="small" onClick={() => { setAction("terminal"); setTarget(row); setNote(""); }}>核对冻结</Button> : "—" : row.upstreamId
             ? permissions.includes("tasks.review") ? <Button size="small" disabled={!row.reconciliationRequired || (row.type !== "video" && !(row.type === 'image' && row.imageRecheckable))} onClick={() => { setAction("recheck"); setTarget(row); setNote(""); }}>查询上游</Button> : "—"
-            : <div className="flex gap-2">{permissions.includes("tasks.resolve") && <Button size="small" onClick={() => { setAction("release"); setTarget(row); setNote(""); }}>核查并释放</Button>}{permissions.includes("tasks.review") && (row.type === "video" || (row.type === 'image' && row.imageRecheckable)) && row.reconciliationRequired && <Button size="small" onClick={() => { setAction("attach"); setTarget(row); setNote(""); setUpstreamId(""); }}>补录上游 ID</Button>}</div> },
+            : <div className="flex gap-2">{permissions.includes("tasks.resolve") && <Button size="small" onClick={() => { setAction("release"); setTarget(row); setNote(""); }}>核查并释放</Button>}{permissions.includes("tasks.review") && (row.type === "video" || (row.type === 'image' && row.imageRecheckable)) && row.reconciliationRequired && <Button size="small" onClick={() => { setAction("attach"); setTarget(row); setNote(""); setUpstreamId(row.submissionReference || ""); }}>补录上游 ID</Button>}</div> },
     ];
     return <>
         {permissions.includes("tasks.read") && <AdminPanel title="任务核对" description="显示未关闭冻结的任务，以及缺少有效冻结记录的未完成任务。已有上游任务 ID 的视频及支持核对的图片任务请通过上游核查；不要仅凭等待时间判断失败。" actions={<RefreshStatus checkedAt={checkedAt} onRefresh={()=>void load()} />} flush>
@@ -1688,750 +2624,5 @@ export function HeldTasksTab() {
             <label className="mt-3 block">核查说明<Input.TextArea value={note} onChange={(event) => setNote(event.target.value)} maxLength={300} rows={3} /></label>
         </Modal>
     </>;
-}
-
-
-========================================================================
-FILE: web/src/pages/admin/components/invite.tsx
-LINES: 1-258
-========================================================================
-import { useEffect, useState } from "react";
-import { App as AntApp, Button, Input, InputNumber, Select, Switch, Table } from "antd";
-import type { TableColumnsType } from "antd";
-import dayjs from "dayjs";
-import { Link, useSearchParams } from "react-router-dom";
-
-import { useAdminRequest } from "../use-admin-request";
-import { ADMIN_AUTOFILL_OFF, AdminBadge, AdminField, AdminPanel, AdminStat, AdminToolbar } from "./ui";
-import { useAdminPermissions } from "../permissions";
-
-type InviteSettings = { enabled: boolean; rebatePercent: number; membershipRebatePercent: number };
-type Relation = { id: string; inviterEmail: string; inviteeEmail: string; status: string; totalRebate: number; createdAt: string };
-type Rebate = {
-    id: string;
-    orderNo: string;
-    inviterEmail: string;
-    inviteeEmail: string;
-    orderCredits: number;
-    amountCents: number;
-    rebatePercent: number;
-    rebateCredits: number;
-    recoveredCredits: number | null;
-    recoveryShortfall: number | null;
-    status: string;
-    createdAt: string;
-    revokedAt: string | null;
-};
-
-const formatTime = (value?: string | null) => (value ? dayjs(value).format("YYYY-MM-DD HH:mm") : "-");
-
-export function InviteTab() {
-    const permissions = useAdminPermissions();
-    const [urlParams] = useSearchParams();
-    const apiRequest = useAdminRequest();
-    const { message } = AntApp.useApp();
-    const [settings, setSettings] = useState<InviteSettings>({ enabled: true, rebatePercent: 10, membershipRebatePercent: 10 });
-    const [saving, setSaving] = useState(false);
-    const [relations, setRelations] = useState<Relation[]>([]);
-    const [relationTotal, setRelationTotal] = useState(0);
-    const [relationPage, setRelationPage] = useState(1);
-    const [keyword, setKeyword] = useState("");
-    const [rebates, setRebates] = useState<Rebate[]>([]);
-    const [rebateTotal, setRebateTotal] = useState(0);
-    const [rebatePage, setRebatePage] = useState(1);
-    const [totals, setTotals] = useState({ granted: 0, revoked: 0 });
-    const [loading, setLoading] = useState(false);
-    const [filterUser, setFilterUser] = useState(urlParams.get("userId") ?? "");
-    const [relationStatus, setRelationStatus] = useState("");
-    const [rebateStatus, setRebateStatus] = useState("");
-    const [orderNo, setOrderNo] = useState(urlParams.get("orderNo") ?? "");
-    const [from, setFrom] = useState("");
-    const [to, setTo] = useState("");
-    function appendFilters(params: URLSearchParams, status: string) {
-        if (filterUser.trim()) params.set("userId", filterUser.trim());
-        if (status) params.set("status", status);
-        if (from) params.set("from", new Date(`${from}T00:00:00`).toISOString());
-        if (to) { const end = new Date(`${to}T00:00:00`); end.setDate(end.getDate() + 1); params.set("to", end.toISOString()); }
-    }
-
-    async function loadSettings() {
-        const data = await apiRequest<{ settings: InviteSettings }>("/api/admin/invite/settings");
-        setSettings({ ...data.settings, membershipRebatePercent: Number(data.settings.membershipRebatePercent ?? data.settings.rebatePercent) || 0 });
-    }
-
-    async function loadRelations(currentPage = relationPage) {
-        setLoading(true);
-        try {
-            const params = new URLSearchParams({ page: String(currentPage), pageSize: "20", keyword });
-            appendFilters(params, relationStatus);
-            const data = await apiRequest<{ items: Relation[]; total: number }>(`/api/admin/invite/relations?${params.toString()}`);
-            setRelations(data.items);
-            setRelationTotal(data.total);
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : String(error));
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    async function loadRebates(currentPage = rebatePage) {
-        setLoading(true);
-        try {
-            const params = new URLSearchParams({ page: String(currentPage), pageSize: "20" });
-            appendFilters(params, rebateStatus);
-            if (orderNo.trim()) params.set("orderNo", orderNo.trim());
-            const data = await apiRequest<{ items: Rebate[]; total: number; totals: { granted: number; revoked: number } }>(`/api/admin/invite/rebates?${params}`);
-            setRebates(data.items);
-            setRebateTotal(data.total);
-            setTotals(data.totals);
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : String(error));
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    useEffect(() => {
-        void loadSettings().catch((error: unknown) => message.error(error instanceof Error ? error.message : String(error)));
-    }, []);
-
-    useEffect(() => {
-        void loadRelations();
-    }, [relationPage]);
-
-    useEffect(() => {
-        void loadRebates();
-    }, [rebatePage]);
-
-    async function saveSettings() {
-        setSaving(true);
-        try {
-            await apiRequest("/api/admin/invite/settings", { method: "PUT", json: settings });
-            message.success("邀请设置已保存");
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : String(error));
-        } finally {
-            setSaving(false);
-        }
-    }
-
-    async function toggleRelation(relation: Relation) {
-        const status = relation.status === "active" ? "disabled" : "active";
-        try {
-            await apiRequest(`/api/admin/invite/relations/${relation.id}`, { method: "PATCH", json: { status } });
-            await loadRelations();
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : String(error));
-        }
-    }
-
-    const relationColumns: TableColumnsType<Relation> = [
-        { title: "邀请人", dataIndex: "inviterEmail", render: (value: string) => <Link to={`/admin?tab=users&search=${encodeURIComponent(value)}`}>{value}</Link> },
-        { title: "被邀请人", dataIndex: "inviteeEmail", render: (value: string) => <Link to={`/admin?tab=users&search=${encodeURIComponent(value)}`}>{value}</Link> },
-        { title: "累计返佣", dataIndex: "totalRebate", align: "right", render: (value: number) => <span className="tabular-nums">{value.toLocaleString("zh-CN")}</span> },
-        { title: "状态", dataIndex: "status", render: (value: string) => <AdminBadge tone={value === "active" ? "positive" : "neutral"}>{value === "active" ? "生效" : "已禁用"}</AdminBadge> },
-        { title: "建立时间", dataIndex: "createdAt", render: formatTime },
-        {
-            title: "操作",
-            key: "actions",
-            align: "right",
-            render: (_value, record) => (
-                permissions.includes("invites.manage") ? <Button size="small" onClick={() => void toggleRelation(record)}>
-                    {record.status === "active" ? "禁用" : "启用"}
-                </Button> : null
-            ),
-        },
-    ];
-
-    const rebateColumns: TableColumnsType<Rebate> = [
-        { title: "订单号", dataIndex: "orderNo", render: (value: string) => <Link to={`/admin?tab=orders&search=${encodeURIComponent(value)}`} className="font-mono text-[11px]">{value}</Link> },
-        { title: "邀请人", dataIndex: "inviterEmail", render: (value: string) => <span className="text-[var(--admin-ink)]">{value}</span> },
-        { title: "被邀请人", dataIndex: "inviteeEmail", render: (value: string) => <span className="text-[var(--admin-muted)]">{value}</span> },
-        { title: "订单积分", dataIndex: "orderCredits", align: "right", render: (value: number) => <span className="tabular-nums">{value.toLocaleString("zh-CN")}</span> },
-        { title: "比例", dataIndex: "rebatePercent", align: "right", render: (value: number) => <span className="tabular-nums">{Number(value)}%</span> },
-        { title: "返佣积分", dataIndex: "rebateCredits", align: "right", render: (value: number) => <span className="font-medium tabular-nums">{value.toLocaleString("zh-CN")}</span> },
-        { title: "实际扣回", dataIndex: "recoveredCredits", align: "right", render: (value: number | null) => value == null ? "—" : value },
-        { title: "扣回差额", dataIndex: "recoveryShortfall", align: "right", render: (value: number | null) => value == null ? "—" : value },
-        { title: "状态", dataIndex: "status", render: (value: string) => <AdminBadge tone={value === "granted" ? "positive" : "danger"}>{value === "granted" ? "已发放" : "已撤回"}</AdminBadge> },
-        { title: "时间", dataIndex: "createdAt", render: formatTime },
-    ];
-
-    return (
-        <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
-                <AdminStat label="累计发放返佣" value={totals.granted.toLocaleString("zh-CN")} note="积分" accent />
-                <AdminStat label="已撤销返佣" value={totals.revoked.toLocaleString("zh-CN")} note="原返佣额度，实际扣回见明细" />
-                <AdminStat label="邀请关系" value={relationTotal.toLocaleString("zh-CN")} note="一个用户只能被邀请一次" />
-            </div>
-
-            <AdminPanel
-                title="返佣规则"
-                description="被邀请人充值或会员订单支付成功后，按对应比例给邀请人发放积分；订单退款时自动撤回并扣回。"
-                actions={
-                    <Button type="primary" size="small" disabled={!permissions.includes("invites.manage")} loading={saving} onClick={() => void saveSettings()}>
-                        保存设置
-                    </Button>
-                }
-            >
-                <div className="grid gap-4 sm:grid-cols-3">
-                    <AdminField label="积分充值返佣比例（%）" hint="按充值订单到账积分计算，例如 10 表示充值 100 积分返 10 积分。">
-                        <InputNumber
-                            {...ADMIN_AUTOFILL_OFF}
-                            name="sundas-invite-credits-percent"
-                            className="w-full"
-                            disabled={!permissions.includes("invites.manage")}
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={settings.rebatePercent}
-                            onChange={(value) => setSettings({ ...settings, rebatePercent: Number(value) || 0 })}
-                        />
-                    </AdminField>
-                    <AdminField label="会员订单返佣比例（%）" hint="按会员套餐订单到账积分计算，例如 10 表示到账 100 积分返 10 积分。">
-                        <InputNumber
-                            {...ADMIN_AUTOFILL_OFF}
-                            name="sundas-invite-membership-percent"
-                            className="w-full"
-                            disabled={!permissions.includes("invites.manage")}
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={settings.membershipRebatePercent}
-                            onChange={(value) => setSettings({ ...settings, membershipRebatePercent: Number(value) || 0 })}
-                        />
-                    </AdminField>
-                    <div className="flex items-center justify-between rounded-[9px] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] px-3 py-2.5">
-                        <div>
-                            <div className="text-xs font-medium text-[var(--admin-ink)]">启用邀请返佣</div>
-                            <div className="mt-0.5 text-[11px] text-[var(--admin-muted)]">关闭后不再发放新的返佣</div>
-                        </div>
-                        <Switch disabled={!permissions.includes("invites.manage")} checked={settings.enabled} onChange={(checked) => setSettings({ ...settings, enabled: checked })} />
-                    </div>
-                </div>
-            </AdminPanel>
-
-            <AdminPanel title="邀请关系" description="禁用后该关系不再产生返佣，已发放的积分不会扣回。" flush>
-                <AdminToolbar>
-                    <Input placeholder="用户 ID" value={filterUser} onChange={e => setFilterUser(e.target.value)} className="max-w-[220px]" />
-                    <Select value={relationStatus} onChange={setRelationStatus} options={[{value:"",label:"全部关系"},{value:"active",label:"生效"},{value:"disabled",label:"禁用"}]} />
-                    <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="max-w-[160px]" />
-                    <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="max-w-[160px]" />
-                    <Input.Search
-                        allowClear
-                        placeholder="搜索邮箱"
-                        className="max-w-[260px]"
-                        value={keyword}
-                        onChange={(event) => setKeyword(event.target.value)}
-                        onSearch={() => {
-                            if (relationPage === 1) void loadRelations(1);
-                            else setRelationPage(1);
-                        }}
-                    />
-                    <Button onClick={() => { if (relationPage === 1) void loadRelations(1); else setRelationPage(1); }}>查询关系</Button>
-                </AdminToolbar>
-                <Table<Relation>
-                    rowKey="id"
-                    loading={loading}
-                    dataSource={relations}
-                    columns={relationColumns}
-                    scroll={{ x: 860 }}
-                    pagination={{ current: relationPage, pageSize: 20, total: relationTotal, onChange: setRelationPage, size: "small" }}
-                />
-            </AdminPanel>
-
-            <AdminPanel title="返佣记录" description="同一笔订单只返佣一次；退款后状态变为已撤回并扣回积分。" flush>
-                <AdminToolbar><Input placeholder="订单号" value={orderNo} onChange={e => setOrderNo(e.target.value)} className="max-w-[240px]" /><Select value={rebateStatus} onChange={setRebateStatus} options={[{value:"",label:"全部返佣"},{value:"granted",label:"已发放"},{value:"revoked",label:"已撤回"}]} /><Button onClick={() => { if (rebatePage === 1) void loadRebates(1); else setRebatePage(1); }}>查询</Button></AdminToolbar>
-                <Table<Rebate>
-                    rowKey="id"
-                    loading={loading}
-                    dataSource={rebates}
-                    columns={rebateColumns}
-                    scroll={{ x: 1080 }}
-                    pagination={{ current: rebatePage, pageSize: 20, total: rebateTotal, onChange: setRebatePage, size: "small" }}
-                />
-            </AdminPanel>
-        </div>
-    );
-}
-
-
-========================================================================
-FILE: web/src/pages/admin/components/model-editor.tsx
-LINES: 1-475
-========================================================================
-import { useEffect, useState } from "react";
-import { App as AntApp, AutoComplete, Button, Input, InputNumber, Modal, Select, Switch } from "antd";
-import { Plus, Trash2 } from "lucide-react";
-
-import { useAdminRequest } from "../use-admin-request";
-import { ADMIN_AUTOFILL_OFF, AdminBadge, AdminField } from "./ui";
-
-export type AdminFamily = {
-    id: string;
-    name: string;
-    vendor: string;
-    description: string;
-    icon: string;
-    sort: number;
-    modelCount?: number;
-};
-
-export type AdminModelRoute = {
-    id?: string;
-    channelId: string;
-    channelName?: string;
-    unit: string;
-    baseCredits: number | string;
-    resolutionMultipliers: Record<string, number>;
-    priority: number;
-    weight: number;
-    enabled: boolean;
-    healthStatus?: string;
-};
-
-export type AdminModel = {
-    id: string;
-    familyId: string | null;
-    familyName: string | null;
-    upstreamName: string;
-    displayName: string;
-    description: string;
-    capability: string;
-    metadata: Record<string, unknown>;
-    enabled: boolean;
-    sort: number;
-    routes: AdminModelRoute[];
-};
-
-type ChannelOption = { id: string; name: string; enabled: boolean; healthStatus?: string };
-type ResolutionRow = { value: string; multiplier: number };
-type RouteDraft = {
-    channelId: string;
-    unit: string;
-    baseCredits: number;
-    priority: number;
-    weight: number;
-    enabled: boolean;
-    resolutions: ResolutionRow[];
-};
-type MetadataDraft = {
-    visionInput: boolean;
-    upscaleAdapter: string;
-    imageProtocol: string;
-    tags: string;
-    refImages: number;
-    refVideos: number;
-    refAudios: number;
-    durationMin: number;
-    durationMax: number;
-    aspectRatios: string;
-    docsUrl: string;
-    promptSkill: string;
-};
-
-type PromptSkillOption = { key: string; label: string; capability: "image" | "video"; description: string };
-
-const CAPABILITIES = [
-    { value: "image", label: "图片" },
-    { value: "video", label: "视频" },
-    { value: "text", label: "文本" },
-    { value: "audio", label: "音频" },
-];
-const IMAGE_PROTOCOLS = [
-    { value: "", label: "OpenAI Images（默认）" },
-    { value: "gemini", label: "Gemini 原生" },
-    { value: "gpt88", label: "GPT88" },
-    { value: "catcode", label: "Catcode" },
-    { value: "cangyuan", label: "Cangyuan" },
-];
-const UNITS = [
-    { value: "image", label: "按张" },
-    { value: "second", label: "按秒" },
-    { value: "request", label: "按次" },
-    { value: "1k_chars", label: "按千字符" },
-];
-const UNITS_BY_CAPABILITY: Record<string, string[]> = {
-    image: ["image", "request"],
-    video: ["second", "request"],
-    text: ["request"],
-    audio: ["1k_chars", "request"],
-};
-const defaultResolutions: ResolutionRow[] = [
-    { value: "720", multiplier: 1 },
-    { value: "1080", multiplier: 2 },
-];
-
-function unitsFor(capability: string) {
-    return UNITS.filter((unit) => (UNITS_BY_CAPABILITY[capability] ?? []).includes(unit.value));
-}
-
-function nextUnit(capability: string, current: string) {
-    const allowed = UNITS_BY_CAPABILITY[capability] ?? [];
-    return allowed.includes(current) ? current : allowed[0] ?? "request";
-}
-
-function normalizeResolutionKey(value: string) {
-    return String(value || "").trim().toLowerCase().replace(/p$/i, "");
-}
-
-function resolutionRowsFromMap(multipliers: Record<string, number> | undefined): ResolutionRow[] {
-    const rows = Object.entries(multipliers ?? {}).map(([value, multiplier]) => ({ value: normalizeResolutionKey(value), multiplier: Number(multiplier) > 0 ? Number(multiplier) : 1 }));
-    const unique = rows.filter((row, index) => row.value && rows.findIndex((item) => item.value === row.value) === index);
-    return unique.length ? unique : defaultResolutions.map((row) => ({ ...row }));
-}
-
-function resolutionsToMap(rows: ResolutionRow[]) {
-    const multipliers: Record<string, number> = {};
-    for (const row of rows) {
-        const value = normalizeResolutionKey(row.value);
-        if (!value || multipliers[value] !== undefined) continue;
-        multipliers[value] = Number(row.multiplier) > 0 ? Number(row.multiplier) : 1;
-    }
-    return multipliers;
-}
-
-function metadataDraftOf(metadata: Record<string, unknown> | undefined): MetadataDraft {
-    const reference = (metadata?.referenceLimits ?? {}) as Record<string, unknown>;
-    const durations = (metadata?.durations ?? {}) as Record<string, unknown>;
-    return {
-        upscaleAdapter: String((metadata?.upscale as { adapter?: string } | undefined)?.adapter ?? ''),
-        imageProtocol: String(metadata?.imageProtocol ?? ""),
-        tags: Array.isArray(metadata?.tags) ? metadata.tags.join(", ") : "",
-        refImages: Number(reference.images) || 0,
-        refVideos: Number(reference.videos) || 0,
-        refAudios: Number(reference.audios) || 0,
-        durationMin: Number(durations.min) || 0,
-        durationMax: Number(durations.max) || 0,
-        aspectRatios: Array.isArray(metadata?.aspectRatios) ? metadata.aspectRatios.join(", ") : "",
-        docsUrl: String(metadata?.docsUrl ?? ""),
-        promptSkill: String(metadata?.promptSkill ?? ""),
-        visionInput: metadata?.visionInput === true,
-    };
-}
-
-function metadataFromDraft(draft: MetadataDraft): Record<string, unknown> {
-    const referenceLimits = {
-        ...(draft.refImages > 0 ? { images: draft.refImages } : {}),
-        ...(draft.refVideos > 0 ? { videos: draft.refVideos } : {}),
-        ...(draft.refAudios > 0 ? { audios: draft.refAudios } : {}),
-    };
-    const durations = {
-        ...(draft.durationMin > 0 ? { min: draft.durationMin } : {}),
-        ...(draft.durationMax > 0 ? { max: draft.durationMax } : {}),
-    };
-    const aspectRatios = draft.aspectRatios.split(",").map((item) => item.trim()).filter(Boolean);
-    return {
-        ...(draft.upscaleAdapter ? { upscale: { enabled: true, adapter: draft.upscaleAdapter } } : {}),
-        visionInput: draft.visionInput,
-        ...(draft.tags.trim() ? { tags: draft.tags.split(",").map((item) => item.trim()).filter(Boolean) } : {}),
-        ...(Object.keys(referenceLimits).length ? { referenceLimits } : {}),
-        ...(Object.keys(durations).length ? { durations } : {}),
-        ...(aspectRatios.length ? { aspectRatios } : {}),
-        ...(draft.docsUrl.trim() ? { docsUrl: draft.docsUrl.trim() } : {}),
-        ...(draft.promptSkill ? { promptSkill: draft.promptSkill } : {}),
-    };
-}
-
-function routeDraftsOf(model: AdminModel | null, channels: ChannelOption[]): RouteDraft[] {
-    if (model?.routes?.length) {
-        return model.routes.map((route) => ({
-            channelId: route.channelId,
-            unit: nextUnit(model.capability, route.unit),
-            baseCredits: Number(route.baseCredits) || 1,
-            priority: Number(route.priority) || 0,
-            weight: Number(route.weight) || 100,
-            enabled: route.enabled !== false,
-            resolutions: resolutionRowsFromMap(route.resolutionMultipliers),
-        }));
-    }
-    return [
-        {
-            channelId: channels[0]?.id ?? "",
-            unit: model?.capability === "video" ? "second" : "request",
-            baseCredits: 1,
-            priority: 0,
-            weight: 100,
-            enabled: true,
-            resolutions: defaultResolutions.map((row) => ({ ...row })),
-        },
-    ];
-}
-
-export function ModelEditorModal({
-    open,
-    model,
-    families,
-    channels,
-    modelSuggestions,
-    onClose,
-    onSaved,
-}: {
-    open: boolean;
-    model: AdminModel | null;
-    families: AdminFamily[];
-    channels: ChannelOption[];
-    modelSuggestions: string[];
-    onClose: () => void;
-    onSaved: () => Promise<void> | void;
-}) {
-    const apiRequest = useAdminRequest();
-    const { message } = AntApp.useApp();
-    const [familyId, setFamilyId] = useState("");
-    const [upstreamName, setUpstreamName] = useState("");
-    const [displayName, setDisplayName] = useState("");
-    const [description, setDescription] = useState("");
-    const [capability, setCapability] = useState("image");
-    const [metadata, setMetadata] = useState<MetadataDraft>(metadataDraftOf({}));
-    const [routes, setRoutes] = useState<RouteDraft[]>([]);
-    const [enabled, setEnabled] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [promptSkills, setPromptSkills] = useState<PromptSkillOption[]>([]);
-    const imageResolutionPricing = capability === 'image' && Boolean(model?.metadata?.cangyuanImage);
-
-    useEffect(() => {
-        if (!open) return;
-        setFamilyId(model?.familyId ?? families[0]?.id ?? "");
-        setUpstreamName(model?.upstreamName ?? "");
-        setDisplayName(model?.displayName ?? "");
-        setDescription(model?.description ?? "");
-        setCapability(model?.capability ?? "image");
-        setMetadata(metadataDraftOf(model?.metadata));
-        setRoutes(routeDraftsOf(model, channels));
-        setEnabled(model?.enabled !== false);
-    }, [open, model]);
-
-    useEffect(() => {
-        if (!open) return;
-        let alive = true;
-        apiRequest<{ skills: PromptSkillOption[] }>("/api/admin/prompt-skills")
-            .then((data) => { if (alive) setPromptSkills(data.skills); })
-            .catch(() => { if (alive) setPromptSkills([]); });
-        return () => { alive = false; };
-    }, [open, apiRequest]);
-
-    function updateRoute(index: number, patch: Partial<RouteDraft>) {
-        setRoutes((current) => current.map((route, routeIndex) => (routeIndex === index ? { ...route, ...patch } : route)));
-    }
-
-    function changeCapability(value: string) {
-        setCapability(value);
-        setMetadata((current) => ({
-            ...current,
-            upscaleAdapter: '',
-            promptSkill: promptSkills.some((skill) => skill.key === current.promptSkill && skill.capability === value) ? current.promptSkill : "",
-        }));
-        setRoutes((current) => current.map((route) => ({ ...route, unit: nextUnit(value, route.unit) })));
-    }
-
-    async function save() {
-        if (metadata.upscaleAdapter && routes.some(route => !(route.baseCredits > 0))) { message.error('请填写超分模型的实际售价'); return; }
-        if (!upstreamName.trim()) {
-            message.error("请填写上游模型名");
-            return;
-        }
-        if (!routes.length || routes.some((route) => !route.channelId)) {
-            message.error("请至少配置一条完整线路");
-            return;
-        }
-        setSaving(true);
-        try {
-            const { tags: _tags, referenceLimits: _referenceLimits, durations: _durations, aspectRatios: _aspectRatios, docsUrl: _docsUrl, promptSkill: _promptSkill, ...protocolMetadata } = model?.metadata ?? {};
-            const editedMetadata = metadataFromDraft(metadata);
-            if (protocolMetadata.videoProtocol === "tongxin") {
-                editedMetadata.referenceLimits = { ...(editedMetadata.referenceLimits as Record<string, number> | undefined), videos: 0, audios: 0 };
-            }
-            const nextMetadata = { ...protocolMetadata, ...editedMetadata };
-            if (!metadata.upscaleAdapter) delete nextMetadata.upscale;
-            if (capability === "image" && metadata.imageProtocol) nextMetadata.imageProtocol = metadata.imageProtocol;
-            else delete nextMetadata.imageProtocol;
-            if (capability === "image" || capability === "video") {
-                if (metadata.promptSkill) nextMetadata.promptSkill = metadata.promptSkill;
-                else delete nextMetadata.promptSkill;
-            } else {
-                delete nextMetadata.promptSkill;
-            }
-            const payload = {
-                familyId: familyId || null,
-                upstreamName: upstreamName.trim(),
-                displayName: displayName.trim() || upstreamName.trim(),
-                description,
-                capability,
-                metadata: nextMetadata,
-                enabled,
-                routes: routes.map((route) => ({
-                    channelId: route.channelId,
-                    unit: route.unit,
-                    baseCredits: route.baseCredits,
-                    resolutionMultipliers: capability === "video" || imageResolutionPricing ? resolutionsToMap(route.resolutions) : {},
-                    priority: route.priority,
-                    weight: route.weight,
-                    enabled: route.enabled,
-                })),
-            };
-            await apiRequest(model?.id ? `/api/admin/models/${model.id}` : "/api/admin/models", {
-                method: model?.id ? "PATCH" : "POST",
-                json: payload,
-            });
-            message.success("模型已保存");
-            await onSaved();
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : String(error));
-        } finally {
-            setSaving(false);
-        }
-    }
-
-    return (
-        <Modal title={model ? "编辑模型" : "新增模型"} open={open} onCancel={onClose} onOk={() => void save()} okText="保存" confirmLoading={saving} width={760}>
-            <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1 pt-1">
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <AdminField label="模型族" hint="用于前台按 Seedance、Grok 等系列分组。">
-                        <Select className="w-full" value={familyId || undefined} placeholder="未分组" onChange={setFamilyId} options={families.map((family) => ({ value: family.id, label: family.name }))} allowClear />
-                    </AdminField>
-                    <AdminField label="能力">
-                        <Select className="w-full" value={capability} onChange={changeCapability} options={CAPABILITIES} />
-                    </AdminField>
-                    <AdminField label="上游模型名" required>
-                        <AutoComplete className="w-full" value={upstreamName} onChange={setUpstreamName} options={modelSuggestions.map(value => ({ value }))} filterOption={(input, option) => String(option?.value ?? "").toLowerCase().includes(input.toLowerCase())} placeholder="选择已获取的模型，或手动输入名称" />
-                    </AdminField>
-                    <AdminField label="展示名">
-                        <Input {...ADMIN_AUTOFILL_OFF} name="sundas-model-display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="用户看到的名字" />
-                    </AdminField>
-                </div>
-
-                <AdminField label="模型描述" hint="显示在模型选择器详情里，可写适用场景、限制等。">
-                    <Input.TextArea {...ADMIN_AUTOFILL_OFF} name="sundas-model-description" value={description} onChange={(event) => setDescription(event.target.value)} autoSize={{ minRows: 2, maxRows: 4 }} placeholder="例如：1080p 快速生成，适合口播和商品展示。" />
-                </AdminField>
-
-                {capability === 'text' && <AdminField label="图像理解能力" hint="仅在已验证上游支持图片输入时启用，供创作助手检查真实参考帧。"><label><input type="checkbox" checked={metadata.visionInput} onChange={event => setMetadata({ ...metadata, visionInput: event.target.checked })} /> 支持图像理解</label></AdminField>}
-                {(capability === 'image' || capability === 'video') && <AdminField label="模型用途" hint="超分使用阿里云 VIAPI 渠道；配置售价并完成实际验收后启用，不会出现在普通生成列表。">
-                    <Select className="w-full" value={metadata.upscaleAdapter} options={[{ value: '', label: '普通生成 / 编辑' },
-                        { value: capability === 'image' ? 'aliyun-image-super-resolution' : 'aliyun-video-super-resolution', label: capability === 'image' ? '阿里云图片超分（1–4 倍）' : '阿里云视频超分（2 倍）' }]}
-                        onChange={value => { setMetadata({ ...metadata, upscaleAdapter: value }); if (value) { setUpstreamName(capability === 'image' ? 'MakeSuperResolutionImage' : 'SuperResolveVideo'); setEnabled(false); setRoutes(items => items.map(item => ({ ...item, baseCredits: 0, resolutions: [] }))); } }} />
-                </AdminField>}
-
-                {capability === "image" || capability === "video" ? (
-                    <AdminField label="提示词优化 Skill" hint="默认自动识别；也可按模型系列手动指定。">
-                        <Select
-                            className="w-full"
-                            allowClear
-                            value={metadata.promptSkill || undefined}
-                            placeholder="自动识别"
-                            options={promptSkills.filter((skill) => skill.capability === capability).map((skill) => ({ value: skill.key, label: skill.label }))}
-                            onChange={(value) => setMetadata({ ...metadata, promptSkill: value ?? "" })}
-                        />
-                    </AdminField>
-                ) : null}
-
-                <div className="rounded-[9px] border border-[var(--admin-line)] p-3">
-                    <div className="mb-3 text-xs font-medium text-[var(--admin-ink)]">能力与限制</div>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                        <AdminField label="参考图上限">
-                            <InputNumber {...ADMIN_AUTOFILL_OFF} name="sundas-model-ref-images" className="w-full" min={0} value={metadata.refImages} onChange={(value) => setMetadata({ ...metadata, refImages: Number(value) || 0 })} />
-                        </AdminField>
-                        {capability === "image" ? <AdminField label="图片协议" hint="Gemini 图片模型请选择 Gemini 原生。">
-                            <Select className="w-full" value={metadata.imageProtocol} onChange={(value) => setMetadata({ ...metadata, imageProtocol: value })} options={IMAGE_PROTOCOLS} />
-                        </AdminField> : null}
-                        <AdminField label="参考视频上限">
-                            <InputNumber {...ADMIN_AUTOFILL_OFF} name="sundas-model-ref-videos" className="w-full" min={0} value={metadata.refVideos} onChange={(value) => setMetadata({ ...metadata, refVideos: Number(value) || 0 })} />
-                        </AdminField>
-                        <AdminField label="参考音频上限">
-                            <InputNumber {...ADMIN_AUTOFILL_OFF} name="sundas-model-ref-audios" className="w-full" min={0} value={metadata.refAudios} onChange={(value) => setMetadata({ ...metadata, refAudios: Number(value) || 0 })} />
-                        </AdminField>
-                        {capability === "video" ? (
-                            <>
-                                <AdminField label="最短时长（秒）">
-                                    <InputNumber {...ADMIN_AUTOFILL_OFF} name="sundas-model-duration-min" className="w-full" min={0} value={metadata.durationMin} onChange={(value) => setMetadata({ ...metadata, durationMin: Number(value) || 0 })} />
-                                </AdminField>
-                                <AdminField label="最长时长（秒）">
-                                    <InputNumber {...ADMIN_AUTOFILL_OFF} name="sundas-model-duration-max" className="w-full" min={0} value={metadata.durationMax} onChange={(value) => setMetadata({ ...metadata, durationMax: Number(value) || 0 })} />
-                                </AdminField>
-                                <AdminField label="宽高比">
-                                    <Input {...ADMIN_AUTOFILL_OFF} name="sundas-model-aspect-ratios" value={metadata.aspectRatios} onChange={(event) => setMetadata({ ...metadata, aspectRatios: event.target.value })} placeholder="16:9, 9:16, 1:1" />
-                                </AdminField>
-                            </>
-                        ) : null}
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                        <AdminField label="标签">
-                            <Input {...ADMIN_AUTOFILL_OFF} name="sundas-model-tags" value={metadata.tags} onChange={(event) => setMetadata({ ...metadata, tags: event.target.value })} placeholder="快速, 人物, 口播" />
-                        </AdminField>
-                        <AdminField label="文档链接">
-                            <Input {...ADMIN_AUTOFILL_OFF} name="sundas-model-docs-url" value={metadata.docsUrl} onChange={(event) => setMetadata({ ...metadata, docsUrl: event.target.value })} placeholder="https://..." />
-                        </AdminField>
-                    </div>
-                </div>
-
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                        <div>
-                            <div className="text-xs font-medium text-[var(--admin-ink)]">模型线路</div>
-                            <div className="mt-0.5 text-[11px] text-[var(--admin-muted)]">一个模型绑多个渠道；前台只显示一次，网关按优先级和健康状态选路。</div>
-                        </div>
-                        <Button size="small" icon={<Plus size={13} />} onClick={() => setRoutes([...routes, { channelId: channels[0]?.id ?? "", unit: nextUnit(capability, "request"), baseCredits: 1, priority: routes.length, weight: 100, enabled: true, resolutions: defaultResolutions.map((row) => ({ ...row })) }])}>
-                            添加线路
-                        </Button>
-                    </div>
-                    {routes.map((route, index) => (
-                        <div key={index} className="space-y-3 rounded-[9px] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3">
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-medium text-[var(--admin-ink)]">线路 {index + 1}</span>
-                                    {route.channelId ? <AdminBadge tone={route.enabled ? "positive" : "neutral"}>{route.enabled ? "启用" : "停用"}</AdminBadge> : null}
-                                </div>
-                                <Button type="text" danger icon={<Trash2 size={14} />} aria-label="删除线路" onClick={() => setRoutes(routes.filter((_item, routeIndex) => routeIndex !== index))} />
-                            </div>
-                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                <AdminField label="渠道" required>
-                                    <Select className="w-full" value={route.channelId || undefined} placeholder="选择渠道" onChange={(value) => updateRoute(index, { channelId: value })} options={channels.map((channel) => ({ value: channel.id, label: `${channel.name}${channel.healthStatus === "down" ? "（异常）" : ""}` }))} />
-                                </AdminField>
-                                <AdminField label="计量单位">
-                                    <Select className="w-full" value={route.unit} onChange={(value) => updateRoute(index, { unit: value })} options={unitsFor(capability)} />
-                                </AdminField>
-                                <AdminField label="单价（积分）">
-                                    <InputNumber {...ADMIN_AUTOFILL_OFF} name={`sundas-route-credits-${index}`} className="w-full" min={0.0001} step={0.5} value={route.baseCredits} onChange={(value) => updateRoute(index, { baseCredits: Number(value) || 0 })} />
-                                </AdminField>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <AdminField label="优先级">
-                                        <InputNumber {...ADMIN_AUTOFILL_OFF} name={`sundas-route-priority-${index}`} className="w-full" value={route.priority} onChange={(value) => updateRoute(index, { priority: Number(value) || 0 })} />
-                                    </AdminField>
-                                    <AdminField label="权重">
-                                        <InputNumber {...ADMIN_AUTOFILL_OFF} name={`sundas-route-weight-${index}`} className="w-full" min={1} value={route.weight} onChange={(value) => updateRoute(index, { weight: Number(value) || 100 })} />
-                                    </AdminField>
-                                </div>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                                <span className="text-[11px] text-[var(--admin-muted)]">优先级越小越先尝试，权重用于同优先级排序。</span>
-                                <Switch checked={route.enabled} onChange={(checked) => updateRoute(index, { enabled: checked })} />
-                            </div>
-                            {capability === "video" || imageResolutionPricing ? (
-                                <div className="space-y-2 border-t border-[var(--admin-line)] pt-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[11px] text-[var(--admin-muted)]">该线路支持的分辨率</span>
-                                        <Button size="small" type="text" icon={<Plus size={12} />} onClick={() => updateRoute(index, { resolutions: [...route.resolutions, { value: "", multiplier: 1 }] })}>分辨率</Button>
-                                    </div>
-                                    {route.resolutions.map((row, resolutionIndex) => (
-                                        <div key={resolutionIndex} className="grid grid-cols-[1fr_100px_28px] gap-2">
-                                            <Input {...ADMIN_AUTOFILL_OFF} name={`sundas-route-resolution-${index}-${resolutionIndex}`} value={row.value} placeholder="720 / 1080 / 2k / 4k" onChange={(event) => updateRoute(index, { resolutions: route.resolutions.map((item, itemIndex) => (itemIndex === resolutionIndex ? { ...item, value: event.target.value } : item)) })} />
-                                            <InputNumber {...ADMIN_AUTOFILL_OFF} name={`sundas-route-resolution-multiplier-${index}-${resolutionIndex}`} className="w-full" min={0.1} step={0.1} value={row.multiplier} onChange={(value) => updateRoute(index, { resolutions: route.resolutions.map((item, itemIndex) => (itemIndex === resolutionIndex ? { ...item, multiplier: Number(value) || 1 } : item)) })} />
-                                            <Button type="text" danger icon={<Trash2 size={13} />} aria-label="删除分辨率" onClick={() => updateRoute(index, { resolutions: route.resolutions.filter((_item, itemIndex) => itemIndex !== resolutionIndex) })} />
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : null}
-                        </div>
-                    ))}
-                </div>
-
-                <div className="flex items-center justify-between rounded-[9px] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] px-3 py-2.5">
-                    <div>
-                        <div className="text-xs font-medium text-[var(--admin-ink)]">启用模型</div>
-                        <div className="mt-0.5 text-[11px] text-[var(--admin-muted)]">关闭后前台不会展示该模型。</div>
-                    </div>
-                    <Switch checked={enabled} onChange={setEnabled} />
-                </div>
-            </div>
-        </Modal>
-    );
 }
 

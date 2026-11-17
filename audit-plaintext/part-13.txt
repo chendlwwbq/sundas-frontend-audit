@@ -1,7 +1,1167 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+========================================================================
+FILE: web/src/lib/app-theme.ts
+LINES: 1-152
+========================================================================
+import type { ThemeConfig } from "antd";
+import { theme as antdTheme } from "antd";
+
+// sundas brand: lime #D8FF3E accent on near-black (dark) / warm white (light).
+const brand = {
+    primary: "#D8FF3E",
+    primaryInk: "#11130A",
+    primaryHover: "#E3FF6B",
+    primaryActive: "#B8E81C",
+    link: { light: "#4D7C0F", dark: "#D8FF3E" },
+};
+
+const neutral = {
+    light: {
+        elevatedBg: "#FFFFFF",
+        itemHoverBg: "rgba(29, 33, 41, 0.06)",
+        itemSelectedBg: "rgba(216, 255, 62, 0.12)",
+        itemSelectedHoverBg: "rgba(216, 255, 62, 0.18)",
+        itemText: "#1D2129",
+        tableSelectedBg: "rgba(216, 255, 62, 0.08)",
+        tableSelectedHoverBg: "rgba(216, 255, 62, 0.14)",
+    },
+    dark: {
+        elevatedBg: "#1F1F1F",
+        itemHoverBg: "rgba(255, 255, 255, 0.08)",
+        itemSelectedBg: "rgba(255, 255, 255, 0.08)",
+        itemSelectedHoverBg: "rgba(255, 255, 255, 0.12)",
+        itemText: "rgba(255, 255, 255, 0.88)",
+        tableSelectedBg: "rgba(216, 255, 62, 0.08)",
+        tableSelectedHoverBg: "rgba(216, 255, 62, 0.14)",
+    },
+};
+
+const fontFamily =
+    "'CapCut Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif";
+
+export function getAntThemeConfig(dark: boolean): ThemeConfig {
+    const color = dark ? neutral.dark : neutral.light;
+
+    return {
+        algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+        cssVar: { key: dark ? "sundas-dark" : "sundas-light" },
+        token: {
+            colorPrimary: brand.primary,
+            colorInfo: brand.primary,
+            colorLink: dark ? brand.link.dark : brand.link.light,
+            colorLinkHover: dark ? brand.primaryHover : "#3F6212",
+            colorLinkActive: dark ? brand.primary : brand.link.light,
+            colorTextLightSolid: brand.primaryInk,
+            colorBgElevated: color.elevatedBg,
+            colorBgContainer: dark ? "#1A1A1A" : "#FFFFFF",
+            colorBgBase: dark ? "#121212" : "#F7F8FA",
+            colorText: dark ? "rgba(255, 255, 255, 0.88)" : "#1D2129",
+            colorTextSecondary: dark ? "rgba(255, 255, 255, 0.70)" : "#4E5969",
+            colorTextTertiary: dark ? "rgba(255, 255, 255, 0.60)" : "#86909C",
+            colorTextQuaternary: dark ? "rgba(255, 255, 255, 0.40)" : "#C9CDD4",
+            colorBorder: dark ? "rgba(255, 255, 255, 0.12)" : "#C9CDD4",
+            colorBorderSecondary: dark ? "rgba(255, 255, 255, 0.08)" : "#E5E6EB",
+            borderRadius: 8,
+            fontFamily,
+            controlItemBgHover: color.itemHoverBg,
+            controlItemBgActive: color.itemSelectedBg,
+            controlItemBgActiveHover: color.itemSelectedHoverBg,
+            // 聚焦反馈：即梦式 3px 浅蓝光圈由组件样式提供，关闭 antd 默认实心外框
+            controlOutline: "transparent",
+            boxShadowSecondary: dark ? "0 12px 40px rgba(0, 0, 0, 0.5)" : "0 12px 40px rgba(0, 0, 0, 0.12)",
+        },
+        components: {
+            Input: {
+                activeShadow: "none",
+                colorBorder: dark ? "rgba(255, 255, 255, 0.12)" : "#C9CDD4",
+            },
+            InputNumber: {
+                activeShadow: "none",
+            },
+            Button: {
+                primaryShadow: "none",
+                fontWeight: 500,
+            },
+            Checkbox: {
+                colorPrimary: brand.primary,
+                colorPrimaryHover: brand.primaryHover,
+            },
+            Radio: {
+                colorPrimary: brand.primary,
+            },
+            Switch: {
+                colorPrimary: brand.primary,
+                colorPrimaryHover: brand.primaryHover,
+            },
+            Slider: {
+                colorPrimary: brand.primary,
+                colorPrimaryBorder: brand.primary,
+                colorPrimaryBorderHover: brand.primaryHover,
+            },
+            Tabs: {
+                // 选中态统一走品牌青柠（青柠文字 + 青柠下划线），不再用白字胶囊
+                inkBarColor: brand.primary,
+                itemColor: dark ? "rgba(255, 255, 255, 0.60)" : "#4E5969",
+                itemHoverColor: dark ? "rgba(255, 255, 255, 0.92)" : "#1D2129",
+                itemSelectedColor: dark ? brand.primary : "#3F6212",
+                titleFontSize: 14,
+            },
+            Segmented: {
+                trackBg: dark ? "rgba(255, 255, 255, 0.06)" : "#F2F3F5",
+                itemColor: dark ? "rgba(255, 255, 255, 0.60)" : "#4E5969",
+                itemHoverColor: dark ? "rgba(255, 255, 255, 0.92)" : "#1D2129",
+                itemHoverBg: dark ? "rgba(255, 255, 255, 0.06)" : "rgba(29, 33, 41, 0.04)",
+                // 激活态：青柠淡底 + 青柠字（与素材库/提示词库的筛选胶囊同一套语言）
+                itemSelectedBg: dark ? "rgba(216, 255, 62, 0.16)" : "#EAFFB4",
+                itemSelectedColor: dark ? brand.primary : "#3F6212",
+            },
+            Dropdown: {
+                colorBgElevated: color.elevatedBg,
+                colorText: color.itemText,
+                controlItemBgHover: color.itemHoverBg,
+                controlItemBgActive: color.itemSelectedBg,
+                controlItemBgActiveHover: color.itemSelectedHoverBg,
+            },
+            Menu: {
+                popupBg: color.elevatedBg,
+                itemActiveBg: color.itemSelectedBg,
+                itemHoverBg: color.itemHoverBg,
+                itemSelectedBg: color.itemSelectedBg,
+                itemSelectedColor: color.itemText,
+                darkPopupBg: neutral.dark.elevatedBg,
+                darkItemHoverBg: neutral.dark.itemHoverBg,
+                darkItemSelectedBg: neutral.dark.itemSelectedBg,
+                darkItemSelectedColor: neutral.dark.itemText,
+            },
+            Select: {
+                activeOutlineColor: "transparent",
+                optionActiveBg: color.itemHoverBg,
+                optionSelectedBg: color.itemSelectedBg,
+                optionSelectedColor: color.itemText,
+            },
+            Table: {
+                rowSelectedBg: color.tableSelectedBg,
+                rowSelectedHoverBg: color.tableSelectedHoverBg,
+            },
+            Modal: {
+                contentBg: dark ? "#1A1A1A" : "#FFFFFF",
+                headerBg: dark ? "#1A1A1A" : "#FFFFFF",
+            },
+            Tooltip: {
+                // 即梦暗色 tooltip：深灰底 + 白字（rgba(28,28,28,.96)）
+                colorBgSpotlight: dark ? "rgba(28, 28, 28, 0.96)" : "#1D2129",
+                colorTextLightSolid: dark ? "rgba(255, 255, 255, 0.88)" : "#FFFFFF",
+            },
+        },
+    };
+}
+
+
+========================================================================
+FILE: web/src/lib/asset-pagination.ts
+LINES: 1-24
+========================================================================
+export type AssetPage<T> = { assets: T[]; nextCursor: string | null; hasMore: boolean };
+
+// No store or baseline mutations until the entire traversal succeeds.
+export async function readAllAssetPages<T extends { id: string; version: number }>(read: (cursor?: string) => Promise<AssetPage<T>>, active: () => boolean): Promise<T[]> {
+    const assets = new Map<string,T>();
+    const cursors = new Set<string>();
+    let cursor: string | undefined;
+    do {
+        if (!active()) throw new Error('素材读取会话已变化');
+        const page = await read(cursor);
+        if (!active()) throw new Error('素材读取会话已变化');
+        if (!Array.isArray(page.assets) || typeof page.hasMore !== 'boolean'
+            || (page.hasMore ? typeof page.nextCursor !== 'string' || !page.nextCursor || !page.assets.length : page.nextCursor !== null)) throw new Error('素材分页响应不完整，请重新读取');
+        for (const asset of page.assets) {
+            const previous = assets.get(asset.id);
+            if (!previous || asset.version >= previous.version) assets.set(asset.id,asset);
+        }
+        if (!page.hasMore) break;
+        if (cursors.has(page.nextCursor!)) throw new Error('素材分页游标未推进，请重新读取');
+        cursor = page.nextCursor!;
+        cursors.add(cursor);
+    } while (true);
+    return [...assets.values()];
+}
+
+
+========================================================================
+FILE: web/src/lib/audio-generation.ts
+LINES: 1-61
+========================================================================
+export const audioVoiceOptions = [
+    { value: "alloy", label: "Alloy" },
+    { value: "ash", label: "Ash" },
+    { value: "ballad", label: "Ballad" },
+    { value: "coral", label: "Coral" },
+    { value: "echo", label: "Echo" },
+    { value: "fable", label: "Fable" },
+    { value: "nova", label: "Nova" },
+    { value: "onyx", label: "Onyx" },
+    { value: "sage", label: "Sage" },
+    { value: "shimmer", label: "Shimmer" },
+    { value: "verse", label: "Verse" },
+    { value: "marin", label: "Marin" },
+    { value: "cedar", label: "Cedar" },
+];
+
+export const audioFormatOptions = [
+    { value: "mp3", label: "MP3" },
+    { value: "wav", label: "WAV" },
+    { value: "opus", label: "Opus" },
+    { value: "aac", label: "AAC" },
+    { value: "flac", label: "FLAC" },
+    { value: "pcm", label: "PCM" },
+];
+
+export function normalizeAudioVoiceValue(value: string) {
+    return audioVoiceOptions.some((item) => item.value === value) ? value : "alloy";
+}
+
+export function normalizeAudioFormatValue(value: string) {
+    return audioFormatOptions.some((item) => item.value === value) ? value : "mp3";
+}
+
+export function normalizeAudioSpeedValue(value: string) {
+    const speed = Number(value);
+    if (!Number.isFinite(speed)) return "1";
+    return String(Math.max(0.25, Math.min(4, Number(speed.toFixed(2)))));
+}
+
+export function audioVoiceLabel(value: string) {
+    const voice = normalizeAudioVoiceValue(value);
+    return audioVoiceOptions.find((item) => item.value === voice)?.label || voice;
+}
+
+export function audioFormatLabel(value: string) {
+    const format = normalizeAudioFormatValue(value);
+    return audioFormatOptions.find((item) => item.value === format)?.label || format;
+}
+
+export function audioSpeedLabel(value: string) {
+    return `${normalizeAudioSpeedValue(value)}x`;
+}
+
+export function audioMimeType(format: string) {
+    if (format === "wav") return "audio/wav";
+    if (format === "opus") return "audio/opus";
+    if (format === "aac") return "audio/aac";
+    if (format === "flac") return "audio/flac";
+    if (format === "pcm") return "audio/pcm";
+    return "audio/mpeg";
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas-theme.ts
+LINES: 1-151
+========================================================================
+export type CanvasColorTheme = "light" | "dark";
+export type CanvasBackgroundMode = "dots" | "lines" | "blank";
+
+/**
+ * 画布视觉令牌：迁移自 BeefTV 的画布主题合同。
+ * - 画布底色取 #141414（不是纯黑），点阵保持低对比；
+ * - 节点是内容容器，常态不描边、只用柔和投影区分层级，选中才出现 1px 亮描边；
+ * - 工具栏是半透明玻璃层（rgba 面板 + backdrop-blur），层级靠明度组织，不靠重阴影。
+ */
+export const canvasThemes = {
+    light: {
+        canvas: {
+            background: "#f0f0f0",
+            // 网格/点阵令牌自带最终透明度（不再由 CanvasGrid 二次叠 opacity），
+            // 直接换算成"落在 #f0f0f0 上的实际灰度"，方便调对比度。
+            dot: "rgba(0,0,0,.27)",
+            line: "rgba(0,0,0,.37)",
+            selectionStroke: "#111827",
+            selectionFill: "rgba(17,17,17,.10)",
+        },
+        node: {
+            label: "#4b5563",
+            fill: "#ffffff",
+            panel: "#ffffff",
+            stroke: "#e2e4e8",
+            edge: "rgba(15,23,42,.16)",
+            shadow: "0 6px 18px rgba(15,23,42,.08)",
+            hoverShadow: "0 10px 24px rgba(15,23,42,.12)",
+            activeStroke: "#111827",
+            placeholder: "#9ca3af",
+            text: "#111827",
+            muted: "#6b7280",
+            faint: "#9ca3af",
+        },
+        // 浮动菜单（双击画布 / 连线落点）：必须是实色面板，避免与画布内容视觉叠字。
+        menu: {
+            panel: "#ffffff",
+            border: "rgba(17,24,39,.12)",
+            shadow: "0 24px 60px rgba(15,23,42,.16), 0 2px 10px rgba(15,23,42,.08)",
+            divider: "rgba(17,24,39,.07)",
+            itemHover: "rgba(17,24,39,.05)",
+            iconBg: "rgba(17,24,39,.045)",
+            iconColor: "#4b5563",
+            header: "#4b5563",
+            title: "#111827",
+            subtitle: "#6b7280",
+        },
+        toolbar: {
+            panel: "rgba(255,255,255,.94)",
+            border: "rgba(17,24,39,.10)",
+            item: "#4b5563",
+            itemHover: "rgba(17,24,39,.06)",
+            activeBg: "rgba(17,24,39,.10)",
+            activeText: "#111827",
+        },
+        composer: {
+            surface: "rgba(255,255,255,.98)",
+            border: "rgba(17,24,39,.10)",
+            borderFocus: "rgba(17,24,39,.30)",
+            shadow: "0 1px 2px rgba(15,23,42,.06), 0 16px 40px rgba(15,23,42,.12)",
+            chip: "rgba(17,24,39,.05)",
+            chipHover: "rgba(17,24,39,.09)",
+            chipText: "#1f2937",
+            muted: "#6b7280",
+            divider: "rgba(17,24,39,.08)",
+            slot: "rgba(17,24,39,.035)",
+            slotBorder: "rgba(17,24,39,.18)",
+            sendDisabledBg: "rgba(17,24,39,.07)",
+            sendDisabledText: "#9ca3af",
+        },
+        accent: {
+            primary: "#111827",
+            primarySoft: "rgba(17,17,17,.10)",
+            onPrimary: "#ffffff",
+            danger: "#e11d48",
+        },
+        // 品牌青柠：浅底上换成深橄榄，保证文字对比度
+        brand: "#4D7C0F",
+    },
+    dark: {
+        canvas: {
+            background: "#141414",
+            // 点阵/格子不用元素级 opacity 衰减：软边圆点叠上 0.34 的 opacity 后，
+            // 峰值只剩 #212121（相对 #141414 只差 13 级灰），肉眼基本看不见，
+            // 这就是"点"看起来不生效的原因。令牌直接给最终透明度。
+            dot: "rgba(255,255,255,.2)",
+            line: "rgba(255,255,255,.07)",
+            selectionStroke: "#f1f1f1",
+            selectionFill: "rgba(255,255,255,.12)",
+        },
+        node: {
+            label: "#a3a3a3",
+            fill: "#262626",
+            panel: "#222222",
+            stroke: "rgba(255,255,255,.18)",
+            edge: "rgba(255,255,255,.18)",
+            shadow: "0 8px 24px rgba(0,0,0,.34)",
+            hoverShadow: "0 12px 30px rgba(0,0,0,.46)",
+            activeStroke: "#f1f1f1",
+            placeholder: "#737373",
+            text: "#ededed",
+            muted: "#a3a3a3",
+            faint: "#666666",
+        },
+        menu: {
+            panel: "#242424",
+            border: "rgba(255,255,255,.15)",
+            shadow: "0 28px 70px rgba(0,0,0,.62), 0 4px 14px rgba(0,0,0,.44)",
+            divider: "rgba(255,255,255,.08)",
+            itemHover: "rgba(255,255,255,.07)",
+            iconBg: "rgba(255,255,255,.055)",
+            iconColor: "#b4b4b4",
+            header: "#c8c8c8",
+            title: "#ededed",
+            subtitle: "#9a9a9a",
+        },
+        toolbar: {
+            panel: "rgba(20,20,20,.97)",
+            border: "rgba(255,255,255,.1)",
+            item: "#d4d4d4",
+            itemHover: "rgba(255,255,255,.07)",
+            activeBg: "rgba(255,255,255,.10)",
+            activeText: "#f5f6f8",
+        },
+        composer: {
+            surface: "rgba(28,28,30,.97)",
+            border: "rgba(255,255,255,.10)",
+            borderFocus: "rgba(255,255,255,.28)",
+            shadow: "0 1px 2px rgba(0,0,0,.30), 0 20px 48px rgba(0,0,0,.50)",
+            chip: "rgba(255,255,255,.06)",
+            chipHover: "rgba(255,255,255,.11)",
+            chipText: "#e7e7e7",
+            muted: "#9a9a9a",
+            divider: "rgba(255,255,255,.08)",
+            slot: "rgba(255,255,255,.04)",
+            slotBorder: "rgba(255,255,255,.20)",
+            sendDisabledBg: "rgba(255,255,255,.08)",
+            sendDisabledText: "#6f6f6f",
+        },
+        accent: {
+            primary: "#f5f5f5",
+            primarySoft: "rgba(255,255,255,.11)",
+            onPrimary: "#131313",
+            danger: "#fb7185",
+        },
+        // 品牌青柠：深色画布上用原色
+        brand: "#D8FF3E",
+    },
+} as const;
+
+export type CanvasTheme = (typeof canvasThemes)[CanvasColorTheme];
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-agent-ops.ts
+LINES: 1-89
+========================================================================
+import { nanoid } from "nanoid";
+
+import i18n from "@/i18n";
+import { getNodeSpec, isRegisteredNodeType } from "@/lib/canvas/node-registry";
+import { CanvasNodeType, type CanvasConnection, type CanvasNodeData, type CanvasNodeMetadata, type CanvasNodeTypeId, type ViewportTransform } from "@/types/canvas";
+
+export type CanvasAgentOp =
+    | { type: "add_node"; id?: string; nodeType?: CanvasNodeTypeId; title?: string; position?: { x: number; y: number }; x?: number; y?: number; width?: number; height?: number; metadata?: CanvasNodeMetadata }
+    | { type: "update_node"; id: string; patch?: Partial<CanvasNodeData>; metadata?: CanvasNodeMetadata }
+    | { type: "delete_node"; id?: string; ids?: string[]; nodeType?: CanvasNodeTypeId }
+    | { type: "delete_connections"; id?: string; ids?: string[]; all?: boolean }
+    | { type: "connect_nodes"; id?: string; fromNodeId: string; toNodeId: string }
+    | { type: "set_viewport"; viewport: ViewportTransform }
+    | { type: "select_nodes"; ids: string[] }
+    | { type: "run_generation"; nodeId: string; mode?: "text" | "image" | "video" | "audio"; prompt?: string };
+
+export type CanvasAgentSnapshot = {
+    projectId: string;
+    title: string;
+    nodes: CanvasNodeData[];
+    connections: CanvasConnection[];
+    selectedNodeIds: string[];
+    viewport: ViewportTransform;
+};
+
+export function summarizeCanvasAgentOps(ops?: CanvasAgentOp[]) {
+    const counts = (Array.isArray(ops) ? ops : []).reduce<Record<string, number>>((acc, op) => {
+        if (!op?.type) return acc;
+        acc[op.type] = (acc[op.type] || 0) + 1;
+        return acc;
+    }, {});
+    return Object.entries(counts)
+        .map(([type, count]) => `${opLabel(type)} ${count}`)
+        .join("，");
+}
+
+export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasAgentOp[]) {
+    let nodes = snapshot.nodes;
+    let connections = snapshot.connections;
+    let selectedNodeIds = snapshot.selectedNodeIds;
+    let viewport = snapshot.viewport;
+
+    (Array.isArray(ops) ? ops : []).forEach((op, index) => {
+        if (!op?.type) return;
+        if (op.type === "add_node") {
+            const nodeType = op.nodeType && isRegisteredNodeType(op.nodeType) ? op.nodeType : CanvasNodeType.Text;
+            const spec = getNodeSpec(nodeType);
+            const node: CanvasNodeData = {
+                id: op.id || `${nodeType}-${Date.now()}-${index}`,
+                type: nodeType,
+                title: op.title || spec.title,
+                position: op.position || { x: op.x ?? index * 36, y: op.y ?? index * 36 },
+                width: op.width || spec.width,
+                height: op.height || spec.height,
+                metadata: { ...spec.metadata, ...op.metadata },
+            };
+            nodes = [...nodes, node];
+            selectedNodeIds = [node.id];
+        }
+        if (op.type === "update_node") {
+            if (!op.id) return;
+            nodes = nodes.map((node) => (node.id === op.id ? { ...node, ...op.patch, metadata: { ...node.metadata, ...op.patch?.metadata, ...op.metadata } } : node));
+        }
+        if (op.type === "delete_node") {
+            const ids = new Set(op.ids || (op.id ? [op.id] : op.nodeType ? nodes.filter((node) => node.type === op.nodeType).map((node) => node.id) : []));
+            nodes = nodes.filter((node) => !ids.has(node.id));
+            connections = connections.filter((conn) => !ids.has(conn.fromNodeId) && !ids.has(conn.toNodeId));
+            selectedNodeIds = selectedNodeIds.filter((id) => !ids.has(id));
+        }
+        if (op.type === "delete_connections") {
+            const ids = new Set(op.ids || (op.id ? [op.id] : []));
+            connections = op.all ? [] : connections.filter((conn) => !ids.has(conn.id));
+        }
+        if (op.type === "connect_nodes") {
+            if (!op.fromNodeId || !op.toNodeId) return;
+            const exists = connections.some((conn) => conn.fromNodeId === op.fromNodeId && conn.toNodeId === op.toNodeId);
+            const hasNodes = nodes.some((node) => node.id === op.fromNodeId) && nodes.some((node) => node.id === op.toNodeId);
+            if (!exists && hasNodes) connections = [...connections, { id: op.id || nanoid(), fromNodeId: op.fromNodeId, toNodeId: op.toNodeId }];
+        }
+        if (op.type === "set_viewport" && op.viewport) viewport = op.viewport;
+        if (op.type === "select_nodes") selectedNodeIds = (op.ids || []).filter((id) => nodes.some((node) => node.id === id));
+    });
+
+    return { ...snapshot, nodes, connections, selectedNodeIds, viewport };
+}
+
+function opLabel(type: string) {
+    return i18n.t(`canvas.agentOps.${type}`, { defaultValue: type });
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-export.ts
+LINES: 1-115
+========================================================================
+import { saveAs } from "file-saver";
+
+import i18n from "@/i18n";
+import { createZip } from "@/lib/zip";
+import { getMediaBlob } from "@/services/file-storage";
+import { getImageBlob } from "@/services/image-storage";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { matchesCanvasSession } from "@/lib/canvas/canvas-session";
+import type { CanvasExportAsset, CanvasExportFile } from "@/types/canvas-export";
+import type { CanvasProject } from "@/stores/canvas/use-canvas-store";
+import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
+import { collectCanvasPackageMedia } from './canvas-package';
+import { parseProduction } from '../../../../shared/production';
+
+export async function exportCanvasProjects(projects: CanvasProject[], fileName = i18n.t("canvas.export.defaultProjectName")) {
+    const checkSession = captureExportSession();
+    const zipFiles: { name: string; data: BlobPart }[] = [];
+    const exportedProjects = await Promise.all(
+        projects.map(async (project) => {
+            if (project.production) parseProduction(project.production);
+            const files: CanvasExportAsset[] = [];
+            await Promise.all(
+                collectCanvasPackageMedia(project).map(async (storageKey, index) => {
+                    checkSession();
+                    const blob = storageKey.startsWith('/media/') ? await downloadPackageMedia(storageKey, checkSession) : storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
+                    if (!blob) throw new Error("画布引用的本地素材缺失，无法完整导出；请先恢复素材后重试。");
+                    const path = `projects/${project.id}/files/${index}.${fileExtension(blob.type, storageKey)}`;
+                    files.push({ storageKey, path, mimeType: blob.type || "application/octet-stream", bytes: blob.size });
+                    zipFiles.push({ name: path, data: blob });
+                }),
+            );
+            return { project, files };
+        }),
+    );
+
+    const data: CanvasExportFile = { app: "sundas", version: 4, exportedAt: new Date().toISOString(), projects: exportedProjects };
+    checkSession();
+    const zip = await createZip([{ name: "projects.json", data: JSON.stringify(data, null, 2) }, ...zipFiles]);
+    checkSession();
+    saveAs(zip, `${safeFileName(fileName)}.zip`);
+}
+
+export async function exportCanvasNodes(nodes: CanvasNodeData[], fileName = i18n.t("canvas.export.defaultNodesName")) {
+    const checkSession = captureExportSession();
+    const zipFiles: { name: string; data: BlobPart }[] = [];
+    const used = new Set<string>();
+    const uniqueName = (base: string, ext: string) => {
+        const safe = safeFileName(base) || i18n.t("canvas.export.item");
+        let name = `${safe}.${ext}`;
+        for (let i = 1; used.has(name); i += 1) name = `${safe}-${i}.${ext}`;
+        used.add(name);
+        return name;
+    };
+
+    await Promise.all(
+        nodes.map(async (node) => {
+            const title = node.title || node.type;
+            const storageKey = node.metadata?.storageKey || "";
+            if (storageKey) {
+                const blob = storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
+                if (blob) return void zipFiles.push({ name: uniqueName(title, fileExtension(blob.type, storageKey)), data: blob });
+            }
+            if (node.type === CanvasNodeType.Text) return void zipFiles.push({ name: uniqueName(title, "txt"), data: node.metadata?.content || node.metadata?.prompt || "" });
+            const content = node.metadata?.content;
+            if (content && content.startsWith("data:")) {
+                const blob = await (await fetch(content)).blob();
+                return void zipFiles.push({ name: uniqueName(title, fileExtension(blob.type, storageKey)), data: blob });
+            }
+            if (storageKey) throw new Error("节点引用的本地素材缺失，无法完整导出；请先恢复素材后重试。");
+            zipFiles.push({ name: uniqueName(title, "json"), data: JSON.stringify(node, null, 2) });
+        }),
+    );
+
+    checkSession();
+    const zip = await createZip(zipFiles);
+    checkSession();
+    saveAs(zip, `${safeFileName(fileName)}.zip`);
+}
+
+function captureExportSession() {
+    const current = useAuthStore.getState();
+    const owner = current.user?.id ?? null, epoch = current.sessionEpoch;
+    const check = () => { if (!matchesCanvasSession(owner, epoch, useAuthStore.getState())) throw new Error("账户会话已变化，请重新导出"); };
+    check();
+    return check;
+}
+
+async function downloadPackageMedia(url: string, checkSession: () => void) {
+    checkSession();
+    const owner = useAuthStore.getState().user?.id;
+    if (!owner) throw new Error('请先登录后导出媒体');
+    const response = await fetch(url, { credentials: 'same-origin', headers: { 'X-Sundas-User': owner } });
+    checkSession();
+    if (!response.ok) throw new Error('无法读取工程引用的媒体，请检查归属或文件状态');
+    const blob = await response.blob();
+    checkSession();
+    return blob;
+}
+
+function safeFileName(value: string) {
+    return value.replace(/[\\/:*?"<>|]/g, "_");
+}
+
+function fileExtension(mimeType: string, storageKey: string) {
+    if (mimeType.includes("png")) return "png";
+    if (mimeType.includes("jpeg")) return "jpg";
+    if (mimeType.includes("webp")) return "webp";
+    if (mimeType.includes("gif")) return "gif";
+    if (mimeType.includes("mp4")) return "mp4";
+    if (mimeType.includes("webm")) return "webm";
+    if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
+    if (mimeType.includes("wav")) return "wav";
+    if (mimeType.includes("ogg")) return "ogg";
+    return storageKey.startsWith("image:") ? "png" : "bin";
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-generation-helpers.ts
+LINES: 1-205
+========================================================================
+import { defaultConfig, modelOptionName, resolveModelForCapability, useConfigStore, type AiConfig } from "@/stores/use-config-store";
+import { clampVideoSecondsToRange, parseVideoResolution, videoSecondsRangeForDurations } from "@/lib/media-size";
+import i18n from "@/i18n";
+import { resolveImageUrl, uploadImage } from "@/services/image-storage";
+import { resolveMediaUrl } from "@/services/file-storage";
+import { imageMetadata, referenceUrl } from "@/lib/canvas/canvas-node-factory";
+import type { NodeGenerationInput } from "@/components/canvas/canvas-node-generation";
+import type { CanvasNodeGenerationMode } from "@/components/canvas/canvas-node-prompt-panel";
+import type { CanvasImageAngleParams } from "@/components/canvas/canvas-node-angle-dialog";
+import type { ReferenceImage } from "@/types/image";
+import { CanvasNodeType, type CanvasAssistantSession, type CanvasConnection, type CanvasNodeData, type CanvasNodeMetadata } from "@/types/canvas";
+
+export function imageExtension(dataUrl: string) {
+    return dataUrl.match(/^data:image[/]([^;]+)/)?.[1] || dataUrl.match(/image[/]([^;]+)/)?.[1] || "png";
+}
+
+export function audioExtension(mimeType?: string) {
+    if (mimeType?.includes("wav")) return "wav";
+    if (mimeType?.includes("opus")) return "opus";
+    if (mimeType?.includes("aac")) return "aac";
+    if (mimeType?.includes("flac")) return "flac";
+    if (mimeType?.includes("pcm")) return "pcm";
+    return "mp3";
+}
+
+export function generationReferenceUrls(context: { referenceImages: ReferenceImage[]; referenceVideos: Array<{ storageKey?: string; url?: string }>; referenceAudios?: Array<{ storageKey?: string; url?: string }> }) {
+    return [
+        ...context.referenceImages.map(referenceUrl).filter((url): url is string => Boolean(url)),
+        ...context.referenceVideos.map((video) => video.storageKey || video.url).filter((url): url is string => Boolean(url)),
+        ...(context.referenceAudios || []).map((audio) => audio.storageKey || audio.url).filter((url): url is string => Boolean(url)),
+    ];
+}
+
+export async function resolveMetadataReferences(metadata: CanvasNodeMetadata) {
+    if (metadata.generationType !== "edit") return [];
+    if (!metadata.references?.length) return null;
+    const references = await Promise.all(
+        metadata.references.map(async (url, index) => {
+            const dataUrl = url.startsWith("image:") ? await resolveImageUrl(url, "") : url;
+            return dataUrl ? { id: `${index}`, name: `reference-${index}.png`, type: "image/png", dataUrl, storageKey: url.startsWith("image:") ? url : undefined } : null;
+        }),
+    );
+    return references.every(Boolean) ? (references as ReferenceImage[]) : null;
+}
+
+export async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
+    return Promise.all(
+        nodes.map(async (node) => {
+            const metadata = node.metadata;
+            const content = metadata?.content;
+            if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && metadata?.storageKey) return { ...node, metadata: { ...metadata, content: await resolveMediaUrl(metadata.storageKey, content) } };
+            if (node.type !== CanvasNodeType.Image || !metadata || !content) return node;
+            const images = await Promise.all(
+                (metadata.images || []).map(async (image) => {
+                    if (!image.content) return image;
+                    return { ...image, content: await resolveImageUrl(image.storageKey, image.content) };
+                }),
+            );
+            if (metadata.storageKey) {
+                return { ...node, metadata: { ...metadata, content: await resolveImageUrl(metadata.storageKey, content), images } };
+            }
+            if (!content.startsWith("data:image/")) return node;
+            return { ...node, metadata: { ...metadata, ...imageMetadata(await uploadImage(content)) } };
+        }),
+    );
+}
+
+export async function hydrateAssistantImages(sessions: CanvasAssistantSession[]) {
+    const hydrateItem = async <T extends { dataUrl?: string; storageKey?: string }>(item: T) => {
+        if (item.storageKey) return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
+        if (item.dataUrl?.startsWith("data:image/")) {
+            const image = await uploadImage(item.dataUrl);
+            return { ...item, dataUrl: image.url, storageKey: image.storageKey };
+        }
+        return item;
+    };
+    return Promise.all(
+        sessions.map(async (session) => ({
+            ...session,
+            messages: await Promise.all(
+                session.messages.map(async (message) => ({
+                    ...message,
+                    references: await Promise.all((message.references || []).map(hydrateItem)),
+                })),
+            ),
+        })),
+    );
+}
+
+export function getGenerationCount(count: string) {
+    return Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
+}
+
+export function getInputSummary(inputs: NodeGenerationInput[]) {
+    const resources = [...new Map(inputs.flatMap((input) => (input.type === "group" ? input.children : [input])).map((input) => [input.nodeId, input])).values()];
+    return {
+        textCount: resources.filter((input) => input.type === "text").length,
+        imageCount: resources.filter((input) => input.type === "image").length,
+        videoCount: resources.filter((input) => input.type === "video").length,
+        audioCount: resources.filter((input) => input.type === "audio").length,
+    };
+}
+
+export function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefined, mode: CanvasNodeGenerationMode): AiConfig {
+    const resolved = resolveModelForCapability(config, node?.metadata?.model, mode);
+    const serverModels = useConfigStore.getState().serverModels;
+    const fallbackModel = mode === "image" ? config.imageModel : mode === "video" ? config.videoModel : mode === "audio" ? config.audioModel : config.textModel;
+    const model = serverModels.length && !serverModels.some((item) => item.id === modelOptionName(resolved) && item.capability === mode)
+        ? fallbackModel || resolved
+        : resolved;
+    const serverModel = mode === "video" ? serverModels.find((item) => item.id === modelOptionName(model)) : undefined;
+    const durations = (serverModel?.metadata as { durations?: { min?: number; max?: number } } | undefined)?.durations;
+    const secondsRange = videoSecondsRangeForDurations(durations);
+    const currentQuality = parseVideoResolution(node?.metadata?.vquality || config.vquality || defaultConfig.vquality);
+    const selectedRouteId = mode === 'video' ? node?.metadata?.videoRouteId ?? '' : '';
+    const resolutions = Object.keys((selectedRouteId ? serverModel?.routes.find((route) => route.id === selectedRouteId)?.resolutionMultipliers : undefined) ?? serverModel?.resolutionMultipliers ?? {});
+    const vquality = mode === "video" ? resolutions.length && !resolutions.includes(currentQuality) ? resolutions[0] : currentQuality : node?.metadata?.vquality || config.vquality || defaultConfig.vquality;
+    return {
+        ...config,
+        model,
+        reasoningEffort: node?.metadata?.reasoningEffort || config.reasoningEffort || defaultConfig.reasoningEffort,
+        quality: node?.metadata?.quality || config.quality || defaultConfig.quality,
+        size: node?.metadata?.size || config.size || defaultConfig.size,
+        background: node?.metadata?.background ?? config.background ?? defaultConfig.background,
+        videoSeconds: clampVideoSecondsToRange(node?.metadata?.seconds || config.videoSeconds || defaultConfig.videoSeconds, secondsRange.min, secondsRange.max),
+        vquality,
+        videoGenerateAudio: node?.metadata?.generateAudio || config.videoGenerateAudio || defaultConfig.videoGenerateAudio,
+        videoWatermark: node?.metadata?.watermark || config.videoWatermark || defaultConfig.videoWatermark,
+        videoMode: node?.metadata?.videoMode || config.videoMode || defaultConfig.videoMode,
+        videoRouteId: selectedRouteId,
+        audioVoice: node?.metadata?.audioVoice || config.audioVoice || defaultConfig.audioVoice,
+        audioFormat: node?.metadata?.audioFormat || config.audioFormat || defaultConfig.audioFormat,
+        audioSpeed: node?.metadata?.audioSpeed || config.audioSpeed || defaultConfig.audioSpeed,
+        audioInstructions: node?.metadata?.audioInstructions || config.audioInstructions || defaultConfig.audioInstructions,
+        count: String(node?.metadata?.count || (mode === "image" ? config.canvasImageCount || config.count : config.count) || defaultConfig.count),
+    };
+}
+
+export function hasResumableVideoTask(node: CanvasNodeData) {
+    return node.type === CanvasNodeType.Video && Boolean(node.metadata?.videoTaskId) && !node.metadata?.content;
+}
+
+export function resetInterruptedGeneration(nodes: CanvasNodeData[]) {
+    return nodes.map((node) =>
+        node.metadata?.status === "loading"
+            ? hasResumableVideoTask(node)
+                ? node
+                : {
+                      ...node,
+                      metadata: {
+                          ...node.metadata,
+                          status: "error" as const,
+                          errorDetails: i18n.t("canvas.generation.interrupted"),
+                          images: node.metadata.images?.map((image) => (image.status === "loading" ? { ...image, status: "error" as const, errorDetails: i18n.t("canvas.generation.interrupted") } : image)),
+                          texts: node.metadata.texts?.map((text) => (text.status === "loading" ? { ...text, status: "error" as const, errorDetails: i18n.t("canvas.generation.interrupted") } : text)),
+                      },
+                  }
+            : node,
+    );
+}
+
+export function isGenerationCanceled(error: unknown) {
+    return error instanceof Error && (error.message === i18n.t("common.requestCanceled") || error.name === "AbortError");
+}
+
+export function findRetrySourceNode(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
+    const queue = connections.filter((connection) => connection.toNodeId === nodeId).map((connection) => connection.fromNodeId);
+    const visited = new Set<string>();
+    while (queue.length) {
+        const id = queue.shift()!;
+        if (visited.has(id)) continue;
+        visited.add(id);
+        const node = nodes.find((item) => item.id === id);
+        if (node?.type === CanvasNodeType.Config) return node;
+        connections.filter((connection) => connection.toNodeId === id).forEach((connection) => queue.push(connection.fromNodeId));
+    }
+    return null;
+}
+
+export function sourceNodeReferenceImages(node: CanvasNodeData | null) {
+    if (!node || node.type !== CanvasNodeType.Image || !node.metadata?.content) return [];
+    return [
+        {
+            id: node.id,
+            name: `${node.title || node.id}.png`,
+            type: node.metadata.mimeType || "image/png",
+            dataUrl: node.metadata.content,
+            storageKey: node.metadata.storageKey,
+        },
+    ];
+}
+
+export function isAudioFile(file: File) {
+    return file.type.startsWith("audio/") || /\.(mp3|wav)$/i.test(file.name);
+}
+
+export function buildAngleLabel(params: CanvasImageAngleParams) {
+    const horizontal = params.horizontalAngle === 0 ? i18n.t("canvas.generation.front") : params.horizontalAngle > 0 ? i18n.t("canvas.generation.rotateRight", { angle: params.horizontalAngle }) : i18n.t("canvas.generation.rotateLeft", { angle: Math.abs(params.horizontalAngle) });
+    const pitch = params.pitchAngle === 0 ? i18n.t("canvas.generation.level") : params.pitchAngle > 0 ? i18n.t("canvas.generation.topDown", { angle: params.pitchAngle }) : i18n.t("canvas.generation.lowAngle", { angle: Math.abs(params.pitchAngle) });
+    return i18n.t("canvas.generation.angleLabel", { horizontal, pitch, distance: params.cameraDistance.toFixed(1), lens: i18n.t(params.wideAngle ? "canvas.editors.wide" : "canvas.editors.standard") });
+}
+
+export function buildAnglePrompt(params: CanvasImageAngleParams) {
+    return i18n.t("canvas.generation.anglePrompt", { angle: buildAngleLabel(params) });
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-image-data.ts
+LINES: 1-176
+========================================================================
+export type ImageCropRect = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
+export type ImageAngleTransform = {
+    horizontalAngle: number;
+    pitchAngle: number;
+    cameraDistance: number;
+    wideAngle: boolean;
+};
+
+export type ImageUpscaleAlgorithm = "nearest" | "bilinear" | "high";
+
+export const MAX_UPSCALE_LONG_EDGE = 4096;
+
+export type ImageUpscaleParams = {
+    targetLongEdge: number;
+    algorithm: ImageUpscaleAlgorithm;
+};
+
+export type ImageSplitParams = {
+    rows: number;
+    columns: number;
+    horizontalLines?: number[];
+    verticalLines?: number[];
+};
+
+export type ImageSplitPiece = {
+    row: number;
+    column: number;
+    dataUrl: string;
+};
+
+export async function cropDataUrl(dataUrl: string, crop?: ImageCropRect) {
+    const image = await loadImage(dataUrl);
+    if (crop) {
+        return drawCrop(image, Math.floor(crop.x * image.width), Math.floor(crop.y * image.height), Math.ceil(crop.width * image.width), Math.ceil(crop.height * image.height));
+    }
+    const size = Math.min(image.width, image.height);
+    const sx = Math.max(0, Math.floor((image.width - size) / 2));
+    const sy = Math.max(0, Math.floor((image.height - size) / 2));
+    return drawCrop(image, sx, sy, size, size);
+}
+
+export async function splitDataUrl(dataUrl: string, params: ImageSplitParams): Promise<ImageSplitPiece[]> {
+    const image = await loadImage(dataUrl);
+    const xCuts = buildSplitCuts(params.verticalLines, image.width, Math.max(1, Math.floor(params.columns)));
+    const yCuts = buildSplitCuts(params.horizontalLines, image.height, Math.max(1, Math.floor(params.rows)));
+    const pieces: ImageSplitPiece[] = [];
+
+    for (let row = 0; row < yCuts.length - 1; row += 1) {
+        const sy = yCuts[row];
+        const sh = yCuts[row + 1] - sy;
+        for (let column = 0; column < xCuts.length - 1; column += 1) {
+            const sx = xCuts[column];
+            const sw = xCuts[column + 1] - sx;
+            pieces.push({ row, column, dataUrl: drawCrop(image, sx, sy, sw, sh) });
+        }
+    }
+
+    return pieces;
+}
+
+function buildSplitCuts(lines: number[] | undefined, size: number, count: number) {
+    if (!lines?.length) return Array.from({ length: count + 1 }, (_, index) => Math.floor((index * size) / count));
+    return [0, ...lines.map((line) => Math.round(line * size)).filter((line) => line > 0 && line < size).sort((a, b) => a - b), size];
+}
+
+export async function transformAngleDataUrl(dataUrl: string, params: ImageAngleTransform) {
+    const image = await loadImage(dataUrl);
+    const canvas = document.createElement("canvas");
+    const padding = Math.round(Math.max(image.width, image.height) * 0.18);
+    canvas.width = image.width + padding * 2;
+    canvas.height = image.height + padding * 2;
+    const context = canvas.getContext("2d");
+    if (!context) return dataUrl;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    const horizontal = params.horizontalAngle / 60;
+    const pitch = params.pitchAngle / 45;
+    const distanceScale = 1.12 - params.cameraDistance * 0.035;
+    const wideScale = params.wideAngle ? 0.88 : 1;
+    const scale = Math.max(0.64, Math.min(1.1, distanceScale * wideScale));
+    const width = image.width * scale * (1 - Math.abs(horizontal) * 0.28);
+    const height = image.height * scale * (1 - Math.abs(pitch) * 0.18);
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const skewX = horizontal * image.width * 0.18;
+    const skewY = pitch * image.height * 0.12;
+    const x = cx - width / 2 + horizontal * padding * 0.5;
+    const y = cy - height / 2 + pitch * padding * 0.45;
+
+    context.save();
+    context.setTransform(1, pitch * 0.08, horizontal * -0.1, 1, 0, 0);
+    context.drawImage(image, x + skewX, y + skewY, width, height);
+    context.restore();
+
+    if (params.wideAngle) {
+        const gradient = context.createRadialGradient(cx, cy, Math.min(canvas.width, canvas.height) * 0.2, cx, cy, Math.max(canvas.width, canvas.height) * 0.62);
+        gradient.addColorStop(0, "rgba(255,255,255,0)");
+        gradient.addColorStop(1, "rgba(0,0,0,0.18)");
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    return canvas.toDataURL("image/png");
+}
+
+export async function upscaleDataUrl(dataUrl: string, params: ImageUpscaleParams) {
+    const image = await loadImage(dataUrl);
+    const { width, height } = resolveUpscaleSize(image.width, image.height, params.targetLongEdge);
+    return params.algorithm === "high" ? drawStepUpscale(image, width, height) : drawResize(image, image.width, image.height, width, height, params.algorithm);
+}
+
+export function resolveUpscaleSize(width: number, height: number, targetLongEdge: number) {
+    const longEdge = Math.max(1, width, height);
+    const target = Math.min(MAX_UPSCALE_LONG_EDGE, Math.max(1, Math.round(targetLongEdge)));
+    const scale = target / longEdge;
+    return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
+function drawCrop(image: HTMLImageElement, sx: number, sy: number, sw: number, sh: number) {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, sw);
+    canvas.height = Math.max(1, sh);
+    const context = canvas.getContext("2d");
+    if (!context) return image.src;
+    context.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/png");
+}
+
+function drawStepUpscale(image: HTMLImageElement, width: number, height: number) {
+    let source: CanvasImageSource = image;
+    let sourceWidth = image.width;
+    let sourceHeight = image.height;
+
+    while (sourceWidth * 2 < width && sourceHeight * 2 < height) {
+        const nextWidth = sourceWidth * 2;
+        const nextHeight = sourceHeight * 2;
+        const next = drawResizeCanvas(source, sourceWidth, sourceHeight, nextWidth, nextHeight, "high");
+        source = next;
+        sourceWidth = nextWidth;
+        sourceHeight = nextHeight;
+    }
+
+    return drawResize(source, sourceWidth, sourceHeight, width, height, "high");
+}
+
+function drawResize(source: CanvasImageSource, sourceWidth: number, sourceHeight: number, width: number, height: number, algorithm: ImageUpscaleAlgorithm) {
+    return drawResizeCanvas(source, sourceWidth, sourceHeight, width, height, algorithm).toDataURL("image/png");
+}
+
+function drawResizeCanvas(source: CanvasImageSource, sourceWidth: number, sourceHeight: number, width: number, height: number, algorithm: ImageUpscaleAlgorithm) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return canvas;
+    context.imageSmoothingEnabled = algorithm !== "nearest";
+    context.imageSmoothingQuality = algorithm === "bilinear" ? "medium" : "high";
+    context.drawImage(source, 0, 0, sourceWidth, sourceHeight, 0, 0, width, height);
+    return canvas;
+}
+
+function loadImage(dataUrl: string) {
+    return new Promise<HTMLImageElement>((resolve) => {
+        const image = new Image();
+        // 私有媒体会重定向至 OSS，画布读取像素必须按 CORS 方式加载。
+        if (dataUrl.startsWith('/media/') || dataUrl.startsWith(`${window.location.origin}/media/`)) image.crossOrigin = 'anonymous';
+        image.onload = () => resolve(image);
+        image.src = dataUrl;
+    });
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-import.ts
+LINES: 1-35
+========================================================================
+import { readZip } from "@/lib/zip";
+import { importMediaFiles } from "@/lib/imported-media";
+import { collectCanvasPackageMedia, remapCanvasPackageIdentities, remapCanvasPackageMedia } from './canvas-package';
+import { parseProduction } from '../../../../shared/production';
+import { currentMediaOwner } from "@/services/cloud-media";
+import { captureAccountSession } from "@/lib/account-session";
+import type { CanvasExportFile } from "@/types/canvas-export";
+
+export async function readCanvasPackage(file: Blob) {
+    const session = captureAccountSession();
+    const owner = session.owner;
+    if (!owner) throw new Error("请先登录");
+    const zip = await readZip(file);
+    session.check();
+    const projectFile = zip.get("projects.json");
+    if (!projectFile) throw new Error("missing projects.json");
+    const data = JSON.parse(await projectFile.text()) as CanvasExportFile;
+    session.check();
+    if (data.app !== "sundas" || ![3, 4].includes(data.version) || !Array.isArray(data.projects)) throw new Error("不支持的画布文件");
+    for (const item of data.projects) {
+        if (!item?.project || !Array.isArray(item.files) || !Array.isArray(item.project.nodes) || !Array.isArray(item.project.connections)) throw new Error('工程结构不完整');
+        const ids = new Set(item.project.nodes.map(node => node.id));
+        if (ids.size !== item.project.nodes.length || item.project.nodes.some(node => typeof node.id !== 'string' || !node.id) || item.project.connections.some(edge => !ids.has(edge.fromNodeId) || !ids.has(edge.toNodeId))) throw new Error('工程节点或连线身份无效');
+        if (item.project.production) parseProduction(item.project.production);
+        if (item.project.production?.shots.some(shot => shot.nodeId && !ids.has(shot.nodeId))) throw new Error('制作镜头绑定的节点缺失');
+        if (item.files.some(file => typeof file.storageKey !== 'string' || typeof file.path !== 'string' || typeof file.mimeType !== 'string' || !zip.has(file.path))) throw new Error('工程素材清单或文件不完整');
+        const files = new Set(item.files.map(file => file.storageKey));
+        if (collectCanvasPackageMedia(item.project).some(key => !files.has(key))) throw new Error('工程备份缺少引用素材，请重新完整导出');
+    }
+    const media = await importMediaFiles(zip, data.projects.flatMap((project) => project.files), owner, session.check);
+    const projects = data.projects.map((item) => remapCanvasPackageIdentities(remapCanvasPackageMedia(item.project, media), () => crypto.randomUUID()));
+    session.check();
+    if (currentMediaOwner() !== owner) throw new Error("登录账户已变化，请重新导入");
+    return projects;
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-media-playback.ts
+LINES: 1-20
+========================================================================
+let playingIds: ReadonlySet<string> = new Set();
+const listeners = new Set<() => void>();
+
+export function getPlayingCanvasNodeIds() { return playingIds; }
+export function subscribeCanvasPlayback(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
+
+/** Active playback remains mounted when panned offscreen; paused offscreen players can be released. */
+export function setCanvasNodePlaying(id: string, playing: boolean) {
+    if (playingIds.has(id) === playing) return;
+    const next = new Set(playingIds);
+    if (playing) next.add(id); else next.delete(id);
+    playingIds = next;
+    listeners.forEach((listener) => listener());
+}
+
+export function releaseCanvasMedia(media: HTMLMediaElement) {
+    media.pause();
+    media.removeAttribute("src");
+    media.load();
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-node-factory.ts
+LINES: 1-71
+========================================================================
+import { getNodeSpec, NODE_DEFAULT_SIZE } from "@/constant/canvas";
+import { nodeSizeFromRatio } from "@/lib/canvas/canvas-node-size";
+import type { AiConfig } from "@/stores/use-config-store";
+import type { UploadedImage } from "@/services/image-storage";
+import type { UploadedFile } from "@/services/file-storage";
+import type { ReferenceImage } from "@/types/image";
+import { CanvasNodeType, type CanvasImageGenerationType, type CanvasNodeData, type CanvasNodeMetadata, type CanvasNodeTypeId, type Position } from "@/types/canvas";
+
+export function createCanvasNode(type: CanvasNodeTypeId, position: Position, metadata?: CanvasNodeMetadata): CanvasNodeData {
+    const spec = getNodeSpec(type);
+    const id = `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    return {
+        id,
+        type,
+        title: spec.title,
+        position: {
+            x: position.x - spec.width / 2,
+            y: position.y - spec.height / 2,
+        },
+        width: spec.width,
+        height: spec.height,
+        metadata: { ...spec.metadata, ...metadata },
+    };
+}
+
+export function imageMetadata(image: UploadedImage): CanvasNodeMetadata {
+    return { content: image.url, storageKey: image.storageKey, status: "success", naturalWidth: image.width, naturalHeight: image.height, bytes: image.bytes, mimeType: image.mimeType };
+}
+
+export function videoMetadata(video: UploadedFile): CanvasNodeMetadata {
+    return { content: video.url, storageKey: video.storageKey, status: "success", naturalWidth: video.width, naturalHeight: video.height, bytes: video.bytes, mimeType: video.mimeType || "video/mp4", durationMs: video.durationMs };
+}
+
+export function audioMetadata(audio: UploadedFile): CanvasNodeMetadata {
+    return { audioMediaId: audio.mediaId, audioTaskId: audio.taskId, content: audio.url, storageKey: audio.storageKey, status: "success", bytes: audio.bytes, mimeType: audio.mimeType || "audio/mpeg", durationMs: audio.durationMs };
+}
+
+export function referenceUrl(image: ReferenceImage) {
+    return image.storageKey || image.url || (!image.dataUrl.startsWith("data:") ? image.dataUrl : undefined);
+}
+
+export function buildImageGenerationMetadata(type: CanvasImageGenerationType, config: AiConfig, count: number, references: ReferenceImage[]): CanvasNodeMetadata {
+    return {
+        generationType: type,
+        model: config.model,
+        size: config.size,
+        quality: config.quality,
+        ...(config.background ? { background: config.background } : {}),
+        count,
+        references: references.map(referenceUrl).filter((url): url is string => Boolean(url)),
+    };
+}
+
+export function buildAudioGenerationMetadata(config: AiConfig): CanvasNodeMetadata {
+    return {
+        model: config.model,
+        audioVoice: config.audioVoice,
+        audioFormat: config.audioFormat,
+        audioSpeed: config.audioSpeed,
+        audioInstructions: config.audioInstructions,
+    };
+}
+
+export function applyNodeConfigPatch(node: CanvasNodeData, patch: Partial<CanvasNodeData["metadata"]>) {
+    const safePatch = patch || {};
+    const next = { ...node, metadata: { ...node.metadata, ...safePatch } };
+    const spec = node.type === CanvasNodeType.Video ? NODE_DEFAULT_SIZE[CanvasNodeType.Video] : NODE_DEFAULT_SIZE[CanvasNodeType.Image];
+    const size = typeof safePatch.size === "string" && !node.metadata?.content ? nodeSizeFromRatio(safePatch.size, spec.width, spec.height) : null;
+    return size && (node.type === CanvasNodeType.Image || node.type === CanvasNodeType.Video) ? { ...next, ...size, position: { x: node.position.x + node.width / 2 - size.width / 2, y: node.position.y + node.height / 2 - size.height / 2 } } : next;
+}
 
 
 ========================================================================
@@ -2042,1227 +3202,5 @@ export function recordDirectorDiagnostic(code: DirectorDiagnosticCode, fields: D
         message: event.message,
     });
     return true;
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-diagnostics.ts
-LINES: 1-181
-========================================================================
-/**
- * 导演台诊断领域：稳定白名单 code + 安全结构化字段。
- *
- * 调用边界的硬约束（安全边界，不是风格偏好）：
- * - 绝不接收 Error / stack / componentStack / URL / Cookie / Authorization / token / 密钥；
- * - 绝不接收 scene 名称、素材正文、prompt 等业务文本；
- * - message 只能来自本模块的固定常量表，调用方不能自带文案；
- * - 字段只允许「白名单枚举 | 布尔 | 有限数值 | 通过 safe-id 校验的 id」；
- * - 未知 code 与未知字段一律丢弃，不透传。
- */
-
-/** 故障与恢复代码白名单。新增代码必须同时补 message 与测试。 */
-export const DIRECTOR_DIAGNOSTIC_CODES = [
-    "DIRECTOR_VIEWPORT_RENDER_FAILED",
-    "DIRECTOR_VIEWPORT_CONTEXT_LOST",
-    "DIRECTOR_VIEWPORT_CONTEXT_RESTORED",
-    "DIRECTOR_MODEL_LOAD_FAILED",
-    "DIRECTOR_MODEL_LOAD_RETRY",
-    "DIRECTOR_MODEL_ADOPT_FAILED",
-    "DIRECTOR_SAVE_FLUSH_FAILED",
-    "DIRECTOR_SAVE_RETRY_FAILED",
-    "DIRECTOR_SAVE_RETRY_RECOVERED",
-    "DIRECTOR_SAVE_DRAFT_UNAVAILABLE",
-    "DIRECTOR_CLOSE_BLOCKED",
-] as const;
-
-export type DirectorDiagnosticCode = (typeof DIRECTOR_DIAGNOSTIC_CODES)[number];
-
-const CODE_SET: ReadonlySet<string> = new Set(DIRECTOR_DIAGNOSTIC_CODES);
-
-/** 固定文案：调用方不得传入任意字符串，避免业务正文经 message 泄漏。 */
-const MESSAGES: Record<DirectorDiagnosticCode, string> = {
-    DIRECTOR_VIEWPORT_RENDER_FAILED: "导演台 3D 视口渲染失败",
-    DIRECTOR_VIEWPORT_CONTEXT_LOST: "导演台 WebGL 上下文丢失",
-    DIRECTOR_VIEWPORT_CONTEXT_RESTORED: "导演台 WebGL 上下文已恢复",
-    DIRECTOR_MODEL_LOAD_FAILED: "导演台 3D 模型加载失败",
-    DIRECTOR_MODEL_LOAD_RETRY: "导演台 3D 模型重试加载",
-    DIRECTOR_MODEL_ADOPT_FAILED: "导演台 3D 模型采纳失败",
-    DIRECTOR_SAVE_FLUSH_FAILED: "导演台场景保存失败",
-    DIRECTOR_SAVE_RETRY_FAILED: "导演台场景重试保存仍失败",
-    DIRECTOR_SAVE_RETRY_RECOVERED: "导演台场景重试保存成功",
-    DIRECTOR_SAVE_DRAFT_UNAVAILABLE: "导演台本地草稿不可用",
-    DIRECTOR_CLOSE_BLOCKED: "导演台关闭被阻止",
-};
-
-const LEVELS: Record<DirectorDiagnosticCode, "info" | "warning" | "error"> = {
-    DIRECTOR_VIEWPORT_RENDER_FAILED: "error",
-    DIRECTOR_VIEWPORT_CONTEXT_LOST: "warning",
-    DIRECTOR_VIEWPORT_CONTEXT_RESTORED: "info",
-    DIRECTOR_MODEL_LOAD_FAILED: "warning",
-    DIRECTOR_MODEL_LOAD_RETRY: "info",
-    DIRECTOR_MODEL_ADOPT_FAILED: "error",
-    DIRECTOR_SAVE_FLUSH_FAILED: "error",
-    DIRECTOR_SAVE_RETRY_FAILED: "error",
-    DIRECTOR_SAVE_RETRY_RECOVERED: "info",
-    DIRECTOR_SAVE_DRAFT_UNAVAILABLE: "error",
-    DIRECTOR_CLOSE_BLOCKED: "warning",
-};
-
-/** 对象种类枚举：只表达形态，绝不表达名称或素材来源。 */
-export const DIRECTOR_OBJECT_KINDS = ["actor", "model", "billboard", "primitive", "unknown"] as const;
-export type DirectorDiagnosticObjectKind = (typeof DIRECTOR_OBJECT_KINDS)[number];
-const OBJECT_KIND_SET: ReadonlySet<string> = new Set(DIRECTOR_OBJECT_KINDS);
-
-/** 保存决策枚举：与 coordinator 的关闭决策同构，但不携带任何场景内容。 */
-export const DIRECTOR_SAVE_OUTCOMES = ["close", "offer-draft-exit", "stay"] as const;
-export type DirectorDiagnosticSaveOutcome = (typeof DIRECTOR_SAVE_OUTCOMES)[number];
-const SAVE_OUTCOME_SET: ReadonlySet<string> = new Set(DIRECTOR_SAVE_OUTCOMES);
-
-/**
- * 允许的结构化字段。全部可选，且每个字段都有独立的校验规则。
- * 这里故意不提供任何自由文本字段。
- */
-export type DirectorDiagnosticFields = {
-    /** 对象 id：safe-id 校验；不通过则丢弃。 */
-    objectId?: string;
-    /** 场景 id：safe-id 校验。绝不接收 scene 名称。 */
-    sceneId?: string;
-    objectKind?: DirectorDiagnosticObjectKind;
-    saveOutcome?: DirectorDiagnosticSaveOutcome;
-    /** 加载/保存重试次数。 */
-    attempt?: number;
-    /** 修订号。 */
-    revision?: number;
-    /** 本地草稿是否可用。 */
-    draftStored?: boolean;
-    /** 是否由用户显式触发（区分自动重试与手动重试）。 */
-    userInitiated?: boolean;
-};
-
-export type DirectorDiagnosticEvent = {
-    code: DirectorDiagnosticCode;
-    level: "info" | "warning" | "error";
-    message: string;
-    fields: DirectorDiagnosticFields;
-};
-
-const SAFE_ID = /^[A-Za-z0-9._:-]{1,96}$/;
-
-export function isDirectorDiagnosticCode(value: unknown): value is DirectorDiagnosticCode {
-    return typeof value === "string" && CODE_SET.has(value);
-}
-
-/** id 白名单校验：任何含 URL、query、路径分隔、空格、凭证形态的输入都不合法。 */
-function safeDirectorId(value: unknown): string | undefined {
-    if (typeof value !== "string") return undefined;
-    const trimmed = value.trim();
-    return SAFE_ID.test(trimmed) ? trimmed : undefined;
-}
-
-function boundedInteger(value: unknown, min: number, max: number): number | undefined {
-    if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
-    const rounded = Math.round(value);
-    if (rounded < min || rounded > max) return undefined;
-    return rounded;
-}
-
-/**
- * 纯投影：把任意输入收敛成安全事件。未知 code 返回 null，调用方据此丢弃。
- * 未知字段、非法 id、越界数值、非布尔值一律不出现在输出里。
- */
-export function projectDirectorDiagnostic(code: unknown, fields: unknown): DirectorDiagnosticEvent | null {
-    if (!isDirectorDiagnosticCode(code)) return null;
-
-    const source: Record<string, unknown> = fields && typeof fields === "object" && !Array.isArray(fields) ? (fields as Record<string, unknown>) : {};
-    const safe: DirectorDiagnosticFields = {};
-
-    const objectId = safeDirectorId(source.objectId);
-    if (objectId) safe.objectId = objectId;
-
-    const sceneId = safeDirectorId(source.sceneId);
-    if (sceneId) safe.sceneId = sceneId;
-
-    if (typeof source.objectKind === "string" && OBJECT_KIND_SET.has(source.objectKind)) {
-        safe.objectKind = source.objectKind as DirectorDiagnosticObjectKind;
-    }
-    if (typeof source.saveOutcome === "string" && SAVE_OUTCOME_SET.has(source.saveOutcome)) {
-        safe.saveOutcome = source.saveOutcome as DirectorDiagnosticSaveOutcome;
-    }
-
-    const attempt = boundedInteger(source.attempt, 0, 999);
-    if (attempt !== undefined) safe.attempt = attempt;
-
-    const revision = boundedInteger(source.revision, 0, Number.MAX_SAFE_INTEGER);
-    if (revision !== undefined) safe.revision = revision;
-
-    if (typeof source.draftStored === "boolean") safe.draftStored = source.draftStored;
-    if (typeof source.userInitiated === "boolean") safe.userInitiated = source.userInitiated;
-
-    return { code, level: LEVELS[code], message: MESSAGES[code], fields: safe };
-}
-
-/**
- * 把安全字段压成 code 后缀，便于在统一诊断流里检索而无需自由文本。
- *
- * scene/object 走 safe-id 投影后的值（非法 id 在投影阶段已被丢弃，不会到这里），
- * 因此后缀里只可能出现受限字符集。完整签名同时用于去重：
- * 不同 objectId / sceneId 必须是不同事件，不能在去重窗口内互相吞掉。
- */
-export function formatDirectorDiagnosticCode(event: DirectorDiagnosticEvent): string {
-    const parts: string[] = [event.code];
-    if (event.fields.sceneId) parts.push("scene=" + event.fields.sceneId);
-    if (event.fields.objectId) parts.push("object=" + event.fields.objectId);
-    if (event.fields.objectKind) parts.push("kind=" + event.fields.objectKind);
-    if (event.fields.saveOutcome) parts.push("outcome=" + event.fields.saveOutcome);
-    if (event.fields.attempt !== undefined) parts.push("attempt=" + event.fields.attempt);
-    if (event.fields.revision !== undefined) parts.push("revision=" + event.fields.revision);
-    if (event.fields.draftStored !== undefined) parts.push("draft=" + (event.fields.draftStored ? "1" : "0"));
-    if (event.fields.userInitiated !== undefined) parts.push("user=" + (event.fields.userInitiated ? "1" : "0"));
-    return parts.join(" ");
-}
-
-/** 从 DirectorObject 的形态推导枚举，不读取 name / url / storageKey。 */
-export function directorDiagnosticObjectKind(object: { kind?: string; primitive?: string } | null | undefined): DirectorDiagnosticObjectKind {
-    if (!object) return "unknown";
-    if (object.kind === "actor") return "actor";
-    if (object.kind === "model") return "model";
-    if (object.kind === "billboard") return "billboard";
-    if (typeof object.primitive === "string" && object.primitive) return "primitive";
-    return "unknown";
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-editor-overlays.ts
-LINES: 1-32
-========================================================================
-import { SkeletonHelper, type Object3D } from "three";
-
-/** Mounted beside the model, inside the same actor transform group. */
-export class DirectorSkeletonHelper extends SkeletonHelper {
-    constructor(model: Object3D) {
-        super(model);
-        // SkeletonHelper 默认绑定世界矩阵；作为模型兄弟节点时须使用局部矩阵，
-        // 否则角色父组的位移、旋转与缩放会被重复应用。
-        this.matrix = model.matrix;
-    }
-
-    override updateMatrixWorld(force?: boolean) {
-        // 姿态 effect 可先于渲染器遍历触发，先更新完整骨架再采样线段端点。
-        this.root.updateWorldMatrix(true, true);
-        super.updateMatrixWorld(force);
-    }
-}
-
-/** Editor aids are visible in the workbench, never in captured frames or video. */
-export function suspendDirectorEditorOverlays(scene: Object3D): () => void {
-    const previous: Array<{ object: Object3D; visible: boolean }> = [];
-    scene.traverse((object) => {
-        // drei mounts the TransformControls Object3D separately from its JSX group.
-        // Its `isTransformControls` flag is therefore the reliable capture-time marker.
-        if (object.userData.directorEditorOnly !== true && (object as Object3D & { isTransformControls?: boolean }).isTransformControls !== true) return;
-        previous.push({ object, visible: object.visible });
-        object.visible = false;
-    });
-    return () => {
-        for (const item of previous) item.object.visible = item.visible;
-    };
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-focus.ts
-LINES: 1-32
-========================================================================
-import type { DirectorVec3 } from "@/types/director";
-
-export type DirectorFocusFrameInput = {
-    cameraPosition: DirectorVec3;
-    cameraTarget: DirectorVec3;
-    focusTarget: DirectorVec3;
-    radius: number;
-    fov: number;
-};
-
-export type DirectorFocusFrame = { position: DirectorVec3; target: DirectorVec3 };
-
-/** Reframe the free editor camera around one scene asset without changing scene data or history. */
-export function resolveDirectorFocusFrame(input: DirectorFocusFrameInput): DirectorFocusFrame | null {
-    const values = [...input.cameraPosition, ...input.cameraTarget, ...input.focusTarget];
-    if (!values.every(Number.isFinite) || !Number.isFinite(input.radius)) return null;
-
-    let direction = input.cameraPosition.map((value, index) => value - input.cameraTarget[index]) as DirectorVec3;
-    let distance = Math.hypot(...direction);
-    if (distance < 1e-5) {
-        direction = [0, 0, 1];
-        distance = 1;
-    }
-    direction = direction.map((value) => value / distance) as DirectorVec3;
-
-    const fov = Math.min(120, Math.max(10, Number.isFinite(input.fov) ? input.fov : 50)) * Math.PI / 180;
-    const radius = Math.min(1000, Math.max(0.1, Math.abs(input.radius)));
-    const framedDistance = Math.min(80, Math.max(1.25, radius / Math.sin(fov / 2) * 1.15));
-    const target = [...input.focusTarget] as DirectorVec3;
-    const position = target.map((value, index) => value + direction[index] * framedDistance) as DirectorVec3;
-    return { position, target };
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-geometry-presets.ts
-LINES: 1-19
-========================================================================
-import { createDirectorObject } from "@/lib/canvas/director/director-scene";
-import type { DirectorObject, DirectorPrimitiveKind } from "@/types/director";
-
-export type DirectorGeometryPresetId = Exclude<DirectorPrimitiveKind, "plane" | "character">;
-
-export const DIRECTOR_GEOMETRY_PRESET_OPTIONS: ReadonlyArray<{ id: DirectorGeometryPresetId; label: string; primitive: DirectorPrimitiveKind }> = [
-    { id: "box", label: "立方体", primitive: "box" },
-    { id: "sphere", label: "球体", primitive: "sphere" },
-    { id: "cylinder", label: "圆柱体", primitive: "cylinder" },
-    { id: "torus", label: "环状体", primitive: "torus" },
-    { id: "cone", label: "圆锥", primitive: "cone" },
-    { id: "pyramid", label: "棱锥", primitive: "pyramid" },
-    { id: "empty", label: "添加空对象", primitive: "empty" },
-];
-
-export function createDirectorGeometricObject(preset: DirectorGeometryPresetId): DirectorObject {
-    const option = DIRECTOR_GEOMETRY_PRESET_OPTIONS.find((item) => item.id === preset)!;
-    return createDirectorObject(option.primitive, option.label);
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-gesture-transaction.ts
-LINES: 1-116
-========================================================================
-import { directorGestureIdle, reduceDirectorGesture } from "./director-animation-semantics";
-
-export type DirectorTransactionHooks<TSnapshot> = {
-    /** 读取当前值；返回 null 表示无法开始/结束事务。 */
-    read: () => TSnapshot | null;
-    /** 取消路径：把快照写回。 */
-    restore: (snapshot: TSnapshot) => void;
-    /** 成功路径：恰好调用一次。 */
-    commit: (from: TSnapshot, to: TSnapshot) => void;
-    /** 进入/退出手势；任何终态都会收到 false。 */
-    setActive: (active: boolean) => void;
-    /** 取消时结束第三方控件内部拖拽状态。 */
-    terminateDrag?: () => void;
-};
-
-export type DirectorTransaction<TSnapshot = unknown> = {
-    begin: () => void;
-    end: (outcome: "commit" | "cancel") => void;
-    active: () => boolean;
-    snapshot: () => TSnapshot | null;
-};
-
-/**
- * 一次手势一个事务：begin 抓快照，end 恰好产生一个终态。
- * 幂等——非活跃时的 end 是空操作，终态后可以重新 begin。
- */
-export function createDirectorTransaction<TSnapshot>(hooks: DirectorTransactionHooks<TSnapshot>): DirectorTransaction<TSnapshot> {
-    let state = directorGestureIdle;
-    // 快照可能是任何值（含 0 / ""），所以用独立标记表示「有快照」，不能用真值判断。
-    let snapshot: TSnapshot | null = null;
-    let hasSnapshot = false;
-    return {
-        begin: () => {
-            if (state.active) return;
-            const current = hooks.read();
-            if (current === null || current === undefined) return;
-            snapshot = current;
-            hasSnapshot = true;
-            state = reduceDirectorGesture(state, "start");
-            hooks.setActive(true);
-        },
-        end: (outcome) => {
-            if (!state.active) return;
-            const base = snapshot;
-            const settled = reduceDirectorGesture(state, outcome);
-            const hadSnapshot = hasSnapshot;
-            snapshot = null;
-            hasSnapshot = false;
-            state = directorGestureIdle;
-            // 先进入终态再结束第三方拖拽：stdlib 在 domElement.ownerDocument 注册 pointerup，
-            // 其 pointerUp({button:0}) 会 dispatch mouseUp 后清 dragging=false / axis=null。
-            // 该回调会回到本事务，此时已非活跃，因此不会二次提交。
-            if (outcome === "cancel") hooks.terminateDrag?.();
-            if (!hadSnapshot || base === null || base === undefined) {
-                hooks.setActive(false);
-                return;
-            }
-            if (settled.committed) {
-                const current = hooks.read();
-                if (current !== null && current !== undefined) hooks.commit(base, current);
-            } else {
-                hooks.restore(base);
-            }
-            hooks.setActive(false);
-        },
-        active: () => state.active,
-        snapshot: () => hasSnapshot ? snapshot : null,
-    };
-}
-
-export type DirectorListenerTarget = {
-    addEventListener: (type: string, listener: (event: Event) => void) => void;
-    removeEventListener: (type: string, listener: (event: Event) => void) => void;
-};
-
-export type DirectorTerminalTargets = {
-    /** 承载 keydown / blur / pointercancel / pointerup 的目标（通常是 window）。 */
-    window: DirectorListenerTarget;
-    /** 承载 visibilitychange 的目标（通常是 document）。 */
-    document: DirectorListenerTarget;
-    /** 读取可见性；hidden 视为「离开」而非「放弃」。 */
-    isHidden: () => boolean;
-};
-
-/**
- * 无条件安装终止监听，绝不以「当前是否有手势」为安装条件——
- * 手势只 mutate 事务内部状态，不会重跑安装逻辑。
- * 非活跃时 transaction.end 自身是空操作，因此常驻监听是安全的。
- *
- * 终态语义（#305 验收）：
- * - pointerup / window blur / document hidden → commit 当前可见值。
- *   失焦或切页只是「离开」，用户已经把对象拖到那里了，不能把它弹回原位。
- * - Escape / pointercancel → cancel 并恢复快照，这是用户明确表达的放弃。
- */
-export function installDirectorTerminalListeners(transaction: DirectorTransaction, targets: DirectorTerminalTargets) {
-    const cancel = () => transaction.end("cancel");
-    const commit = () => transaction.end("commit");
-    const onKeyDown = (event: Event) => {
-        if ((event as KeyboardEvent).key === "Escape") cancel();
-    };
-    const onVisibility = () => {
-        if (targets.isHidden()) commit();
-    };
-    targets.window.addEventListener("keydown", onKeyDown);
-    targets.window.addEventListener("blur", commit);
-    targets.window.addEventListener("pointercancel", cancel);
-    targets.window.addEventListener("pointerup", commit);
-    targets.document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-        targets.window.removeEventListener("keydown", onKeyDown);
-        targets.window.removeEventListener("blur", commit);
-        targets.window.removeEventListener("pointercancel", cancel);
-        targets.window.removeEventListener("pointerup", commit);
-        targets.document.removeEventListener("visibilitychange", onVisibility);
-    };
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-ground-clamp.ts
-LINES: 1-12
-========================================================================
-import type { DirectorScene } from "@/types/director";
-import { directorGroundSettings } from "./director-ground";
-import { directorStagePoint, directorStageTransform } from "./director-stage-transform";
-export * from "../../../../../shared/director-ground-clamp";
-
-/** 地面在世界坐标里的高度：舞台有平移/旋转/缩放时，本地 ground.height 不能直接拿来比。 */
-export function directorGroundWorldY(scene: Pick<DirectorScene, "ground" | "stageTransform">): number {
-    const { height } = directorGroundSettings(scene);
-    const stage = directorStageTransform(scene);
-    if (stage.scale === 1 && stage.position.every((value) => value === 0) && stage.rotation.every((value) => value === 0)) return height;
-    return directorStagePoint(stage, [0, height, 0])[1];
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-ground.ts
-LINES: 1-1
-========================================================================
-export * from "../../../../../shared/director-ground";
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-image-layout.ts
-LINES: 1-18
-========================================================================
-export type DirectorImageLayoutElement = { name: string; type: "person" | "object"; x: number; depth: number };
-
-/** Parse untrusted model output into bounded canvas coordinates; image text is never treated as instructions. */
-export function parseDirectorImageLayout(raw: string): DirectorImageLayoutElement[] {
-    const candidate = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-    let value: unknown;
-    try { value = JSON.parse(candidate); } catch { throw new Error("识图结果格式无效"); }
-    if (!value || typeof value !== "object" || !Array.isArray((value as { elements?: unknown }).elements)) throw new Error("识图结果格式无效");
-    const result: DirectorImageLayoutElement[] = [];
-    for (const item of (value as { elements: unknown[] }).elements.slice(0, 16)) {
-        if (!item || typeof item !== "object") continue;
-        const row = item as Record<string, unknown>;
-        if (typeof row.name !== "string" || !row.name.trim() || (row.type !== "person" && row.type !== "object") || typeof row.x !== "number" || !Number.isFinite(row.x) || typeof row.depth !== "number" || !Number.isFinite(row.depth)) continue;
-        result.push({ name: row.name.trim().slice(0, 64), type: row.type, x: Math.max(0, Math.min(1, row.x)), depth: Math.max(0, Math.min(1, row.depth)) });
-    }
-    if (!result.length) throw new Error("未识别到可用的人物或物体");
-    return result;
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-library-persist.ts
-LINES: 1-109
-========================================================================
-import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
-import { uploadImage, type UploadedImage } from "@/services/image-storage";
-import { useAssetStore, type Asset } from "@/stores/use-asset-store";
-
-export type DirectorCanvasImageHandoff = {
-    assetId?: string;
-    persisted?: boolean;
-};
-
-export type DirectorLibraryPersistResult = {
-    assetId: string;
-    created: boolean;
-    confirmed: boolean;
-};
-
-/** 素材草稿：与 useAssetStore.addAsset 的入参一致。 */
-type NewAsset = Omit<Asset, "id" | "createdAt" | "updatedAt">;
-
-function throwIfAborted(signal?: AbortSignal) {
-    if (signal?.aborted) throw new DOMException("导演台会话已结束", "AbortError");
-}
-
-function storageKeyOf(asset: NewAsset) {
-    return "storageKey" in asset.data ? asset.data.storageKey : undefined;
-}
-
-/**
- * BeefTV 这一层是「浏览器本地 IndexedDB + 桌面/托管工作区远端」双写；
- * sundas 的素材库本身就是 localforage 单机存储，因此这里以本地写入为权威：
- * 有 storageKey 视为已落盘（confirmed），没有则保持未确认，调用方照常提示。
- */
-export function isDirectorCanonicalPersistSource(input: { storageKey?: string; pendingRemoteUpload?: boolean }) {
-    return Boolean(input.storageKey) && !input.pendingRemoteUpload;
-}
-
-export function findWorkspaceAssetIdByStorageKey(storageKey?: string) {
-    const key = storageKey?.trim();
-    if (!key) return undefined;
-    return useAssetStore.getState().assets.find((asset) => "storageKey" in asset.data && asset.data.storageKey === key)?.id;
-}
-
-export async function persistDirectorLibraryAsset(input: {
-    asset: NewAsset;
-    signal?: AbortSignal;
-    existingAssetId?: string;
-    existingPersisted?: boolean;
-    /** BeefTV 的远端待上传标记；sundas 全部本地落盘，保留参数只为调用方零改动。 */
-    pendingRemoteUpload?: boolean;
-}): Promise<DirectorLibraryPersistResult> {
-    const { signal } = input;
-    throwIfAborted(signal);
-
-    const existingId = input.existingAssetId?.trim();
-    if (existingId) {
-        const live = useAssetStore.getState().assets.find((item) => item.id === existingId);
-        if (live) {
-            throwIfAborted(signal);
-            return { assetId: live.id, created: false, confirmed: isDirectorCanonicalPersistSource({ storageKey: storageKeyOf(input.asset) }) };
-        }
-    }
-
-    const assetId = useAssetStore.getState().addAsset(input.asset);
-    const asset = useAssetStore.getState().assets.find((item) => item.id === assetId);
-    if (!asset) throw new Error("素材写入本地失败");
-    throwIfAborted(signal);
-    return { assetId, created: true, confirmed: isDirectorCanonicalPersistSource({ storageKey: storageKeyOf(input.asset) }) };
-}
-
-/** 先上传，再落素材库。 */
-export async function persistDirectorImageUpload(input: {
-    source: string | Blob;
-    signal?: AbortSignal;
-    toAsset: (uploaded: UploadedImage) => NewAsset;
-    existingAssetId?: string;
-    existingPersisted?: boolean;
-    onProgress?: (uploadedBytes: number, totalBytes: number) => void;
-}): Promise<{ uploaded: UploadedImage; persist: DirectorLibraryPersistResult }> {
-    throwIfAborted(input.signal);
-    const uploaded = await uploadImage(input.source, { signal: input.signal });
-    throwIfAborted(input.signal);
-    const persist = await persistDirectorLibraryAsset({
-        asset: input.toAsset(uploaded),
-        signal: input.signal,
-        existingAssetId: input.existingAssetId,
-        existingPersisted: input.existingPersisted,
-    });
-    return { uploaded, persist };
-}
-
-export async function persistDirectorMediaUpload(input: {
-    source: Blob;
-    prefix: string;
-    signal?: AbortSignal;
-    toAsset: (uploaded: UploadedFile) => NewAsset;
-    existingAssetId?: string;
-    existingPersisted?: boolean;
-    onProgress?: (uploadedBytes: number, totalBytes: number) => void;
-}): Promise<{ uploaded: UploadedFile; persist: DirectorLibraryPersistResult }> {
-    throwIfAborted(input.signal);
-    const uploaded = await uploadMediaFile(input.source, input.prefix, { signal: input.signal });
-    throwIfAborted(input.signal);
-    const persist = await persistDirectorLibraryAsset({
-        asset: input.toAsset(uploaded),
-        signal: input.signal,
-        existingAssetId: input.existingAssetId,
-        existingPersisted: input.existingPersisted,
-    });
-    return { uploaded, persist };
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-modes.ts
-LINES: 1-76
-========================================================================
-import type { DirectorRenderMode } from "@/types/director";
-
-/**
- * 导演台一级模式。
- *
- * mode 是工作台 UI 状态，绝不写入 DirectorScene —— 场景是内容，模式是当前怎么看内容。
- * 这里只做纯粹的「模式 -> 能力」映射与切换清理，组件层照着 capabilities 决定显示什么。
- */
-
-export type DirectorMode = "layout" | "pose" | "animate" | "camera";
-
-export type DirectorModeCapabilities = {
-    /** 时间轴是否显示。只有动画模式显示。 */
-    timeline: boolean;
-    /** 是否允许记录/删除关键帧与 Auto Key。只有动画模式允许。 */
-    keyframes: boolean;
-    /** 是否开放骨骼视图与多选骨骼编辑。单个演员的姿势检查器不受此能力限制。 */
-    bones: boolean;
-    /** 是否突出 shot/camera 检查器与运镜入口。摄影机模式突出。 */
-    cameraTools: boolean;
-    /** 该模式允许的渲染视图。摆场不给深度/法线这类高级视图。 */
-    renderModes: DirectorRenderMode[];
-};
-
-const CAPABILITIES: Record<DirectorMode, DirectorModeCapabilities> = {
-    // 摆场：先把人和物放对位置，隐藏骨骼叠加视图/多选骨骼编辑、关键帧、Auto Key、深度/法线。
-    layout: { timeline: false, keyframes: false, bones: false, cameraTools: false, renderModes: ["beauty", "clay"] },
-    // 姿态：调骨骼与姿势，但不默认制造关键帧。
-    pose: { timeline: false, keyframes: false, bones: true, cameraTools: false, renderModes: ["beauty", "clay", "pose"] },
-    // 动画：唯一显示时间轴、允许 Auto Key 与录制关键帧的模式。
-    animate: { timeline: true, keyframes: true, bones: true, cameraTools: false, renderModes: ["beauty", "clay", "pose"] },
-    // 摄影机：突出机位、对齐视图与运镜；深度/法线在这里才有意义。
-    camera: { timeline: false, keyframes: false, bones: false, cameraTools: true, renderModes: ["beauty", "clay", "depth", "normal"] },
-};
-
-export const DIRECTOR_MODES: Array<{ mode: DirectorMode; label: string; hint: string }> = [
-    { mode: "layout", label: "摆场", hint: "摆放演员、道具与灯光" },
-    { mode: "pose", label: "姿态", hint: "调整选中演员的骨骼与姿势" },
-    { mode: "animate", label: "动画", hint: "时间轴、关键帧与 Auto Key" },
-    { mode: "camera", label: "摄影机", hint: "机位、对齐视图与运镜" },
-];
-
-export const DIRECTOR_DEFAULT_MODE: DirectorMode = "layout";
-
-/** 入口先是摆场；左侧机位预设列表只是导航，不应强制切换右侧检查器。 */
-export const DIRECTOR_ENTRY_MODE: DirectorMode = "layout";
-
-export function directorModeCapabilities(mode: DirectorMode): DirectorModeCapabilities {
-    return CAPABILITIES[mode] ?? CAPABILITIES[DIRECTOR_DEFAULT_MODE];
-}
-
-export type DirectorModeTransition = {
-    mode: DirectorMode;
-    playing: boolean;
-    autoKey: boolean;
-    renderMode: DirectorRenderMode;
-};
-
-/**
- * 切换模式时必须一起收敛的运行时状态。
- *
- * 关键安全边界：离开动画模式一定停播 + 关 Auto Key。
- * 否则播放循环仍在推进 playhead，而 Auto Key 会在用户以为只是「换了个模式」时
- * 继续往场景里写关键帧 —— 那是后台偷偷改内容。
- *
- * renderMode 同时被夹回目标模式允许的集合：不能带着深度视图退回摆场。
- */
-export function resolveDirectorModeTransition(input: { mode: DirectorMode; playing: boolean; autoKey: boolean; renderMode: DirectorRenderMode }): DirectorModeTransition {
-    const capabilities = directorModeCapabilities(input.mode);
-    return {
-        mode: input.mode,
-        playing: capabilities.timeline ? input.playing : false,
-        autoKey: capabilities.keyframes ? input.autoKey : false,
-        renderMode: capabilities.renderModes.includes(input.renderMode) ? input.renderMode : "beauty",
-    };
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-node-migration.ts
-LINES: 1-56
-========================================================================
-import { type CanvasNodeData } from "@/types/canvas";
-
-/** 导演台节点类型标识：sundas 的 CanvasNodeType 不新增成员，这里用开放字符串。 */
-const DIRECTOR_NODE_TYPE = "director";
-import type { DirectorScene } from "@/types/director";
-
-/** Move legacy prose and clear its old fields in the same project update. */
-export function migrateDirectorCanvas(nodes: CanvasNodeData[], scenes: DirectorScene[]) {
-    let directorScenes = scenes;
-    const migrated = nodes.map((node) => {
-        const scene = directorScenes.find((entry) => entry.id === node.metadata?.directorSceneId);
-        const shot = scene?.shots.find((entry) => entry.id === node.metadata?.directorShotId) ?? (!node.metadata?.directorShotId ? scene?.shots.find((entry) => entry.id === scene.activeShotId) ?? scene?.shots[0] : undefined);
-        const legacy = [node.metadata?.composerContent, node.metadata?.prompt].filter((value): value is string => typeof value === "string" && Boolean(value.trim()));
-        if (scene && shot && legacy.length) {
-            const values = [shot.prompt, ...legacy].filter((value) => Boolean(value?.trim()));
-            const seen = new Set<string>();
-            const prompt = values.filter((value) => {
-                const key = value.trim();
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            }).join("\n\n");
-            if (prompt !== shot.prompt) directorScenes = directorScenes.map((entry) => entry.id === scene.id ? { ...entry, shots: entry.shots.map((item) => item.id === shot.id ? { ...item, prompt } : item) } : entry);
-        }
-        return normalizeDirectorCanvasNode(node, Boolean(shot));
-    });
-    return { nodes: migrated, directorScenes };
-}
-
-/** Reclassifies legacy director cards that were persisted as video generators. */
-export function normalizeDirectorCanvasNode(node: CanvasNodeData, proseTransferred = false): CanvasNodeData {
-    if (!node.metadata?.directorSceneId) return node;
-
-    const needsCleanup = node.metadata.generationMode !== undefined
-        || node.metadata.videoEditOperation !== undefined
-        || (proseTransferred && (node.metadata.composerContent !== undefined || node.metadata.prompt !== undefined));
-    const hasLegacyDefaultSize = node.type === DIRECTOR_NODE_TYPE && node.width === 560 && node.height === 560;
-    if (node.type === DIRECTOR_NODE_TYPE && !needsCleanup && !hasLegacyDefaultSize) return node;
-
-    const metadata = { ...node.metadata };
-    delete metadata.generationMode;
-    delete metadata.videoEditOperation;
-    if (proseTransferred) {
-        delete metadata.composerContent;
-        delete metadata.prompt;
-    }
-
-    return {
-        ...node,
-        type: DIRECTOR_NODE_TYPE,
-        title: node.type === DIRECTOR_NODE_TYPE ? node.title : "导演台",
-        width: hasLegacyDefaultSize ? 640 : node.width,
-        height: hasLegacyDefaultSize ? 640 : node.height,
-        metadata,
-    };
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-node-naming.ts
-LINES: 1-18
-========================================================================
-import { type CanvasNodeData } from "@/types/canvas";
-
-/** 导演台节点类型标识：sundas 的 CanvasNodeType 不新增成员，这里用开放字符串。 */
-const DIRECTOR_NODE_TYPE = "director";
-
-/** Returns the first available positive index for a new director card. */
-export function nextDirectorNodeIndex(nodes: CanvasNodeData[]): number {
-    const used = new Set<number>();
-    for (const node of nodes) {
-        if (node.type !== DIRECTOR_NODE_TYPE && !node.metadata?.directorSceneId) continue;
-        const titleIndex = /^导演台(?:\s+(\d+))?$/.exec(node.title)?.[1];
-        const index = Number(titleIndex || node.metadata?.shotIndex || 1);
-        if (Number.isSafeInteger(index) && index > 0) used.add(index);
-    }
-    let candidate = 1;
-    while (used.has(candidate)) candidate += 1;
-    return candidate;
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-onboarding.ts
-LINES: 1-245
-========================================================================
-import { localForageStorageForScope } from "@/lib/localforage-storage";
-import type { DirectorMode } from "@/lib/canvas/director/director-modes";
-
-/**
- * 导演台首次上手引导。
- *
- * 为什么存在：导演台把模板、四个一级模式、对象操作、保存/导出堆在同一个工作台里，
- * 第一次进来的人没有任何线索该先做什么。引导给出一条确定的最短路径。
- *
- * 硬约束：
- * - 纯状态机 + 持久化，绝不触碰 DirectorScene，也不写 undo/redo 历史：
- *   引导是「用户看到什么提示」，不是场景内容。
- * - 进度按用户隔离。所有导出 API 必须显式收到非空 scope，禁止内部兜底成 guest ——
- *   默认 scope 会让 A 账号的引导状态泄漏给 B 账号。
- * - 只用 localforage（走 localForageStorageForScope），不用 localStorage：
- *   与项目里其他用户态持久化保持同一条通道。
- * - 缺失、损坏、版本不符的持久数据一律回落到初始进度；只有存储层本身失败才向上抛。
- */
-
-export type DirectorOnboardingStepId = "actor" | "move" | "pose" | "path" | "camera" | "apply";
-
-/** active 才展示。dismissed（用户跳过）与 completed（走完）都不再展示，且不可被 next/back 唤醒。 */
-export type DirectorOnboardingStatus = "active" | "dismissed" | "completed";
-
-/**
- * 进度 schema 版本。
- * 步骤集合发生语义变化（增删步骤、改变顺序）时必须 +1：
- * 旧进度里的 stepId 在新步骤表里可能不存在，继续沿用会把用户卡在不存在的步骤上。
- */
-export const DIRECTOR_ONBOARDING_VERSION = 2;
-
-/** localforage 键名。真实键由 localForageStorageForScope 追加 `:user:<scope>`。 */
-export const DIRECTOR_ONBOARDING_KEY = "director-onboarding-v2";
-
-export type DirectorOnboardingStep = {
-    id: DirectorOnboardingStepId;
-    title: string;
-    /** 一句话说清「在哪儿点什么」，不解释概念。 */
-    detail: string;
-    /**
-     * 该步骤应该在哪个一级模式里完成。
-     * 模式巡览步骤本身没有单一归属，故为 undefined —— 由 UI 决定是否代为切换模式。
-     */
-    mode?: DirectorMode;
-};
-
-/** 引导步骤按首次使用的最短操作路径排列：添加演员 → 移动 → 调姿 → 轨迹 → CAM → 应用。 */
-export const DIRECTOR_ONBOARDING_STEPS: DirectorOnboardingStep[] = [
-    { id: "actor", title: "添加并选中演员", detail: "在左侧「快速添加」点演员；模板已有演员时，直接在场景树或视口选中它。", mode: "layout" },
-    { id: "move", title: "把演员移动到表演位置", detail: "保持摆场模式，在底部 dock 选移动工具（W），拖动轴手柄；右栏可输入精确坐标。", mode: "layout" },
-    { id: "pose", title: "调整演员姿态", detail: "切到姿态模式，在右侧选择姿势预设；模型有骨骼时还可选择手臂、腿和躯干微调。", mode: "pose" },
-    { id: "path", title: "记录一段走位", detail: "切到动画模式，在起点和终点分别移动播放头、摆放演员并记录 Transform 关键帧，再播放预览。", mode: "animate" },
-    { id: "camera", title: "用 CAM 检查构图", detail: "切到摄影机模式，再点视口工具栏 CAM；调整焦距、焦点和机位，确认安全框内的画面。", mode: "camera" },
-    { id: "apply", title: "应用到镜头", detail: "确认场景、姿态、走位和 CAM 构图后，点顶栏「应用到镜头」生成静帧并回写画布。", mode: "camera" },
-];
-
-export type DirectorOnboardingProgress = {
-    version: number;
-    status: DirectorOnboardingStatus;
-    stepId: DirectorOnboardingStepId;
-};
-
-export const directorOnboardingInitial: DirectorOnboardingProgress = {
-    version: DIRECTOR_ONBOARDING_VERSION,
-    status: "active",
-    stepId: DIRECTOR_ONBOARDING_STEPS[0].id,
-};
-
-export type DirectorOnboardingAction = "next" | "back" | "dismiss" | "complete" | "reset";
-
-/**
- * 引导状态机。
- *
- * 关键不变量：
- * - 只有 reset 能让已 dismissed/completed 的引导重新活过来。next/back/dismiss/complete
- *   在非 active 状态下是恒等变换，否则「跳过引导」会被后续任何一次误触重新拉起来。
- * - 在最后一步 next 等于完成：完成必须是终态，而不是停在最后一步继续可 next。
- * - 首步 back 保持不动，不越界，也不隐式关闭引导。
- * - 当前 stepId 不在步骤表里（旧数据、被外部改写）时回到初始进度，而不是把 -1 当下标继续算。
- */
-export function reduceDirectorOnboarding(progress: DirectorOnboardingProgress, action: DirectorOnboardingAction): DirectorOnboardingProgress {
-    if (action === "reset") return directorOnboardingInitial;
-    if (progress.status !== "active") return progress;
-    if (action === "dismiss") return { ...progress, status: "dismissed" };
-    if (action === "complete") return { ...progress, status: "completed" };
-
-    const index = DIRECTOR_ONBOARDING_STEPS.findIndex((step) => step.id === progress.stepId);
-    if (index < 0) return directorOnboardingInitial;
-
-    if (action === "back") {
-        if (index === 0) return progress;
-        return { ...progress, stepId: DIRECTOR_ONBOARDING_STEPS[index - 1].id };
-    }
-
-    const next = DIRECTOR_ONBOARDING_STEPS[index + 1];
-    if (!next) return { ...progress, status: "completed" };
-    return { ...progress, stepId: next.id };
-}
-
-export type DirectorOnboardingView = {
-    step: DirectorOnboardingStep;
-    /** 1 起数，直接用于「第 N 步 / 共 M 步」。 */
-    position: number;
-    total: number;
-    isFirst: boolean;
-    isLast: boolean;
-};
-
-/**
- * 展示态。返回 null 表示不该显示引导 —— 组件层只看这一个判据，
- * 不自己再拼 status 与步骤下标，避免出现第二套可见性规则。
- */
-export function resolveDirectorOnboardingView(progress: DirectorOnboardingProgress): DirectorOnboardingView | null {
-    if (progress.status !== "active") return null;
-    const index = DIRECTOR_ONBOARDING_STEPS.findIndex((step) => step.id === progress.stepId);
-    if (index < 0) return null;
-    return {
-        step: DIRECTOR_ONBOARDING_STEPS[index],
-        position: index + 1,
-        total: DIRECTOR_ONBOARDING_STEPS.length,
-        isFirst: index === 0,
-        isLast: index === DIRECTOR_ONBOARDING_STEPS.length - 1,
-    };
-}
-
-function isStepId(value: unknown): value is DirectorOnboardingStepId {
-    return typeof value === "string" && DIRECTOR_ONBOARDING_STEPS.some((step) => step.id === value);
-}
-
-function isStatus(value: unknown): value is DirectorOnboardingStatus {
-    return value === "active" || value === "dismissed" || value === "completed";
-}
-
-/**
- * 解析持久进度。
- *
- * 引导是提示，不是内容：任何无法确信的持久值都当成「没有进度」，宁可再引导一次，
- * 也不要把用户卡在一个无法解释的状态里。覆盖：非 JSON、非对象、数组、版本不符、
- * status/stepId 不在枚举内。
- */
-export function parseDirectorOnboardingProgress(raw: string | null | undefined): DirectorOnboardingProgress {
-    if (!raw) return directorOnboardingInitial;
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(raw);
-    } catch {
-        return directorOnboardingInitial;
-    }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return directorOnboardingInitial;
-    const candidate = parsed as Partial<DirectorOnboardingProgress>;
-    if (candidate.version !== DIRECTOR_ONBOARDING_VERSION) return directorOnboardingInitial;
-    if (!isStatus(candidate.status) || !isStepId(candidate.stepId)) return directorOnboardingInitial;
-    return { version: DIRECTOR_ONBOARDING_VERSION, status: candidate.status, stepId: candidate.stepId };
-}
-
-/** 只要求读写能力：既是测试注入内存实现的接缝，也避免依赖 zustand StateStorage 的全量接口。 */
-export type DirectorOnboardingStorage = {
-    getItem: (name: string) => string | null | Promise<string | null>;
-    setItem: (name: string, value: string) => void | Promise<void>;
-};
-
-/**
- * scope 归一化 + 守卫。前后空白裁掉后再校验/使用，这样 " user-a " 与 "user-a"
- * 落到同一把生产键上，不会分裂成两份互不可见的进度。
- *
- * 必须在每个导出的持久化函数入口无条件调用 —— 包括调用方已经注入自定义 storage 的分支。
- * 之前的实现写成 `storage ?? localForageStorageForScope(requireScope(scope))`，
- * `??` 短路导致「传了 storage」时 requireScope 根本不会执行，空 scope 就此绕过校验。
- */
-function requireScope(scope: string) {
-    const normalized = scope.trim();
-    if (!normalized) throw new Error("缺少导演台引导的用户 scope");
-    return normalized;
-}
-
-/**
- * 读取进度。
- * 数据脏 -> 初始进度；存储层（IndexedDB）失败 -> 向上抛，由调用方决定是否隐藏引导，
- * 不在这里 catch 成默认值假装读到了。
- */
-export async function loadDirectorOnboardingProgress(scope: string, storage?: DirectorOnboardingStorage): Promise<DirectorOnboardingProgress> {
-    const normalizedScope = requireScope(scope);
-    const target = storage ?? localForageStorageForScope(normalizedScope);
-    return parseDirectorOnboardingProgress(await target.getItem(DIRECTOR_ONBOARDING_KEY));
-}
-
-export async function saveDirectorOnboardingProgress(scope: string, progress: DirectorOnboardingProgress, storage?: DirectorOnboardingStorage): Promise<void> {
-    const normalizedScope = requireScope(scope);
-    const target = storage ?? localForageStorageForScope(normalizedScope);
-    await target.setItem(DIRECTOR_ONBOARDING_KEY, JSON.stringify({ version: DIRECTOR_ONBOARDING_VERSION, status: progress.status, stepId: progress.stepId }));
-}
-
-/**
- * 推进并持久化。返回新进度；写失败向上抛，调用方拿到的进度与已落盘的进度保持一致，
- * 不存在「界面前进了但磁盘没动」这种静默分叉。
- *
- * scope 校验必须在「无变化动作提前返回」之前完成：否则对已 dismissed/completed 账号
- * 调用 next 之类的恒等动作会在校验之前就 return progress，空 scope 也能悄悄跑过去。
- * 无变化的动作仍然不写盘。
- */
-export async function advanceDirectorOnboarding(scope: string, progress: DirectorOnboardingProgress, action: DirectorOnboardingAction, storage?: DirectorOnboardingStorage): Promise<DirectorOnboardingProgress> {
-    const normalizedScope = requireScope(scope);
-    const next = reduceDirectorOnboarding(progress, action);
-    if (next === progress) return progress;
-    await saveDirectorOnboardingProgress(normalizedScope, next, storage);
-    return next;
-}
-
-/**
- * 独立的重启 API。不依赖调用方持有当前内存进度；设置页的「重新开始引导」
- * 按钮可以直接落盘初始状态，对已 dismissed/completed 的账号同样生效。
- */
-export async function resetDirectorOnboardingProgress(scope: string, storage?: DirectorOnboardingStorage): Promise<DirectorOnboardingProgress> {
-    const normalizedScope = requireScope(scope);
-    await saveDirectorOnboardingProgress(normalizedScope, directorOnboardingInitial, storage);
-    return directorOnboardingInitial;
-}
-
-export type DirectorOnboardingGate = {
-    /** 尝试进入互斥区；已有一次未完成的调用时返回 false，调用方必须放弃本次动作。 */
-    tryEnter: () => boolean;
-    /** 释放互斥区。scope/enabled 变化（换账号）时也要调用，否则旧账号的占用会永久卡死新账号。 */
-    release: () => void;
-};
-
-/**
- * 创建一次性写锁：保证同一 tick 内的重复调用（双击、程序化连点）只有一个能真正发起写入。
- *
- * 用同步闭包变量而不是 React state 做门禁：state 更新要等到下一次渲染才对外可见，
- * 两次点击完全可能发生在同一次渲染之间，仅靠 busy state 挡不住这种同步重入。
- * release 是幂等的：未锁定时调用不抛错，方便在 effect 里无条件清理。
- */
-export function createDirectorOnboardingGate(): DirectorOnboardingGate {
-    let locked = false;
-    return {
-        tryEnter: () => {
-            if (locked) return false;
-            locked = true;
-            return true;
-        },
-        release: () => {
-            locked = false;
-        },
-    };
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-orientation-gizmo.ts
-LINES: 1-34
-========================================================================
-import { Matrix4, Quaternion, Vector3 } from "three";
-import type { DirectorViewMode } from "@/lib/canvas/director/director-view-modes";
-
-export type DirectorOrientation = [number, number, number, number];
-export type DirectorAxisHead = { id: string; label: string; mode?: DirectorViewMode; x: number; y: number; depth: number };
-
-const axes: Array<{ id: string; label: string; mode?: DirectorViewMode; direction: [number, number, number] }> = [
-    { id: "x+", label: "右视", mode: "right", direction: [1, 0, 0] },
-    { id: "x-", label: "左视", mode: "left", direction: [-1, 0, 0] },
-    { id: "y+", label: "俯视", mode: "top", direction: [0, 1, 0] },
-    { id: "y-", label: "下方", direction: [0, -1, 0] },
-    { id: "z+", label: "正视", mode: "front", direction: [0, 0, 1] },
-    { id: "z-", label: "背视", mode: "back", direction: [0, 0, -1] },
-];
-
-/** Project world axes into the active camera's screen plane. */
-export function directorAxisHeads(orientation: DirectorOrientation): DirectorAxisHead[] {
-    const inverse = new Quaternion(...orientation).invert();
-    return axes.map(({ id, label, mode, direction }) => {
-        const projected = new Vector3(...direction).applyQuaternion(inverse);
-        return { id, label, mode, x: 36 + projected.x * 24, y: 36 - projected.y * 24, depth: projected.z };
-    }).sort((a, b) => a.depth - b.depth);
-}
-
-export function directorOrientationForMode(mode: DirectorViewMode, free: DirectorOrientation): DirectorOrientation {
-    const eye: Partial<Record<DirectorViewMode, [number, number, number]>> = {
-        top: [0, 10, 0], front: [0, 0, 10], back: [0, 0, -10], left: [-10, 0, 0], right: [10, 0, 0],
-    };
-    const position = eye[mode];
-    if (!position) return free;
-    const up = mode === "top" ? new Vector3(0, 0, -1) : new Vector3(0, 1, 0);
-    const q = new Quaternion().setFromRotationMatrix(new Matrix4().lookAt(new Vector3(...position), new Vector3(), up));
-    return [q.x, q.y, q.z, q.w];
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-output-camera.ts
-LINES: 1-30
-========================================================================
-/** Release borrowed playback state synchronously on abort, before another session takes over. */
-export function restoreDirectorPlaybackOnEnd(signal: AbortSignal, restore: () => void) {
-    let restored = false;
-    const end = () => {
-        if (restored) return;
-        restored = true;
-        signal.removeEventListener("abort", end);
-        restore();
-    };
-    signal.addEventListener("abort", end, { once: true });
-    if (signal.aborted) end();
-    return end;
-}
-
-/** Wait for React/R3F to swap from the free camera before recording the canvas. */
-export async function waitForDirectorCaptureCamera(
-    readCamera: () => "free" | "camera" | "orthographic" | null,
-    nextFrame: () => Promise<void> = () => new Promise((resolve) => requestAnimationFrame(() => resolve())),
-    maxFrames = 60,
-): Promise<void> {
-    for (let frame = 0; frame < maxFrames; frame += 1) {
-        if (readCamera() === "camera") {
-            await nextFrame();
-            if (readCamera() === "camera") return;
-        } else {
-            await nextFrame();
-        }
-    }
-    throw new Error("当前场景没有可用机位，无法生成参考视频");
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-output-layout.ts
-LINES: 1-41
-========================================================================
-import type { CanvasConnection, Position } from "@/types/canvas";
-
-export function resolveDirectorOutputPositions(input: {
-    source: { position: Position; width: number };
-    previewSize: { width: number; height: number };
-    existingPreviewPosition?: Position;
-    existingVideoPosition?: Position;
-}) {
-    const gap = 48;
-    const rightX = input.source.position.x + input.source.width + gap;
-    const previewPosition = input.existingPreviewPosition && input.existingPreviewPosition.x >= rightX
-        ? input.existingPreviewPosition
-        : { x: rightX, y: input.source.position.y };
-    const videoPosition = input.existingVideoPosition && input.existingVideoPosition.x >= rightX
-        ? input.existingVideoPosition
-        : { x: rightX, y: previewPosition.y + input.previewSize.height + gap };
-    return { previewPosition, videoPosition };
-}
-
-export function ensureDirectorOutputConnections(connections: CanvasConnection[], sourceId: string, outputIds: string[], createId: () => string) {
-    const outputs = new Set(outputIds.filter((id) => id && id !== sourceId));
-    const retained: CanvasConnection[] = [];
-    const connected = new Set<string>();
-
-    for (const connection of connections) {
-        const isOutputTarget = connection.fromNodeId === sourceId && outputs.has(connection.toNodeId);
-        const isLegacyReverseOutput = outputs.has(connection.fromNodeId) && connection.toNodeId === sourceId;
-        if (isLegacyReverseOutput) continue;
-        if (isOutputTarget) {
-            if (connected.has(connection.toNodeId)) continue;
-            connected.add(connection.toNodeId);
-        }
-        retained.push(connection);
-    }
-
-    for (const outputId of outputs) {
-        if (connected.has(outputId)) continue;
-        retained.push({ id: createId(), fromNodeId: sourceId, toNodeId: outputId });
-    }
-    return retained;
-}
-
-
-========================================================================
-FILE: web/src/lib/canvas/director/director-panorama-generation.ts
-LINES: 1-100
-========================================================================
-import { nanoid } from "nanoid";
-
-import { requestEdit } from "@/services/api/image";
-import { uploadImage, type UploadedImage } from "@/services/image-storage";
-import { useAssetStore } from "@/stores/use-asset-store";
-import type { AiConfig } from "@/stores/use-config-store";
-import type { ReferenceImage } from "@/types/image";
-
-export const DIRECTOR_PANORAMA_PROMPT =
-    "以参考图中的主体、材质和光影为基础，将环境扩展成完整的 360 度等距柱状全景图。输出 2:1 比例的连续单幅画面，左右边缘自然无缝衔接，保持真实空间尺度；不要拼贴、边框、文字、水印或拍摄设备。";
-
-type DirectorPanoramaGenerationInput = {
-    file: File;
-    config: AiConfig;
-    sceneId: string;
-    projectId?: string;
-    signal?: AbortSignal;
-    onTaskUpdate?: (task: { progress?: number }) => void;
-};
-
-export type DirectorPanoramaResult = { id: string; name: string; url: string; storageKey: string; width: number; height: number };
-
-/** 全景图固定按 2:1 出图；这里只挑一个可用的图片模型，不做尺寸回落。 */
-export function selectDirectorPanoramaModel(config: AiConfig): string {
-    return config.imageModel || config.model || "";
-}
-
-function readImageSize(dataUrl: string): Promise<{ width: number; height: number }> {
-    return new Promise((resolve) => {
-        const image = new Image();
-        image.onload = () => resolve({ width: image.naturalWidth || 0, height: image.naturalHeight || 0 });
-        image.onerror = () => resolve({ width: 0, height: 0 });
-        image.src = dataUrl;
-    });
-}
-
-/**
- * AI 全景图（sundas 版）。
- *
- * BeefTV 走的是自己的「后台生成任务 + 任务中心 + 资产物化」三段式；
- * sundas 的图片链路是同步的 `requestEdit`（内部已处理渠道、插件脚本、计费钱包），
- * 所以这里收敛成一次图生图：上传参考图 → requestEdit(2:1) → 写入素材库。
- */
-export async function generateDirectorPanorama(input: DirectorPanoramaGenerationInput): Promise<DirectorPanoramaResult> {
-    const { file, config, sceneId, signal, onTaskUpdate } = input;
-    const assertCurrent = () => {
-        if (signal?.aborted) throw new DOMException("生成会话已结束", "AbortError");
-    };
-
-    assertCurrent();
-    if (!file.type.startsWith("image/")) throw new Error("请选择图片文件");
-    const model = selectDirectorPanoramaModel(config);
-    if (!model) throw new Error("请先在模型设置中选择可用的图片模型");
-
-    const source: UploadedImage = await uploadImage(file, { signal });
-    assertCurrent();
-
-    const reference: ReferenceImage = {
-        id: nanoid(),
-        name: file.name,
-        type: source.mimeType,
-        dataUrl: source.url,
-        storageKey: source.storageKey,
-        width: source.width,
-        height: source.height,
-        bytes: source.bytes,
-    };
-
-    onTaskUpdate?.({ progress: undefined });
-    const images = await requestEdit({ ...config, model, size: "2:1", count: "1" }, DIRECTOR_PANORAMA_PROMPT, [reference], { signal });
-    assertCurrent();
-
-    const first = images[0];
-    if (!first?.dataUrl) throw new Error("图片任务完成，但没有返回全景图");
-    const { width, height } = await readImageSize(first.dataUrl);
-    assertCurrent();
-
-    const name = `AI 全景图 · ${file.name}`;
-    const id = useAssetStore.getState().addAsset({
-        kind: "image",
-        title: name,
-        coverUrl: first.dataUrl,
-        tags: ["全景图", "AI生成"],
-        source: "导演台",
-        data: { dataUrl: first.dataUrl, width, height, bytes: Math.round(first.dataUrl.length * 0.75), mimeType: "image/png" },
-        metadata: { source: "director-panorama-ai", sceneId },
-    });
-
-    return { id, name, url: first.dataUrl, storageKey: "", width, height };
-}
-
-/**
- * 刷新后恢复未完成的全景图任务。
- *
- * BeefTV 用任务中心回捞；sundas 的生成是同步请求，页面刷新即中断，
- * 结果也已经落进素材库，因此没有需要恢复的远端任务，这里保持空实现以维持调用契约。
- */
-export async function recoverDirectorPanoramaTasks(_projectId: string, _sceneId: string, _signal?: AbortSignal): Promise<number> {
-    return 0;
 }
 

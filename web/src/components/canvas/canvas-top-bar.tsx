@@ -96,7 +96,7 @@ export function CanvasTopBar({
                             type="button"
                             onClick={onBack}
                             aria-label={t("canvas.back")}
-                            className="grid size-7 place-items-center rounded-full transition hover:bg-black/5 dark:hover:bg-white/10"
+                            className="grid size-8 max-lg:size-9 place-items-center rounded-full transition hover:bg-black/5 dark:hover:bg-white/10"
                             style={{ color: theme.node.text }}
                         >
                             <ArrowLeft className="size-4" />
@@ -107,7 +107,7 @@ export function CanvasTopBar({
                             type="button"
                             onClick={toggleSidePanel}
                             aria-label={sidePanelOpen ? t("canvas.collapsePanel") : t("canvas.expandPanel")}
-                            className="grid size-7 place-items-center rounded-full transition hover:bg-black/5 dark:hover:bg-white/10"
+                            className="grid size-8 max-lg:size-9 place-items-center rounded-full transition hover:bg-black/5 dark:hover:bg-white/10"
                             style={{ color: theme.node.text }}
                         >
                             {sidePanelOpen ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
@@ -132,7 +132,7 @@ export function CanvasTopBar({
                             ],
                         }}
                     >
-                        <button type="button" className="grid size-7 place-items-center rounded-full transition hover:bg-black/5 dark:hover:bg-white/10" style={{ color: theme.node.text }} aria-label={t("canvas.openMenu")}>
+                        <button type="button" className="grid size-8 max-lg:size-9 place-items-center rounded-full transition hover:bg-black/5 dark:hover:bg-white/10" style={{ color: theme.node.text }} aria-label={t("canvas.openMenu")}>
                             <Menu className="size-4" />
                         </button>
                     </Dropdown>

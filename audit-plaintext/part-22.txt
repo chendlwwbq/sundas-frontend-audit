@@ -1,1600 +1,7 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
-
-
-========================================================================
-FILE: web/src/pages/image/index.tsx
-LINES: 867-1187
-========================================================================
-    onSaveAsset: (image: GeneratedImage, index: number) => void;
-    onVideo: (image: GeneratedImage, index: number) => void; onContinue: (image: GeneratedImage, index: number) => void;
-}) {
-    const { t } = useTranslation();
-    useSyncExternalStore(subscribeImagePreviews, getImagePreviewRevision);
-    const [previewOpen, setPreviewOpen] = useState(false);
-    return (
-        <div className="creation-result-card overflow-hidden rounded-2xl border border-border bg-background dark:border-border">
-            <button type="button" className="block w-full" onClick={() => setPreviewOpen(true)} aria-label={t("imageWorkbench.resultAlt", { count: index + 1 })}>
-                <img loading="lazy" width={image.width || undefined} height={image.height || undefined} src={previewUrlFor(image.storageKey) || image.dataUrl} alt={t("imageWorkbench.resultAlt", { count: index + 1 })} className="h-auto max-h-[65vh] w-full object-contain" />
-            </button>
-            {previewOpen && <Lightbox isOpen={previewOpen} onOpenChange={setPreviewOpen} media={(gallery || [image]).map((item, i) => ({ src: item.dataUrl, alt: t("imageWorkbench.resultAlt", { count: i + 1 }) }))} defaultIndex={gallery ? index : 0} hasZoom />}
-            <div className="space-y-2 border-t border-border px-3 py-2.5 dark:border-border">
-                <div className="flex min-w-0 gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                    {image.width > 0 && image.height > 0 && <span>{image.width}x{image.height}</span>}
-                    {image.bytes > 0 && <span>{formatBytes(image.bytes)}</span>}
-                    <span>{formatDuration(image.durationMs)}</span>
-                </div>
-                <RecordActions primary={{ key: "edit", label: "继续改图", icon: <PenLine className="size-3.5" />, run: () => onContinue(image, index) }} secondary={{ key: "video", label: "生成视频", run: () => onVideo(image, index) }} more={[
-                    { key: "download", label: "下载图片", icon: <Download className="size-4" />, run: () => onDownload(image, index) },
-                    { key: "asset", label: "加入素材库", icon: <FolderPlus className="size-4" />, run: () => onSaveAsset(image, index) },
-                    { key: "reference", label: "添加为参考图", icon: <PenLine className="size-4" />, run: () => onEdit(image, index) },
-                ]} />
-            </div>
-        </div>
-    );
-}
-
-function PendingImageCard() {
-    const { t } = useTranslation();
-    return (
-        <div className="relative aspect-square overflow-hidden rounded-lg border border-dashed border-border bg-muted dark:border-border dark:bg-muted">
-            <div
-                className="absolute inset-0 opacity-60"
-                style={{
-                    backgroundImage: "radial-gradient(circle, rgba(120,113,108,0.35) 1.4px, transparent 1.6px)",
-                    backgroundSize: "16px 16px",
-                }}
-            />
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-                <LoaderCircle className="size-6 animate-spin" />
-                <span>{t("workbench.generating")}</span>
-            </div>
-        </div>
-    );
-}
-
-function FailedImageCard({ error, onRetry }: { error: string; onRetry: () => void }) {
-    const { t } = useTranslation();
-    return (
-        <div className="overflow-hidden rounded-2xl border border-red-200 bg-red-50 dark:border-red-950 dark:bg-red-950/20">
-            <div className="flex aspect-square flex-col items-center justify-center gap-3 p-5 text-center">
-                <div className="text-sm font-medium text-red-600 dark:text-red-300">{t("workbench.failed")}</div>
-                <Typography.Paragraph ellipsis={{ rows: 4 }} className="!mb-0 !text-xs !text-red-500 dark:!text-red-300">
-                    {error}
-                </Typography.Paragraph>
-            </div>
-            <div className="flex justify-end border-t border-red-200 p-3 dark:border-red-950">
-                <Button size="small" danger onClick={onRetry}>
-                    {t("workbench.retry")}
-                </Button>
-            </div>
-        </div>
-    );
-}
-
-function updateResultAt(results: GenerationResult[], index: number, next: Partial<GenerationResult>) {
-    return results.map((item, itemIndex) => (itemIndex === index ? { ...item, ...next } : item));
-}
-
-function LogPanel({
-    logs,
-    selectedLogIds,
-    activeLogId,
-    onSelectedLogIdsChange,
-    onCreateSession,
-    onDeleteSelected,
-    onPreviewLog,
-}: {
-    logs: GenerationLog[];
-    selectedLogIds: string[];
-    activeLogId?: string;
-    onSelectedLogIdsChange: (ids: string[]) => void;
-    onCreateSession: () => void;
-    onDeleteSelected: () => void;
-    onPreviewLog: (log: GenerationLog) => void;
-}) {
-    const { t } = useTranslation();
-    const allSelected = Boolean(logs.length) && selectedLogIds.length === logs.length;
-    const toggleAll = () => onSelectedLogIdsChange(allSelected ? [] : logs.map((log) => log.id));
-
-    return (
-        <>
-            {/* 标题/计数已移到停靠面板头部，这里只留吸顶工具栏 */}
-            <div className="crec-toolbar">
-                <Button size="small" icon={<Plus className="size-3.5" />} onClick={onCreateSession}>
-                    {t("workbench.new")}
-                </Button>
-                <Button size="small" icon={<CheckSquare className="size-3.5" />} disabled={!logs.length} onClick={toggleAll}>
-                    {allSelected ? t("common.cancel") : t("workbench.selectAll")}
-                </Button>
-                <Button size="small" danger icon={<Trash2 className="size-3.5" />} disabled={!selectedLogIds.length} onClick={onDeleteSelected}>
-                    {t("common.delete")}
-                </Button>
-            </div>
-            <div className="space-y-3">
-                {logs.map((log) => (
-                    <LogCard
-                        key={log.id}
-                        log={log}
-                        selected={selectedLogIds.includes(log.id)}
-                        active={activeLogId === log.id}
-                        onSelectedChange={(checked) => onSelectedLogIdsChange(checked ? [...selectedLogIds, log.id] : selectedLogIds.filter((id) => id !== log.id))}
-                        onClick={() => onPreviewLog(log)}
-                    />
-                ))}
-                {!logs.length ? <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-border text-center text-sm text-muted-foreground dark:border-border">{t("workbench.noLogs")}</div> : null}
-            </div>
-        </>
-    );
-}
-
-function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: GenerationLog; selected: boolean; active: boolean; onSelectedChange: (checked: boolean) => void; onClick: () => void }) {
-    const { t } = useTranslation();
-    useSyncExternalStore(subscribeImagePreviews, getImagePreviewRevision);
-    const thumbnails = log.images.filter((image) => image.dataUrl).slice(0, 4);
-
-    return (
-        <button
-            type="button"
-            className={`block w-full rounded-lg border p-2 text-left transition ${active ? "border-foreground bg-brand-soft dark:bg-brand-soft" : "border-border bg-background hover:bg-muted dark:border-border dark:hover:bg-accent"}`}
-            onClick={onClick}
-        >
-            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
-                <Checkbox className="mt-0.5" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />
-                <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold leading-5">{log.title}</div>
-                    {thumbnails.length ? (
-                        <div className="mt-2 flex gap-1 overflow-hidden">
-                            {thumbnails.map((image) => (
-                                <img key={image.id} src={previewUrlFor(image.storageKey) || image.dataUrl} alt="" className="size-8 shrink-0 rounded-md object-cover" />
-                            ))}
-                        </div>
-                    ) : null}
-                    <div className="mt-2 flex flex-wrap gap-1">
-                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{t("workbench.itemCount", { count: log.imageCount })}</Tag>
-                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{log.time}</Tag>
-                    </div>
-                </div>
-                <div className="grid max-w-[150px] min-w-0 justify-items-end gap-1">
-                    <div className="flex min-w-0 flex-wrap justify-end gap-1">
-                        {log.status === 'pending' ? <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="processing">{t('workbench.generating')}</Tag> : log.status === 'unavailable' ? <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="warning">结果不可用</Tag> : null}
-                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="blue">
-                            {t("workbench.successCount", { count: log.successCount ?? log.imageCount })}
-                        </Tag>
-                        {log.failCount ? (
-                            <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="red">
-                                {t("workbench.failCount", { count: log.failCount })}
-                            </Tag>
-                        ) : null}
-                    </div>
-                    <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="green">
-                        {formatDuration(log.durationMs)}
-                    </Tag>
-                </div>
-            </div>
-        </button>
-    );
-}
-
-function isCurrentUser(owner: string, sessionEpoch: number) {
-    const auth = useAuthStore.getState();
-    return auth.ready && auth.user?.id === owner && auth.sessionEpoch === sessionEpoch;
-}
-
-async function readStoredLogs(owner: string, pager: GenerationHistoryPager, loadMore = false) {
-    if (typeof window === "undefined") return { items: [] as GenerationLog[], hasMore: false };
-    const local = await imageLogStorage.list<GenerationLog>(owner).catch(() => [] as GenerationLog[]);
-    try {
-        const cloud = loadMore ? await pager.loadMore() : await pager.refresh();
-        const remote = cloud.logs as unknown as GenerationLog[];
-        return { items: await Promise.all(mergeGenerationHistory(local, remote, cloud.hiddenTaskIds).map(normalizeLog)), hasMore: cloud.hasMore };
-    } catch {
-        if (loadMore) throw new Error("加载更早记录失败，请重试");
-        return { items: (await Promise.all(local.map(normalizeLog))).sort((a,b)=>b.createdAt-a.createdAt), hasMore: false };
-    }
-}
-
-async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {
-    const references = await Promise.all(
-        (log.references || []).map(async (item) => {
-            void ensureImagePreview(item.storageKey);
-            return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
-        }),
-    );
-    const images = await Promise.all(
-        (log.images || []).map(async (item) => {
-            void ensureImagePreview(item.storageKey);
-            return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
-        }),
-    );
-    const config = normalizeLogConfig(log);
-    return {
-        serverTaskIds: log.serverTaskIds,
-        creditsCharged: log.creditsCharged,
-        reconciliationRequired: log.reconciliationRequired,
-        referenceHistoryUnknown: log.referenceHistoryUnknown,
-        id: log.id || nanoid(),
-        createdAt: log.createdAt || Date.now(),
-        title: log.title || log.model || i18n.t("workbench.untitled"),
-        prompt: log.prompt || log.title || "",
-        time: log.time || new Date().toLocaleString(i18n.resolvedLanguage, { hour12: false }),
-        model: log.model || config.imageModel || "",
-        config,
-        references,
-        durationMs: log.durationMs || 0,
-        successCount: log.successCount ?? log.imageCount ?? 0,
-        failCount: log.failCount || 0,
-        imageCount: log.imageCount || log.successCount || 0,
-        size: log.size || config.size || "",
-        quality: log.quality || config.quality || "",
-        status: log.status || "success",
-        images,
-    };
-}
-
-function serializeLog(log: GenerationLog): GenerationLog {
-    return {
-        ...log,
-        references: log.references.map((item) => ({ ...item, dataUrl: item.storageKey ? "" : item.dataUrl })),
-        images: log.images.map((image) => ({ ...image, dataUrl: image.storageKey ? "" : image.dataUrl })),
-    };
-}
-
-function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
-    return {
-        model: log.config?.model || log.model || "",
-        imageModel: log.config?.imageModel || log.model || "",
-        quality: log.config?.quality || log.quality || "",
-        size: log.config?.size || log.size || "",
-        background: log.config?.background,
-        count: log.config?.count || String(log.imageCount || log.successCount || 1),
-    };
-}
-
-function imageHistoryGaps(log: GenerationLog) {
-    const missing: string[] = [];
-    if (!log.config.size || !log.config.quality || !log.config.background) missing.push("部分历史参数未保存");
-    if (log.referenceHistoryUnknown) missing.push("云端历史未保存参考素材信息");
-    return missing;
-}
-
-function moveListItem<T>(items: T[], index: number, offset: number) {
-    const targetIndex = index + offset;
-    if (targetIndex < 0 || targetIndex >= items.length) return items;
-    const next = [...items];
-    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
-    return next;
-}
-
-function ReferenceOrderButtons({ index, total, onMove }: { index: number; total: number; onMove: (offset: number) => void }) {
-    if (total <= 1) return null;
-    return (
-        <div className="absolute inset-x-1 bottom-1 flex justify-between">
-            <Button size="small" className="!h-6 !w-6 !min-w-6 !rounded-full !bg-white/85 !p-0 !shadow-sm" icon={<ArrowLeft className="size-3" />} disabled={index <= 0} onClick={() => onMove(-1)} />
-            <Button size="small" className="!h-6 !w-6 !min-w-6 !rounded-full !bg-white/85 !p-0 !shadow-sm" icon={<ArrowRight className="size-3" />} disabled={index >= total - 1} onClick={() => onMove(1)} />
-        </div>
-    );
-}
-
-function buildLog({
-    prompt,
-    model,
-    config,
-    references,
-    durationMs,
-    successCount,
-    failCount,
-    status,
-    images,
-    taskIds = [],
-}: {
-    prompt: string;
-    model: string;
-    config: GenerationLogConfig;
-    references: ReferenceImage[];
-    durationMs: number;
-    successCount: number;
-    failCount: number;
-    status: GenerationLog["status"];
-    images: GeneratedImage[];
-    taskIds?: string[];
-}): GenerationLog {
-    const logConfig = {
-        model: config.model,
-        imageModel: config.imageModel,
-        quality: config.quality,
-        size: config.size,
-        background: config.background,
-        count: config.count,
-    };
-    return {
-        id: nanoid(),
-        createdAt: Date.now(),
-        title: prompt.slice(0, 12) || i18n.t("workbench.untitled"),
-        prompt,
-        time: new Date().toLocaleString(i18n.resolvedLanguage, { hour12: false }),
-        model,
-        config: logConfig,
-        references,
-        durationMs,
-        successCount,
-        failCount,
-        serverTaskIds: [...new Set([...taskIds, ...images.flatMap(image => image.taskId ? [image.taskId] : [])])],
-        imageCount: Number(logConfig.count) || successCount,
-        size: logConfig.size,
-        quality: logConfig.quality,
-        status,
-        images,
-    };
-}
-
-
-========================================================================
-FILE: web/src/pages/models/index.tsx
-LINES: 1-387
-========================================================================
-import { useState, useMemo } from "react";
-import { Search, SlidersHorizontal, CheckCircle2, AlertCircle, Clock, XCircle, ImageIcon, Clapperboard, FileText, Music } from "lucide-react";
-
-import { SiteFooter } from "@/components/layout/site-footer";
-import { useConfigStore, type ServerModelInfo } from "@/stores/use-config-store";
-import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useUrlState } from "@/hooks/use-url-state";
-import "./models.css";
-
-type ChannelStatus = "available" | "limited" | "unknown" | "coming-soon" | "offline";
-
-const CAPABILITY_OPTIONS = [
-    { value: "image", label: "图像生成", icon: ImageIcon },
-    { value: "video", label: "视频生成", icon: Clapperboard },
-    { value: "text", label: "文本生成", icon: FileText },
-    { value: "audio", label: "音频生成", icon: Music },
-];
-
-const STATUS_OPTIONS: { value: ChannelStatus; label: string; color: string }[] = [
-    { value: "available", label: "可用", color: "green" },
-    { value: "limited", label: "受限", color: "orange" },
-    { value: "unknown", label: "待检测", color: "blue" },
-    { value: "coming-soon", label: "即将上线", color: "blue" },
-    { value: "offline", label: "离线", color: "red" },
-];
-
-function getModelStatus(model: ServerModelInfo): ChannelStatus {
-    if (model.routeCount === 0) return "coming-soon";
-    if (model.health === "healthy") return "available";
-    if (model.health === "degraded") return "limited";
-    if (model.routes.length && model.routes.every(route => route.health === "down")) return "offline";
-    return "unknown";
-}
-
-function getProviderLogo(vendor: string): string {
-    const name = vendor.toLowerCase();
-    if (name.includes("anthropic") || name.includes("claude")) return "/icons/claude.svg";
-    if (name.includes("openai") || name.includes("gpt")) return "/icons/openai.svg";
-    if (name.includes("google") || name.includes("gemini")) return "/icons/gemini.svg";
-    if (name.includes("deepseek")) return "/icons/deepseek.svg";
-    if (name.includes("zhipu") || name.includes("glm")) return "/icons/glm.svg";
-    if (name.includes("xai") || name.includes("grok")) return "/icons/grok.svg";
-    return "";
-}
-
-function StatusBadge({ status }: { status: ChannelStatus }) {
-    const config = STATUS_OPTIONS.find(s => s.value === status);
-    if (!config) return null;
-
-    const icons = {
-        available: CheckCircle2,
-        limited: AlertCircle,
-        unknown: Clock,
-        "coming-soon": Clock,
-        offline: XCircle,
-    };
-    const Icon = icons[status];
-
-    return (
-        <span className={`model-status-badge status-${config.color}`}>
-            <Icon className="size-3" />
-            {config.label}
-        </span>
-    );
-}
-
-export default function ModelsPage() {
-    const serverModels = useConfigStore((state) => state.serverModels);
-
-    const [urlFilters, setUrlFilters] = useUrlState({
-        providers: [] as string[],
-        capabilities: [] as string[],
-        status: [] as string[],
-    });
-
-    const [searchInput, setSearchInput] = useState("");
-    const [showFilters, setShowFilters] = useState(false);
-    const debouncedSearch = useDebouncedValue(searchInput, 300);
-
-    // 提取所有厂商
-    const allProviders = useMemo(() => {
-        const providers = new Set<string>();
-        serverModels.forEach(model => {
-            if (model.familyVendor) providers.add(model.familyVendor);
-        });
-        return Array.from(providers).sort();
-    }, [serverModels]);
-
-    // 筛选模型
-    const filteredModels = useMemo(() => {
-        return serverModels.filter(model => {
-            // 搜索过滤
-            if (debouncedSearch) {
-                const search = debouncedSearch.toLowerCase();
-                const matchName = model.name.toLowerCase().includes(search);
-                const matchVendor = model.familyVendor?.toLowerCase().includes(search);
-                const matchFamily = model.familyName?.toLowerCase().includes(search);
-                if (!matchName && !matchVendor && !matchFamily) return false;
-            }
-
-            // 厂商过滤
-            if (urlFilters.providers.length > 0) {
-                if (!model.familyVendor || !urlFilters.providers.includes(model.familyVendor)) {
-                    return false;
-                }
-            }
-
-            // 能力过滤
-            if (urlFilters.capabilities.length > 0) {
-                if (!urlFilters.capabilities.includes(model.capability)) return false;
-            }
-
-            // 状态过滤
-            if (urlFilters.status.length > 0) {
-                const modelStatus = getModelStatus(model);
-                if (!urlFilters.status.includes(modelStatus)) return false;
-            }
-
-            return true;
-        });
-    }, [serverModels, debouncedSearch, urlFilters]);
-
-    // 按厂商分组
-    const groupedModels = useMemo(() => {
-        const groups = new Map<string, ServerModelInfo[]>();
-        filteredModels.forEach(model => {
-            const vendor = model.familyVendor || "其他";
-            if (!groups.has(vendor)) {
-                groups.set(vendor, []);
-            }
-            groups.get(vendor)!.push(model);
-        });
-        return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-    }, [filteredModels]);
-
-    const toggleFilter = (type: keyof typeof urlFilters, value: string) => {
-        const current = urlFilters[type] as string[];
-        const next = current.includes(value)
-            ? current.filter(v => v !== value)
-            : [...current, value];
-        setUrlFilters({ [type]: next });
-    };
-
-    return (
-        <div className="models-page">
-            <div className="models-content">
-                {/* 头部 */}
-                <header className="models-header">
-                    <div className="models-header-content">
-                        <div>
-                            <h1 className="models-title">模型广场</h1>
-                            <p className="models-subtitle">
-                                探索 {serverModels.length} 个 AI 模型，涵盖图像、视频、文本和音频生成
-                            </p>
-                        </div>
-                        <div className="models-stats">
-                            <div className="models-stat-item">
-                                <span className="models-stat-value">{allProviders.length}</span>
-                                <span className="models-stat-label">厂商</span>
-                            </div>
-                            <div className="models-stat-item">
-                                <span className="models-stat-value">{serverModels.length}</span>
-                                <span className="models-stat-label">模型</span>
-                            </div>
-                            <div className="models-stat-item">
-                                <span className="models-stat-value">
-                                    {serverModels.filter(m => getModelStatus(m) === "available").length}
-                                </span>
-                                <span className="models-stat-label">可用</span>
-                            </div>
-                        </div>
-                    </div>
-                </header>
-
-                {/* 筛选栏 */}
-                <div className="models-filters-bar">
-                    <div className="models-search-wrapper">
-                        <Search className="models-search-icon" />
-                        <input
-                            type="text"
-                            className="models-search-input"
-                            placeholder="搜索模型、厂商..."
-                            value={searchInput}
-                            onChange={(e) => setSearchInput(e.target.value)}
-                        />
-                    </div>
-                    <button
-                        type="button"
-                        className={`models-filter-toggle ${showFilters ? "is-active" : ""}`}
-                        onClick={() => setShowFilters(!showFilters)}
-                    >
-                        <SlidersHorizontal className="size-4" />
-                        筛选
-                        {(urlFilters.providers.length + urlFilters.capabilities.length + urlFilters.status.length) > 0 && (
-                            <span className="models-filter-count">
-                                {urlFilters.providers.length + urlFilters.capabilities.length + urlFilters.status.length}
-                            </span>
-                        )}
-                    </button>
-                </div>
-
-                {/* 筛选面板 */}
-                {showFilters && (
-                    <div className="models-filters-panel">
-                        {/* 厂商筛选 */}
-                        <div className="models-filter-group">
-                            <h3 className="models-filter-title">厂商</h3>
-                            <div className="models-filter-options">
-                                {allProviders.map(provider => (
-                                    <button
-                                        key={provider}
-                                        type="button"
-                                        className={`models-filter-chip ${
-                                            urlFilters.providers.includes(provider) ? "is-selected" : ""
-                                        }`}
-                                        onClick={() => toggleFilter("providers", provider)}
-                                    >
-                                        {getProviderLogo(provider) && (
-                                            <img
-                                                src={getProviderLogo(provider)}
-                                                alt={provider}
-                                                className="models-filter-chip-logo"
-                                            />
-                                        )}
-                                        {provider}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* 能力筛选 */}
-                        <div className="models-filter-group">
-                            <h3 className="models-filter-title">能力</h3>
-                            <div className="models-filter-options">
-                                {CAPABILITY_OPTIONS.map(cap => (
-                                    <button
-                                        key={cap.value}
-                                        type="button"
-                                        className={`models-filter-chip ${
-                                            urlFilters.capabilities.includes(cap.value) ? "is-selected" : ""
-                                        }`}
-                                        onClick={() => toggleFilter("capabilities", cap.value)}
-                                    >
-                                        <cap.icon className="size-3.5" aria-hidden="true" />
-                                        {cap.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* 状态筛选 */}
-                        <div className="models-filter-group">
-                            <h3 className="models-filter-title">渠道状态</h3>
-                            <div className="models-filter-options">
-                                {STATUS_OPTIONS.map(status => (
-                                    <button
-                                        key={status.value}
-                                        type="button"
-                                        className={`models-filter-chip ${
-                                            urlFilters.status.includes(status.value) ? "is-selected" : ""
-                                        }`}
-                                        onClick={() => toggleFilter("status", status.value)}
-                                    >
-                                        {status.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* 重置按钮 */}
-                        {(urlFilters.providers.length + urlFilters.capabilities.length + urlFilters.status.length) > 0 && (
-                            <button
-                                type="button"
-                                className="models-filter-reset"
-                                onClick={() => setUrlFilters({ providers: [], capabilities: [], status: [] })}
-                            >
-                                重置筛选
-                            </button>
-                        )}
-                    </div>
-                )}
-
-                {/* 模型列表 */}
-                <div className="models-list">
-                    {groupedModels.length > 0 ? (
-                        groupedModels.map(([vendor, models]) => (
-                            <div key={vendor} className="models-vendor-group">
-                                <div className="models-vendor-header">
-                                    {getProviderLogo(vendor) && (
-                                        <img
-                                            src={getProviderLogo(vendor)}
-                                            alt={vendor}
-                                            className="models-vendor-logo"
-                                        />
-                                    )}
-                                    <h2 className="models-vendor-name">{vendor}</h2>
-                                    <span className="models-vendor-count">{models.length} 个模型</span>
-                                </div>
-                                <div className="models-grid">
-                                    {models.map(model => {
-                                        const status = getModelStatus(model);
-                                        const capability = CAPABILITY_OPTIONS.find(option => option.value === model.capability);
-                                        const minCredits = Number.isInteger(model.minCredits)
-                                            ? model.minCredits
-                                            : Number(model.minCredits.toFixed(2));
-                                        const maxCredits = Number.isInteger(model.maxCredits)
-                                            ? model.maxCredits
-                                            : Number(model.maxCredits.toFixed(2));
-                                        const priceText = model.routeCount > 0 && model.minCredits > 0
-                                            ? `${minCredits === maxCredits ? minCredits : `${minCredits}-${maxCredits}`} 积分${
-                                                model.unit === "second" ? "/秒" :
-                                                model.unit === "request" ? "/次" :
-                                                model.unit === "image" ? "/张" : ""
-                                            }`
-                                            : "价格待定";
-
-                                        return (
-                                            <div key={model.id} className="model-card">
-                                                <div className="model-card-header">
-                                                    <div className="model-card-icon">
-                                                        {model.familyIcon ? (
-                                                            <img
-                                                                src={model.familyIcon}
-                                                                alt={model.name}
-                                                                className="model-icon-img"
-                                                            />
-                                                        ) : (
-                                                            <span className="model-icon-text">
-                                                                {model.name.slice(0, 2).toUpperCase()}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <StatusBadge status={status} />
-                                                </div>
-
-                                                <div className="model-card-body">
-                                                    <h3 className="model-card-title">{model.name}</h3>
-                                                    {model.description && (
-                                                        <p className="model-card-description">{model.description}</p>
-                                                    )}
-                                                </div>
-
-                                                <div className="model-card-footer">
-                                                    <div className="model-card-capabilities">
-                                                        {capability && (
-                                                            <span className="model-capability-badge" aria-label={capability.label} title={capability.label}>
-                                                                <capability.icon className="size-3.5" aria-hidden="true" />
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="model-card-meta">
-                                                        <span className="model-card-price">{priceText}</span>
-                                                        {model.routeCount > 0 && (
-                                                            <div className="model-card-routes">
-                                                                <span className="model-routes-count">{model.routeCount} 条线路</span>
-                                                                <div className="model-routes-dots">
-                                                                    {Array.from({ length: Math.min(model.routeCount, 5) }).map((_, i) => (
-                                                                        <span key={i} className="model-route-dot" />
-                                                                    ))}
-                                                                    {model.routeCount > 5 && (
-                                                                        <span className="model-routes-more">+{model.routeCount - 5}</span>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        ))
-                    ) : (
-                        <div className="models-empty">
-                            <p className="models-empty-text">没有找到匹配的模型</p>
-                            <p className="models-empty-hint">尝试调整筛选条件或搜索关键词</p>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <SiteFooter />
-        </div>
-    );
-}
-
-
-========================================================================
-FILE: web/src/pages/models/models.css
-LINES: 1-732
-========================================================================
-/**
- * 模型广场样式 - 学习 Orbi 定价页面设计
- */
-
-.models-page {
-    position: relative;
-    /* 页面在 UserLayout 的 main（overflow:hidden）内滚动：必须撑满可用高度而不是跟随内容增高，
-       否则内容会溢出被父级裁掉，页面永远没有可滚动的余量。 */
-    height: 100%;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    background: var(--background);
-    /* 全局默认是「滚动时才出现的透明滚动条」；模型广场需要常驻可见的右侧滚动条，
-       所以这里把标准滚动条属性交回浏览器，让下面的 ::-webkit-scrollbar 生效。 */
-    scrollbar-width: auto;
-    scrollbar-color: auto;
-}
-
-.models-content {
-    position: relative;
-    z-index: 1;
-    width: min(100%, 1360px);
-    margin: 0 auto;
-    padding: 40px 40px 72px;
-}
-
-/* ==================== 头部 ==================== */
-
-.models-header {
-    margin-bottom: 32px;
-}
-
-.models-header-content {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 32px;
-}
-
-.models-title {
-    margin: 0;
-    color: var(--foreground);
-    font-size: clamp(32px, 4vw, 48px);
-    font-weight: 600;
-    line-height: 1.2;
-    letter-spacing: -0.01em;
-}
-
-.models-subtitle {
-    margin: 12px 0 0;
-    color: var(--muted-foreground);
-    font-size: 16px;
-    line-height: 1.6;
-}
-
-.models-stats {
-    display: flex;
-    gap: 24px;
-    padding: 20px 24px;
-    border: 1px solid var(--input);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.02);
-}
-
-.models-stat-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-}
-
-.models-stat-value {
-    color: var(--brand);
-    font-size: 28px;
-    font-weight: 700;
-    line-height: 1;
-}
-
-.models-stat-label {
-    color: var(--muted-foreground);
-    font-size: 13px;
-    font-weight: 500;
-}
-
-/* ==================== 筛选栏 ==================== */
-
-.models-filters-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 24px;
-}
-
-.models-search-wrapper {
-    position: relative;
-    flex: 1;
-    max-width: 480px;
-}
-
-.models-search-icon {
-    position: absolute;
-    top: 50%;
-    left: 16px;
-    transform: translateY(-50%);
-    width: 18px;
-    height: 18px;
-    color: var(--muted-foreground);
-    pointer-events: none;
-}
-
-.models-search-input {
-    width: 100%;
-    height: 44px;
-    padding: 0 16px 0 44px;
-    border: 1px solid var(--input);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.02);
-    color: var(--foreground);
-    font-size: 14px;
-    transition: all 0.2s ease;
-}
-
-.models-search-input::placeholder {
-    color: var(--muted-foreground);
-}
-
-.models-search-input:focus {
-    outline: none;
-    border-color: var(--brand);
-    background: rgba(255, 255, 255, 0.04);
-    box-shadow: 0 0 0 3px rgba(216, 255, 62, 0.1);
-}
-
-.models-filter-toggle {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    height: 44px;
-    padding: 0 20px;
-    border: 1px solid var(--input);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.02);
-    color: var(--foreground);
-    font: inherit;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.models-filter-toggle:hover {
-    border-color: rgba(216, 255, 62, 0.4);
-    background: rgba(216, 255, 62, 0.05);
-}
-
-.models-filter-toggle.is-active {
-    border-color: var(--brand);
-    background: rgba(216, 255, 62, 0.1);
-    color: var(--brand);
-}
-
-.models-filter-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 20px;
-    height: 20px;
-    padding: 0 6px;
-    border-radius: 10px;
-    background: var(--brand);
-    color: var(--brand-ink);
-    font-size: 11px;
-    font-weight: 700;
-}
-
-/* ==================== 筛选面板 ==================== */
-
-.models-filters-panel {
-    margin-bottom: 32px;
-    padding: 24px;
-    border: 1px solid var(--input);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.02);
-    animation: slideInBounce 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes slideInBounce {
-    0% {
-        opacity: 0;
-        transform: translateY(-10px) scale(0.95);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
-.models-filter-group {
-    margin-bottom: 24px;
-}
-
-.models-filter-group:last-of-type {
-    margin-bottom: 0;
-}
-
-.models-filter-title {
-    margin: 0 0 12px;
-    color: var(--foreground);
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-}
-
-.models-filter-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.models-filter-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 32px;
-    padding: 0 14px;
-    border: 1px solid var(--input);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.02);
-    color: var(--foreground);
-    font: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.models-filter-chip:hover {
-    border-color: rgba(216, 255, 62, 0.4);
-    background: rgba(216, 255, 62, 0.05);
-    transform: translateY(-1px);
-}
-
-.models-filter-chip.is-selected {
-    border-color: var(--brand);
-    background: var(--brand);
-    color: var(--brand-ink);
-    font-weight: 600;
-    box-shadow: 0 4px 12px rgba(216, 255, 62, 0.25);
-}
-
-.models-filter-chip-logo {
-    width: 14px;
-    height: 14px;
-    object-fit: contain;
-}
-
-.models-filter-chip.is-selected .models-filter-chip-logo {
-    filter: brightness(0);
-}
-
-.models-filter-reset {
-    width: 100%;
-    height: 36px;
-    margin-top: 16px;
-    border: 1px solid var(--input);
-    border-radius: 10px;
-    background: transparent;
-    color: var(--muted-foreground);
-    font: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.models-filter-reset:hover {
-    border-color: rgba(255, 60, 60, 0.5);
-    background: rgba(255, 60, 60, 0.1);
-    color: rgba(255, 80, 80, 0.9);
-}
-
-/* ==================== 厂商分组 ==================== */
-
-.models-list {
-    display: flex;
-    flex-direction: column;
-    gap: 48px;
-}
-
-.models-vendor-group {
-    animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.models-vendor-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--input);
-}
-
-.models-vendor-logo {
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-    filter: brightness(0) invert(1);
-}
-
-:root:not(.dark) .models-vendor-logo,
-:root:not(.dark) .model-icon-img {
-    filter: brightness(0);
-}
-
-.models-vendor-name {
-    margin: 0;
-    color: var(--foreground);
-    font-size: 24px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-}
-
-.models-vendor-count {
-    margin-left: auto;
-    color: var(--muted-foreground);
-    font-size: 13px;
-    font-weight: 500;
-}
-
-/* ==================== 模型网格 ==================== */
-
-.models-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 20px;
-}
-
-/* ==================== 模型卡片 - 学习 Orbi ==================== */
-
-.model-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    padding: 20px;
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    background: var(--card);
-    transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
-    cursor: pointer;
-}
-
-/* 渐变边框效果 - 学习 Orbi */
-.model-card::before {
-    content: "";
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(
-        135deg,
-        rgba(216, 255, 62, 0) 0%,
-        rgba(216, 255, 62, 0.6) 50%,
-        rgba(216, 255, 62, 0) 100%
-    );
-    -webkit-mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-    mask-composite: exclude;
-    opacity: 0;
-    transition: opacity 0.35s ease;
-    pointer-events: none;
-}
-
-.model-card:hover::before {
-    opacity: 1;
-}
-
-.model-card:hover {
-    transform: translateY(-3px);
-    border-color: rgba(216, 255, 62, 0.3);
-    background: var(--card);
-    box-shadow:
-        0 20px 40px -10px rgba(0, 0, 0, 0.6),
-        0 0 0 1px rgba(216, 255, 62, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.model-card-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 16px;
-}
-
-.model-card-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 48px;
-    height: 48px;
-    border: 1px solid var(--input);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.03);
-    overflow: hidden;
-}
-
-.model-icon-img {
-    width: 28px;
-    height: 28px;
-    object-fit: contain;
-    filter: brightness(0) invert(1);
-}
-
-.model-icon-text {
-    color: var(--brand);
-    font-size: 16px;
-    font-weight: 700;
-}
-
-.model-status-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    height: 24px;
-    padding: 0 10px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.model-status-badge.status-green {
-    background: rgba(34, 197, 94, 0.15);
-    color: rgb(34, 197, 94);
-}
-
-.model-status-badge.status-orange {
-    background: rgba(251, 146, 60, 0.15);
-    color: rgb(251, 146, 60);
-}
-
-.model-status-badge.status-blue {
-    background: rgba(59, 130, 246, 0.15);
-    color: rgb(59, 130, 246);
-}
-
-.model-status-badge.status-red {
-    background: rgba(239, 68, 68, 0.15);
-    color: rgb(239, 68, 68);
-}
-
-.model-card-body {
-    flex: 1;
-    margin-bottom: 16px;
-}
-
-.model-card-title {
-    margin: 0 0 8px;
-    color: var(--foreground);
-    font-size: 18px;
-    font-weight: 600;
-    line-height: 1.3;
-}
-
-.model-card-description {
-    margin: 0;
-    color: var(--muted-foreground);
-    font-size: 14px;
-    line-height: 1.6;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
-}
-
-.model-card-footer {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.model-card-capabilities {
-    display: flex;
-    gap: 8px;
-}
-
-.model-capability-badge {
-    display: inline-grid;
-    width: 30px;
-    height: 30px;
-    place-items: center;
-    border-radius: 9px;
-    background: var(--muted);
-    color: var(--muted-foreground);
-    transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.model-card:hover .model-capability-badge {
-    background: var(--brand-soft);
-    color: var(--foreground);
-}
-
-.model-card-meta {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-}
-
-.model-card-price {
-    color: var(--brand);
-    font-size: 14px;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.model-card-routes {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.model-routes-count {
-    color: var(--muted-foreground);
-    font-size: 12px;
-    font-weight: 500;
-}
-
-.model-routes-dots {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.model-route-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: rgba(34, 197, 94, 0.8);
-    box-shadow: none;
-}
-
-.model-routes-more {
-    color: var(--muted-foreground);
-    font-size: 11px;
-    font-weight: 600;
-}
-
-/* ==================== 空状态 ==================== */
-
-.models-empty {
-    padding: 80px 20px;
-    text-align: center;
-}
-
-.models-empty-text {
-    margin: 0 0 8px;
-    color: var(--foreground);
-    font-size: 18px;
-    font-weight: 600;
-}
-
-.models-empty-hint {
-    margin: 0;
-    color: var(--muted-foreground);
-    font-size: 14px;
-}
-
-/* ==================== 响应式 ==================== */
-
-@media (max-width: 1024px) {
-    .models-content {
-        padding: 32px 24px 48px;
-    }
-
-    .models-header-content {
-        flex-direction: column;
-    }
-
-    .models-stats {
-        width: 100%;
-        justify-content: space-around;
-    }
-
-    .models-grid {
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 16px;
-    }
-}
-
-@media (max-width: 768px) {
-    .models-content {
-        padding: 24px 16px 32px;
-    }
-
-    .models-title {
-        font-size: 28px;
-    }
-
-    .models-subtitle {
-        font-size: 14px;
-    }
-
-    .models-filters-bar {
-        flex-direction: column;
-    }
-
-    .models-search-wrapper {
-        width: 100%;
-        max-width: none;
-    }
-
-    .models-filter-toggle {
-        width: 100%;
-        justify-content: center;
-    }
-
-    .models-filters-panel {
-        padding: 20px;
-    }
-
-    .models-vendor-header {
-        flex-wrap: wrap;
-    }
-
-    .models-vendor-logo {
-        width: 24px;
-        height: 24px;
-    }
-
-    .models-vendor-name {
-        font-size: 20px;
-    }
-
-    .models-vendor-count {
-        flex-basis: 100%;
-        margin-left: 36px;
-    }
-
-    .models-grid {
-        grid-template-columns: 1fr;
-        gap: 12px;
-    }
-
-    .model-card:hover {
-        transform: translateY(-2px);
-    }
-}
-
-/* ==================== 自定义滚动条 ==================== */
-
-/* 全局 useGlobalScrollbar 会在滚动时给容器加 .scrollbar-active（灰色半透明滑块），
-   模型广场要常驻品牌色滚动条，这里用更高优先级压住它，不依赖样式加载顺序。 */
-.models-page.scrollbar-active {
-    scrollbar-width: auto;
-    scrollbar-color: auto;
-}
-
-.models-page::-webkit-scrollbar {
-    width: 8px;
-}
-
-.models-page::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.models-page::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: rgba(216, 255, 62, 0.38);
-}
-
-.models-page::-webkit-scrollbar-thumb:hover {
-    background: rgba(216, 255, 62, 0.6);
-}
-
-/* 触屏设备用系统浮层滚动条：窄屏上不占用 8px 宽度挤压卡片 */
-@media (hover: none) {
-    .models-page,
-    .models-page.scrollbar-active {
-        scrollbar-width: thin;
-        scrollbar-color: rgba(216, 255, 62, 0.5) transparent;
-    }
-}
-
-/* ==================== 加载动画 ==================== */
-
-.model-card {
-    animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-.model-card:nth-child(1) { animation-delay: 0.05s; }
-.model-card:nth-child(2) { animation-delay: 0.1s; }
-.model-card:nth-child(3) { animation-delay: 0.15s; }
-.model-card:nth-child(4) { animation-delay: 0.2s; }
-
-/* ==================== 可访问性 ==================== */
-
-.model-card:focus-visible,
-.models-filter-chip:focus-visible,
-.models-filter-toggle:focus-visible {
-    outline: 2px solid var(--brand);
-    outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-    }
-}
-
-
-========================================================================
-FILE: web/src/pages/not-found/index.tsx
-LINES: 1-25
-========================================================================
-import { Home } from "lucide-react";
-import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { PageTransition } from "@/components/layout/page-transition";
-
-export default function NotFound() {
-    const { t } = useTranslation();
-    return (
-        <PageTransition className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
-            <main className="flex h-full min-h-0 items-center justify-center overflow-y-auto bg-page px-6 py-10 text-foreground">
-                <section className="w-full max-w-md text-center">
-                    <div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-[16px] border border-border bg-card text-[22px] font-semibold tabular-nums text-muted-foreground">404</div>
-                    <h1 className="text-[26px] font-semibold leading-9 tracking-[-0.01em]">{t("notFound.title")}</h1>
-                    <p className="mt-3 text-[13px] leading-6 text-muted-foreground">{t("notFound.description")}</p>
-                    <div className="mt-8 flex flex-wrap justify-center gap-3">
-                        <Link to="/" className="jm-btn jm-btn-primary h-9 px-4">
-                            <Home className="size-4" />
-                            {t("notFound.home")}
-                        </Link>
-                    </div>
-                </section>
-            </main>
-        </PageTransition>
-    );
-}
-
-
-========================================================================
-FILE: web/src/pages/prompts/index.tsx
-LINES: 1-93
-========================================================================
-import { FolderPlus, Search } from "lucide-react";
-import { type ReactNode, type UIEvent, useEffect, useState } from "react";
-import { App, Button, Empty, Spin, Tag } from "antd";
-import { useTranslation } from "react-i18next";
-
-import { PromptCard } from "@/components/prompts/prompt-card";
-import { usePromptList } from "@/components/prompts/use-prompt-list";
-import { PromptDetailDialog } from "@/components/prompts/prompt-detail-dialog";
-import { useCopyText } from "@/hooks/use-copy-text";
-import { cn } from "@/lib/utils";
-import { useAssetStore } from "@/stores/use-asset-store";
-import { promptImageUrl } from "@/lib/prompt-image";
-import { ALL_PROMPTS_OPTION, type Prompt } from "@/services/api/prompts";
-
-export default function PromptsPage() {
-    const { message } = App.useApp();
-    const { t } = useTranslation();
-    const [titleKeyword, setTitleKeyword] = useState("");
-    const [selectedTags, setSelectedTags] = useState<string[]>([]);
-    const [selectedCategory, setSelectedCategory] = useState(ALL_PROMPTS_OPTION);
-    const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null);
-    const addAsset = useAssetStore((state) => state.addAsset);
-    const copyText = useCopyText();
-    const { query, items: promptItems, tags: promptTags, categories: promptCategoryOptions, total: totalPrompts } = usePromptList({ keyword: titleKeyword, tags: selectedTags, category: selectedCategory });
-
-    useEffect(() => {
-        if (query.isError) message.error(query.error instanceof Error ? query.error.message : t("prompts.loadFailed"));
-    }, [message, query.error, query.isError, t]);
-
-    const toggleTag = (tag: string) => {
-        if (tag === ALL_PROMPTS_OPTION) return setSelectedTags([]);
-        setSelectedTags((items) => (items.includes(tag) ? items.filter((item) => item !== tag) : [...items, tag]));
-    };
-
-    const savePromptAsset = (item: Prompt) => {
-        addAsset({ kind: "text", title: item.title, coverUrl: promptImageUrl(item.coverUrl), tags: item.tags, source: item.category, data: { content: item.prompt }, metadata: { source: "prompt-library", promptId: item.id, githubUrl: item.githubUrl } });
-        message.success(t("common.addedToAssets"));
-    };
-
-    const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
-        const target = event.currentTarget;
-        if (query.hasNextPage && !query.isFetching && !query.isFetchNextPageError && target.scrollTop + target.clientHeight >= target.scrollHeight - 160) void query.fetchNextPage();
-    };
-
-    return (
-        <div className="page-surface flex h-full flex-col overflow-hidden bg-background text-foreground dark:text-foreground">
-            <main className="prompts-main jm-page" onScroll={handleListScroll}>
-                <div className="prompts-band jm-page-inner">
-                    <header className="jm-page-head">
-                    <div className="min-w-0">
-                        <h1 className="jm-page-title">{t("prompts.title")}</h1>
-                        <p className="jm-page-desc">{t("prompts.total", { count: totalPrompts })}</p>
-                    </div>
-                    <label className="jm-search shrink-0">
-                        <Search className="size-4 shrink-0" />
-                        <input value={titleKeyword} placeholder={t("prompts.search")} onChange={(event) => setTitleKeyword(event.target.value)} />
-                    </label>
-                    </header>
-                    <div className="prompts-layout mt-7 space-y-6">
-                        <section aria-label="提示词筛选" className="space-y-3 border-b border-border pb-5">
-                            <PromptFilter label={t("prompts.category")} options={promptCategoryOptions} selected={selectedCategory} onChange={setSelectedCategory} />
-                            <div className="prompt-filter-row">
-                                <div className="prompt-filter-label is-tags">{t("prompts.tags")}</div>
-                                <div className="prompt-tag-scroll" role="group" aria-label={t("prompts.tags")}>
-                                    {promptTags.map((tag) => {
-                                        const active = tag === ALL_PROMPTS_OPTION ? selectedTags.length === 0 : selectedTags.includes(tag);
-                                        return <Tag.CheckableTag key={tag} checked={active} className={cn("prompt-filter-tag", active && "is-active")} onChange={() => toggleTag(tag)}>{tag === ALL_PROMPTS_OPTION ? t("common.all") : tag}</Tag.CheckableTag>;
-                                    })}
-                                </div>
-                            </div>
-                        </section>
-                        <section className="min-w-0">
-                            {query.isLoading ? <div className="flex h-60 items-center justify-center"><Spin /></div> : null}
-                            {!query.isLoading ? <div><PromptGrid items={promptItems} onOpen={setSelectedPrompt} renderActions={(item) => <Button type="text" size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => savePromptAsset(item)}>{t("common.addToAssets")}</Button>} onCopy={(item) => copyText(item.prompt, t("common.promptCopied"))} emptyText={t("prompts.empty")} /></div> : null}
-                            <div className="mt-6 text-center text-xs text-muted-foreground">{query.hasNextPage ? <Button type="text" loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{query.isFetchNextPageError ? t("canvas.sidePanel.loadFailedRetry") : t("prompts.loadMore")}</Button> : promptItems.length > 0 ? t("prompts.end") : null}</div>
-                        </section>
-                    </div>
-                </div>
-            </main>
-
-            <PromptDetailDialog prompt={selectedPrompt} onClose={() => setSelectedPrompt(null)} onCopy={(prompt) => copyText(prompt, t("common.promptCopied"))} onSaveAsset={savePromptAsset} />
-        </div>
-    );
-}
-
-function PromptFilter({ label, options, selected, onChange }: { label: string; options: string[]; selected: string; onChange: (value: string) => void }) {
-    const { t } = useTranslation();
-    return <div className="prompt-filter-row"><div className="prompt-filter-label">{label}</div><div className="prompt-filter-options">{options.map((option) => <Tag.CheckableTag key={option} checked={selected === option} className={cn("prompt-filter-tag", selected === option && "is-active")} onChange={() => onChange(option)}>{option === ALL_PROMPTS_OPTION ? t("common.all") : option}</Tag.CheckableTag>)}</div></div>;
-}
-
-function PromptGrid({ items, onOpen, onCopy, renderActions, emptyText }: { items: Prompt[]; onOpen: (item: Prompt) => void; onCopy: (item: Prompt) => void; renderActions: (item: Prompt) => ReactNode; emptyText: string }) {
-    return <div><div className="prompts-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{items.map((item) => <PromptCard key={`${item.sourceId}:${item.id}`} item={item} onOpen={() => onOpen(item)} onCopy={() => onCopy(item)} extraAction={renderActions(item)} />)}</div>{items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} className="!m-0 jm-card jm-empty min-h-[320px]" /> : null}</div>;
-}
-
 
 ========================================================================
 FILE: web/src/pages/video/index.tsx
-LINES: 1-854
+LINES: 1-1220
 ========================================================================
 import { handoffCreationToChat, ensureCreationThread, newCreationThread, saveCreationRecord } from "@/pages/chat/chat-store";
 import { RecordActions } from "@/components/creation/record-actions";
@@ -2450,12 +857,6 @@ export default function VideoPage() {
                         </article>
                     ))(entry.log))}
                         {(running || (!logs.length && !otherHistory.logs.length) || (!previewLog && results.some((result) => (result.status === "failed" || result.status === "unavailable") && !logs.some((log) => log.id === result.id) || (result.video && !logs.some((log) => log.id === result.id || (log.video && sameVideo(log.video, result.video!))))))) && (<div className={!running && !results.length ? "creation-empty-wrap" : "max-w-[620px]"}>
-
-
-========================================================================
-FILE: web/src/pages/video/index.tsx
-LINES: 855-1220
-========================================================================
                         {running && submittedPrompt && !logs.some(log => log.prompt === submittedPrompt) && <CreationRequest prompt={submittedPrompt} />}
                         <div className={running || results.length ? "mb-4 flex items-center justify-between gap-3" : "hidden"}>
                             <h2 className="text-sm text-muted-foreground">{running ? "正在生成视频…" : "生成结果"}</h2>
@@ -2872,7 +1273,7 @@ function CreationHome() {
             navigate(`/create?mode=${mode}`, { replace: true });
         } catch { /* a bad guest draft must not block the workspace */ }
     }, [user?.id, ready, navigate]);
-    if (!ready) return <PageSkeleton />;
+    if (!ready) return <PageSkeleton embedded />;
     return user ? (params.get("mode") === "chat" ? <ChatPage key={`${user.id}:${useAuthStore.getState().sessionEpoch}`} /> : params.get("mode") === "video" ? <VideoPage /> : <ImagePage />) : <GuestCreation />;
 }
 
@@ -3292,7 +1693,7 @@ export function directorClient(projectId: string, userId: string, signal: AbortS
 
 ========================================================================
 FILE: web/src/services/api/canvas-production.ts
-LINES: 1-45
+LINES: 1-46
 ========================================================================
 import { apiRequest } from './client';
 import { useAuthStore } from '@/stores/use-auth-store';
@@ -3334,9 +1735,376 @@ export function canvasProductionApi(projectId: string, signal?: AbortSignal) {
         list: () => request<{ runs: ProductionRun[] }>('/runs'),
         detail: (id: string) => request<ProductionRunDetail>(`/runs/${encodeURIComponent(id)}`),
         resume: (id: string) => request<ProductionRunDetail>(`/runs/${encodeURIComponent(id)}/resume`, 'POST', {}),
+        cancel: (id: string) => request<ProductionRunDetail>(`/runs/${encodeURIComponent(id)}/cancel`, 'POST', {}),
         pause: (id: string) => request<ProductionRunDetail>(`/runs/${encodeURIComponent(id)}/pause`, 'POST', {}),
         adopt: (input: { clientRequestId: string; expectedVersion: number; command: { type: 'adopt'; runId: string; stepId: string; resultIndex?: number; allowStale?: boolean } }) => request<{ project: AgentProject; receipt: Record<string, unknown> }>('/commands', 'POST', input),
         restore: (input: { clientRequestId: string; expectedVersion: number; command: { type: 'restore'; requestId: string } }) => request<{ project: AgentProject; receipt: Record<string, unknown> }>('/commands', 'POST', input),
     };
+}
+
+
+========================================================================
+FILE: web/src/services/api/canvas-storyboard.ts
+LINES: 1-41
+========================================================================
+import { apiRequest } from "./client";
+
+export type StoryboardShot = {
+    index: number;
+    duration: number;
+    shotSize: string;
+    cameraMove: string;
+    subject: string;
+    action: string;
+    lighting: string;
+    prompt: string;
+    videoPrompt: string;
+    dialogue: string;
+};
+
+export type StoryboardResult = {
+    title: string;
+    style: string;
+    logline: string;
+    durationSeconds: number;
+    shots: StoryboardShot[];
+    scriptText: string;
+    model: string;
+    creditsCharged: number;
+};
+
+export type StoryboardRequest = {
+    brief: string;
+    duration: number;
+    shotCount: number;
+    style?: string;
+    aspectRatio?: string;
+    model: string;
+};
+
+export function generateStoryboard(input: StoryboardRequest) {
+    return apiRequest<StoryboardResult>("/api/canvas/storyboard", {
+        method: "POST",
+        json: input,
+    });
+}
+
+
+========================================================================
+FILE: web/src/services/api/canvas-upscale.ts
+LINES: 1-42
+========================================================================
+import { apiRequest } from './client';
+
+export type UpscaleTarget = { id: string; label: string; scale?: number; width?: number; height?: number };
+export type UpscaleModel = {
+    id: string; name: string; mediaKind: 'image' | 'video'; inputMimeTypes: string[];
+    targets: UpscaleTarget[]; available: boolean; reason: string | null;
+};
+export type UpscaleCapabilities = { models: UpscaleModel[]; available: boolean; reason: string };
+export type UpscaleRun = {
+    id: string; sourceNodeId: string; purpose: 'image_upscale' | 'video_upscale';
+    source: { objectKey: string; mime: string; bytes: string; durationMs: number | null; info?: { width: number; height: number; duration?: number; fps?: number; hasAudio?: boolean } };
+    modelId: string | null; modelName: string | null; parameters: { target?: UpscaleTarget };
+    taskId: string | null; status: 'draft' | 'queued' | 'running' | 'succeeded' | 'failed' | 'review' | 'result_unavailable';
+    creditsHeld: number | null; creditsCharged: number | null; resultUrl: string | null; error: string | null;
+    result: { width: number; height: number; bytes: number; duration?: number; fps?: number; hasAudio?: boolean; mime: string } | null; createdAt: string;
+};
+export type UpscaleDraft = {
+    id: string; sourceNodeId: string; sourceObjectKey: string; mediaKind: 'image' | 'video'; modelId?: string; targetId?: string;
+};
+type Session = { userId: string; signal: AbortSignal };
+const options = ({ userId, signal }: Session) => ({ signal, headers: { 'X-Sundas-User': userId } });
+const runsPath = (projectId: string) => `/api/canvas/projects/${encodeURIComponent(projectId)}/upscale-runs`;
+
+export function getUpscaleCapabilities(kind: 'image' | 'video', session: Session) {
+    return apiRequest<UpscaleCapabilities>(`/api/canvas/upscale/capabilities?kind=${kind}`, options(session));
+}
+export function getUpscaleRuns(projectId: string, sourceNodeId: string, session: Session) {
+    return apiRequest<{ runs: UpscaleRun[] }>(`${runsPath(projectId)}?${new URLSearchParams({ sourceNodeId })}`, options(session));
+}
+export function saveUpscaleDraft(projectId: string, draft: UpscaleDraft, session: Session) {
+    return apiRequest<{ run: UpscaleRun }>(runsPath(projectId), { ...options(session), method: 'POST', json: draft });
+}
+export type UpscaleQuote = { credits: number; routeId: string; target: { width: number; height: number }; unit: string; quantity: number };
+export function quoteUpscaleRun(projectId: string, runId: string, session: Session) {
+    return apiRequest<UpscaleQuote>(`${runsPath(projectId)}/${encodeURIComponent(runId)}/quote`, { ...options(session), method: 'POST' });
+}
+export function submitUpscaleRun(projectId: string, runId: string, quote: UpscaleQuote, session: Session) {
+    return apiRequest<{ run: UpscaleRun }>(`${runsPath(projectId)}/${encodeURIComponent(runId)}/submit`, { ...options(session), method: 'POST', json: { expectedCredits: quote.credits, routeId: quote.routeId } });
+}
+export function resumeUpscaleRun(projectId: string, runId: string, session: Session) {
+    return apiRequest<{ run: UpscaleRun }>(`${runsPath(projectId)}/${encodeURIComponent(runId)}/resume`, { ...options(session), method: 'POST' });
+}
+
+
+========================================================================
+FILE: web/src/services/api/character-workflow.ts
+LINES: 1-26
+========================================================================
+import { apiRequest, type ApiRequestInit } from "./client";
+import { useAuthStore } from "@/stores/use-auth-store";
+
+export type CharacterInput = {
+    sourceKey: string; characterKey: string; target: string; instructions: string;
+    imageModel: string; videoModel: string; imageSize?: string; resolution: string; ratio: string;
+    start: number; end: number | null; keepAudio: boolean;
+};
+export type CharacterMedia = { key: string; kind: "image" | "video"; url?: string; mime?: string; bytes?: number; width?: number; height?: number; duration?: number };
+export type CharacterStepName = "prepare" | "image" | "video" | "assemble";
+export type CharacterStep = {
+    id: string; name: CharacterStepName; attempt: number; status: "queued" | "running" | "succeeded" | "failed" | "review";
+    taskIds: string[]; error?: string; output: { media?: CharacterMedia[]; range?: { start: number; end: number; duration: number }; frame?: CharacterMedia; clip?: CharacterMedia };
+};
+export type CharacterRun = { id: string; projectId: string; input: CharacterInput; selectedKey?: string; paused: boolean; createdAt: string; steps?: CharacterStep[] };
+
+export function characterRequest<T>(path: string, init: ApiRequestInit = {}) {
+    const auth = useAuthStore.getState();
+    if (!auth.user) return Promise.reject(new Error("请先登录"));
+    const owner = auth.user.id, epoch = auth.sessionEpoch;
+    return apiRequest<T>(`/api/canvas/character-runs${path}`, { ...init, headers: { ...init.headers, "X-Sundas-User": owner } }).then(result => {
+        const current = useAuthStore.getState();
+        if (current.user?.id !== owner || current.sessionEpoch !== epoch) throw new DOMException("登录账户已变化", "AbortError");
+        return result;
+    });
+}
+
+
+========================================================================
+FILE: web/src/services/api/client.ts
+LINES: 1-6
+========================================================================
+import { demoRequest } from '@/audit/demo';
+export type ApiRequestInit = RequestInit & { json?: unknown };
+export class ApiError extends Error {
+ constructor(message:string,public status:number,public errorCode?:string){super(message);}
+}
+export async function apiRequest<T=unknown>(path:string,init:ApiRequestInit={}):Promise<T>{return demoRequest(path,init) as Promise<T>;}
+
+
+========================================================================
+FILE: web/src/services/api/creative-agent.ts
+LINES: 1-69
+========================================================================
+import { apiRequest } from './client';
+import { AGENT_CAPABILITIES_HEADER, DIRECTOR_AGENT_CAPABILITY } from '../../../../shared/agent-capabilities';
+import { useAuthStore } from '@/stores/use-auth-store';
+import type { CanvasConnection, CanvasNodeData } from '@/types/canvas';
+
+export type AgentProject = { id: string; title: string; content: { nodes: CanvasNodeData[]; connections: CanvasConnection[]; [key: string]: unknown }; version: number; updatedAt: string };
+export type CreativeSkill = { id: string; source: 'builtin' | 'personal'; enabled: boolean; version: number; name: string; description: string; content: string; requirements: string[] };
+export type SkillDraft = Pick<CreativeSkill, 'name' | 'description' | 'content' | 'requirements'>;
+export type SkillVersion = SkillDraft & { version: number; createdAt: string };
+export type CreativeAgentOperation =
+    | { type: 'media_inspect'; modelId: string; renderRequestId?: string; captureItemId?: string; frames: number[]; instructions: string }
+    | { type: 'production_capture'; runId: string; frames: number[] }
+    | { type: 'production_edit'; commands: Array<{ type: string; [key: string]: unknown }> }
+    | { type: 'director_capture'; sceneId: string; parameters: import('./canvas-director').DirectorRenderParameters }
+    | { type: 'director_command'; sceneId: string; commands: import('../../../../shared/director-commands').DirectorCommand[] }
+    | { type: 'add_node'; id: string; nodeType: 'text' | 'image' | 'video' | 'audio' | 'group'; title: string; position: { x: number; y: number }; text?: string; prompt?: string }
+    | { type: 'move_node'; nodeId: string; position: { x: number; y: number } }
+    | { type: 'update_prompt'; nodeId: string; prompt: string }
+    | { type: 'connect_nodes'; fromNodeId: string; toNodeId: string }
+    | { type: 'generate'; nodeId: string; mode: 'text' | 'image' | 'video' | 'audio'; modelId: string; prompt: string; referenceNodeIds: string[]; seconds?: number; size?: string; resolution?: string; voice?: string }
+    | { type: 'creative_tool'; tool: 'upscale' | 'character_replacement'; nodeId: string; referenceNodeIds: string[]; instructions: string }
+    | { type: 'production_tool'; action: 'script' | 'images' | 'narration' | 'check' | 'preview'; modelId?: string; shotIds?: string[]; narrationIds?: string[]; prompt?: string; voice?: string };
+export type AgentQuote = { minCredits: number | null; maxCredits: number | null; message: string };
+export type CreativeToolHandoff = { tool: 'upscale' | 'character_replacement'; projectId: string; projectVersion: number; operationId: string; nodeId: string; referenceNodeIds: string[]; instructions: string; sourceKey: string; referenceKeys: string[] };
+export type AgentTurn = { id: string; threadId: string; status: 'planning' | 'ready' | 'executing' | 'paused' | 'completed' | 'failed' | 'review'; currentVersion: number; baseVersion: number; prompt: string; planningTaskId: string; planningCredits: number; error?: string; plan?: { reply: string; operations: CreativeAgentOperation[]; quotes: AgentQuote[] }; skillSnapshots: Array<{ id: string; version: number; name: string }>; createdAt: string };
+export type AgentItem = { itemId: string; threadId: string; turnId: string; position: number; role: 'user' | 'assistant' | 'tool'; status: 'pending' | 'executing' | 'submitted' | 'succeeded' | 'failed' | 'review'; content: { text?: string; operation?: CreativeAgentOperation; quote?: AgentQuote }; receipt?: { renderReceipt?: { outputs?: Array<{ objectKey: string; frame?: number }> }; inspectedFrames?: Array<{ frame: number; url: string }>; message?: string; toolHandoff?: CreativeToolHandoff; taskIds?: string[]; creditsCharged?: number; outputs?: Array<{ id: string; kind: string; url?: string; text?: string; frame?: number; timeSeconds?: number }>; [key: string]: unknown }; taskIds: string[] };
+export type AgentThread = { id: string; title: string; createdAt: string; updatedAt: string };
+export type AgentState = { protocolVersion: number; storageVersion: number; thread: AgentThread & { projectId: string }; turns: AgentTurn[]; items: AgentItem[]; project: AgentProject };
+export type AgentCatalog = { models: Array<{ id: string; name: string; credits: number }>; generationModels: Array<{ id: string; name: string; capability: string }>; contextMode: 'text'; tools: Array<{ name: string; description: string }> };
+export type AgentTurnInput = { clientRequestId: string; modelId: string; expectedVersion: number; prompt: string; selectedNodeIds: string[]; skills: Array<{ id: string; version: number }>; acceptedPlanningCredits: number };
+
+/** Captures account and epoch once; both request and response must belong to this session. */
+export function creativeAgentApi(signal?: AbortSignal) {
+    const session = useAuthStore.getState();
+    const owner = session.user?.id;
+    const epoch = session.sessionEpoch;
+    const current = () => owner && useAuthStore.getState().user?.id === owner && useAuthStore.getState().sessionEpoch === epoch;
+    async function request<T>(path: string, method = 'GET', json?: unknown): Promise<T> {
+        if (!current()) throw new Error('登录账户已变化，请重新打开创作助手');
+        const result = await apiRequest<T>(path, { method, json, signal, headers: { 'X-Sundas-User': owner!, [AGENT_CAPABILITIES_HEADER]: DIRECTOR_AGENT_CAPABILITY } });
+        if (!current() || signal?.aborted) throw new Error('画布会话已变化，本次结果未回填');
+        return result;
+    }
+    async function state(path: string, method = 'GET', json?: unknown) {
+        const value = await request<AgentState>(path, method, json);
+        if (value.protocolVersion !== 1 || value.storageVersion !== 1) throw new Error('助手数据版本不受支持，请更新应用；原记录已保留');
+        if (value.items.some(item => item.threadId !== value.thread.id || !value.turns.some(turn => turn.id === item.turnId && turn.threadId === item.threadId))) throw new Error('助手消息归属不一致，请重新加载');
+        return value;
+    }
+    return {
+        undoDirector: (projectId: string, commandId: string, expectedVersion: number) => request<{ project: AgentProject }>(`/api/canvas/projects/${encodeURIComponent(projectId)}/director/commands/${encodeURIComponent(commandId)}/undo`, 'POST', { expectedVersion }),
+        catalog: () => request<AgentCatalog>('/api/canvas-agent/models'),
+        threads: (projectId: string) => request<{ threads: AgentThread[] }>(`/api/canvas-agent/threads?projectId=${encodeURIComponent(projectId)}`),
+        createThread: (projectId: string, title: string) => state('/api/canvas-agent/threads', 'POST', { projectId, title }),
+        thread: (id: string) => state(`/api/canvas-agent/threads/${encodeURIComponent(id)}`),
+        plan: (id: string, input: AgentTurnInput) => state(`/api/canvas-agent/threads/${encodeURIComponent(id)}/turns`, 'POST', input),
+        confirm: (id: string, expectedVersion: number) => state(`/api/canvas-agent/turns/${encodeURIComponent(id)}/confirm`, 'POST', { confirmed: true, expectedVersion }),
+        step: (id: string, itemId: string, expectedVersion: number) => state(`/api/canvas-agent/turns/${encodeURIComponent(id)}/steps/${encodeURIComponent(itemId)}`, 'POST', { expectedVersion }),
+        pause: (id: string) => state(`/api/canvas-agent/turns/${encodeURIComponent(id)}/pause`, 'POST', {}),
+        refresh: (id: string) => state(`/api/canvas-agent/turns/${encodeURIComponent(id)}/refresh`, 'POST', {}),
+        skills: () => request<{ skills: CreativeSkill[] }>('/api/creative-skills'),
+        versions: (id: string) => request<{ versions: SkillVersion[] }>(`/api/creative-skills/${id}/versions`),
+        createSkill: (value: SkillDraft) => request<{ id: string; version: number }>('/api/creative-skills', 'POST', value),
+        editSkill: (id: string, value: SkillDraft, expectedVersion: number) => request(`/api/creative-skills/${id}`, 'PUT', { ...value, expectedVersion }),
+        enableSkill: (id: string, enabled: boolean) => request(`/api/creative-skills/${id}`, 'PATCH', { enabled }),
+        copySkill: (id: string, version: number) => request<{ id: string; version: number }>(`/api/creative-skills/${id}/copy`, 'POST', { version }),
+        restoreSkill: (id: string, version: number, expectedVersion: number) => request(`/api/creative-skills/${id}/restore`, 'POST', { version, expectedVersion }),
+    };
+}
+
+
+========================================================================
+FILE: web/src/services/api/generation-history.ts
+LINES: 1-131
+========================================================================
+import { apiRequest } from './client';
+
+type HistoryMedia = { id:string;kind:string;url:string;mime:string;bytes:number };
+type HistoryTask = { id:string;type:string;modelId:string|null;modelName:string;routeId?:string|null;params:Record<string,unknown>;status:string;error:string|null;createdAt:string;finishedAt:string|null;creditsCharged?:number;reconciliationRequired?:boolean;media:HistoryMedia[] };
+export type RestoredLog = {
+    id:string;serverTaskIds:string[];createdAt:number;title:string;prompt:string;time:string;model:string;
+    config:Record<string,string>;references:[];durationMs:number;size:string;resolution:string;seconds:string;
+    status:'success'|'failed'|'pending'|'unavailable';error?:string;
+    task?:{id:string;provider:'openai';model:string};
+    images:{id:string;dataUrl:string;storageKey?:string;width:number;height:number;bytes:number;mimeType:string;durationMs:number}[];
+    video?:{id:string;url:string;storageKey:string;width:number;height:number;bytes:number;mimeType:string;durationMs:number};
+    successCount:number;failCount:number;imageCount:number;
+    creditsCharged?:number;reconciliationRequired?:boolean;referenceCount?:number;referenceHistoryUnknown?:boolean;
+};
+export async function fetchRecentGenerationHistory(owner:string,type:'image'|'video') {
+    const data=await apiRequest<{items:HistoryTask[]}>(`/api/generations/history?type=${type}&page=1`,{headers:{'X-Sundas-User':owner}});
+    return data.items.map(row=>({id:row.id,title:String(row.params.prompt??'').replace(/^参考图片编号：[^\n]*\n+/, '').replace(/^Reference image labels:[^\n]*\n+/i, '').trim().slice(0,80)||row.modelName,createdAt:new Date(row.createdAt).getTime(),mode:type}));
+}
+export async function fetchGenerationHistory(owner:string,type:'image'|'video',page=1, filter: { id?: string; active?: boolean } = {}) {
+    const params = new URLSearchParams({ type, page: String(page), ...(filter.id ? { id: filter.id } : {}), ...(filter.active ? { active: 'true' } : {}) });
+    const data=await apiRequest<{items:HistoryTask[];hasMore:boolean;hiddenTaskIds:string[]}>(`/api/generations/history?${params}`,{headers:{'X-Sundas-User':owner}});
+    const logs:RestoredLog[]=data.items.map(row=>{
+        const modelId=row.modelId??'';
+        const createdAt=new Date(row.createdAt).getTime();
+        const durationMs=row.finishedAt?Math.max(0,new Date(row.finishedAt).getTime()-createdAt):0;
+        const prompt=String(row.params.prompt??'').replace(/^参考图片编号：[^\n]*\n+/, '').replace(/^Reference image labels:[^\n]*\n+/i, '').trim();
+        const images=row.media.filter(m=>m.kind==='image').map(m=>({id:m.id,dataUrl:m.url,width:0,height:0,bytes:Number(m.bytes),mimeType:m.mime,durationMs}));
+        const media=row.media.find(m=>m.kind==='video');
+        const status=row.status==='succeeded'?(row.media.length?'success':'unavailable'):row.status==='failed'?'failed':'pending';
+        return {id:row.id,serverTaskIds:[row.id],createdAt,title:prompt.slice(0,80)||row.modelName,prompt,time:new Date(createdAt).toLocaleString(),model:row.modelName,
+            config:{model:modelId,imageModel:modelId,videoModel:modelId,videoRouteId:row.routeId??'',size:String(row.params.size??''),vquality:String(row.params.resolution??''),videoSeconds:String(row.params.seconds??''),videoMode:String(row.params.mode??''),videoGenerateAudio:String(row.params.generateAudio??row.params.generate_audio??''),videoWatermark:String(row.params.watermark??''),count:String(images.length||1),quality:String(row.params.quality??''),background:String(row.params.background??'')},
+            references:[],durationMs,size:String(row.params.size??''),resolution:String(row.params.resolution??''),seconds:String(row.params.seconds??''),status,
+            error:row.error??(status==='unavailable'?'生成结果文件暂不可用':undefined),task:type==='video'?{id:row.id,provider:'openai',model:modelId}:undefined,
+            images,video:media?{id:media.id,url:media.url,storageKey:'',width:0,height:0,bytes:Number(media.bytes),mimeType:media.mime,durationMs}:undefined,
+            successCount:images.length,failCount:status==='failed'?1:0,imageCount:images.length,
+            creditsCharged:!row.reconciliationRequired && ['succeeded','failed'].includes(row.status) && row.creditsCharged != null ? Number(row.creditsCharged) : undefined,
+            reconciliationRequired:row.reconciliationRequired,referenceCount:Array.isArray(row.params.referenceInputs)?row.params.referenceInputs.length:undefined,
+            referenceHistoryUnknown:type==='image' && (!Array.isArray(row.params.referenceInputs) || row.params.referenceInputs.length>0)};
+    });
+    return {logs,hiddenTaskIds:data.hiddenTaskIds,hasMore:data.hasMore};
+}
+
+// Keep previously opened pages while refreshing the newest page after a task
+// update. Requests are serialized so a refresh and an older-page load cannot
+// overwrite one another.
+export class GenerationHistoryPager {
+    private records = new Map<string, RestoredLog>();
+    private activeIds = new Set<string>();
+    private hidden: string[] = [];
+    private nextPage = 1;
+    private more = true;
+    private queue: Promise<unknown> = Promise.resolve();
+
+    constructor(private owner: string, private type: 'image' | 'video') {}
+
+    private enqueue<T>(run: () => Promise<T>): Promise<T> {
+        const result = this.queue.then(run, run);
+        this.queue = result.catch(() => undefined);
+        return result;
+    }
+
+    private async fetch(page: number) {
+        const data = await fetchGenerationHistory(this.owner, this.type, page);
+        this.hidden = data.hiddenTaskIds;
+        for (const id of this.hidden) this.records.delete(id);
+        for (const log of data.logs) this.records.set(log.id, log);
+        if (page >= this.nextPage) {
+            this.nextPage = page + 1;
+            this.more = data.hasMore;
+        }
+        return this.snapshot();
+    }
+
+    refresh() { return this.enqueue(async () => {
+        await this.fetch(1);
+        const active = new Set<string>();
+        for (let page = 1; ; page++) {
+            const result = await fetchGenerationHistory(this.owner, this.type, page, { active: true });
+            for (const log of result.logs) { active.add(log.id); this.records.set(log.id, log); }
+            if (!result.hasMore) break;
+        }
+        for (const id of this.activeIds) {
+            if (!active.has(id)) await this.readRecord(id);
+        }
+        this.activeIds = active;
+        return this.snapshot();
+    }); }
+    private async readRecord(id: string) {
+        const result = await fetchGenerationHistory(this.owner, this.type, 1, { id });
+        this.hidden = result.hiddenTaskIds;
+        for (const hidden of this.hidden) this.records.delete(hidden);
+        if (!result.logs.length) this.records.delete(id);
+        for (const log of result.logs) this.records.set(log.id, log);
+        return this.snapshot();
+    }
+    loadRecord(id: string) { return this.enqueue(() => this.readRecord(id)); }
+    loadMore() { return this.enqueue(() => this.more ? this.fetch(this.nextPage) : Promise.resolve(this.snapshot())); }
+    snapshot() { return { logs: [...this.records.values()], hiddenTaskIds: this.hidden, hasMore: this.more }; }
+}
+type MergeLog = {id:string;createdAt:number;serverTaskIds?:string[];task?:{id:string};images?:{dataUrl:string}[];video?:unknown;references?:unknown[];config?:unknown;prompt?:string;model?:string;status?:string;creditsCharged?:number;reconciliationRequired?:boolean;referenceHistoryUnknown?:boolean};
+function plainPrompt(log: MergeLog) {
+    return (log.prompt ?? '').replace(/^参考图片编号：[^\n]*\n+/, '').replace(/^Reference image labels:[^\n]*\n+/i, '').trim();
+}
+function mergeVideoConfig(local: unknown, remote: unknown) {
+    if (!local || typeof local !== 'object') return remote;
+    if (!remote || typeof remote !== 'object') return local;
+    const remoteConfig = remote as Record<string, unknown>;
+    const localValues = Object.fromEntries(Object.entries(local).filter(([, value]) => value !== '' && value != null));
+    return { ...remoteConfig, ...localValues, ...(remoteConfig.videoRouteId ? { videoRouteId: remoteConfig.videoRouteId } : {}) };
+}
+export function generationTaskIds(log:MergeLog) { return log.serverTaskIds??(log.task?[log.task.id]:[]); }
+export function mergeGenerationHistory<T extends MergeLog>(local:T[],remote:T[],hidden:string[]) {
+    const remaining=new Map(remote.map(log=>[log.id,log]));
+    const merged:T[]=[];
+    for(const log of local) {
+        const ids=generationTaskIds(log);
+        if(ids.some(id=>hidden.includes(id)))continue;
+        const matches=remote.filter(item=>ids.includes(item.id)||log.images?.some(image=>item.images?.some(remoteImage=>image.dataUrl===remoteImage.dataUrl))||(!ids.length&&!log.images?.length&&item.status==='failed'&&log.status==='failed'&&log.model===item.model&&plainPrompt(log)&&plainPrompt(log)===plainPrompt(item)&&Math.abs(item.createdAt-log.createdAt)<=15_000));
+        const match=matches[0];
+        if(match) {
+            matches.forEach(item=>remaining.delete(item.id));
+            const value=log.task?{...log,...match,id:log.id,references:log.references??match.references,config:mergeVideoConfig(log.config,match.config),video:match.video??log.video,status:match.status==='pending' && log.status && log.status!=='pending'?log.status:match.status}:{...match,...log};
+            const completeMatch=ids.length ? ids.every(id=>matches.some(item=>item.id===id)) : (log.images?.length??0)<=1 && matches.length===1;
+            merged.push({...value,...(!log.task && Array.isArray(log.references)?{referenceHistoryUnknown:false}:{}),serverTaskIds:[...new Set([...ids,...matches.map(item=>item.id)])],reconciliationRequired:matches.some(item=>item.reconciliationRequired),creditsCharged:completeMatch && matches.every(item=>item.creditsCharged != null)?matches.reduce((sum,item)=>sum+(item.creditsCharged??0),0):undefined});
+        } else merged.push(log);
+    }
+    return [...merged,...remaining.values()].sort((a,b)=>b.createdAt-a.createdAt);
+}
+export async function hideGenerationHistory(owner:string,ids:string[]) {
+    await Promise.all([...new Set(ids)].map(id=>apiRequest(`/api/generations/history/${encodeURIComponent(id)}`,{method:'DELETE',headers:{'X-Sundas-User':owner}})));
+}
+
+
+========================================================================
+FILE: web/src/services/api/generation-wallet.ts
+LINES: 1-9
+========================================================================
+import { useAuthStore } from "@/stores/use-auth-store";
+
+export function refreshGenerationWallet(owner?: string) {
+    const auth = useAuthStore.getState();
+    if (owner && auth.ready && auth.user?.id === owner) {
+        void auth.refreshWallet().catch(() => undefined);
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('sundas:generation-updated', { detail: { owner } }));
+    }
 }
 

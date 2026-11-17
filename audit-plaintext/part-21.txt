@@ -1,2363 +1,11 @@
-SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
-This is uncompressed source text, not a directory index or archive.
-Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
-Each section includes its original path and line range. Demo adapters are under web/src/audit.
-
-
-========================================================================
-FILE: web/src/pages/home/home-jimeng.css
-LINES: 1-404
-========================================================================
-/* 首页（landing）：参考即梦的「大输入框 + 胶囊参数 + 圆形发送」布局 */
-
-.home-landing {
-    --hj-surface: #1A1A1A;
-    --hj-border: rgba(255, 255, 255, 0.08);
-    --hj-border-focus: rgba(255, 255, 255, 0.24);
-    --hj-chip: rgba(255, 255, 255, 0.06);
-    --hj-chip-hover: rgba(255, 255, 255, 0.11);
-    --hj-text: rgba(255, 255, 255, 0.88);
-    --hj-muted: rgba(255, 255, 255, 0.70);
-    --hj-faint: rgba(255, 255, 255, 0.40);
-}
-
-/* ---------- 欢迎区 ---------- */
-.home-landing .landing-welcome {
-    padding: 40px 0 28px;
-    background: none;
-}
-.home-landing .landing-eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
-    padding: 4px 12px;
-    border: 1px solid var(--hj-border);
-    border-radius: 999px;
-    color: var(--hj-muted);
-    font-size: 11px;
-    letter-spacing: 0.04em;
-}
-.home-landing .landing-welcome h1 {
-    font-size: clamp(28px, 3vw, 44px);
-    font-weight: 600;
-    line-height: 1.15;
-    letter-spacing: -0.01em;
-    color: #FFFFFF;
-}
-.home-landing .landing-intro {
-    margin-top: 12px;
-    color: var(--hj-muted);
-    font-size: 14px;
-}
-.home-landing .landing-switch {
-    width: auto;
-    display: inline-flex;
-    gap: 4px;
-    margin: 24px auto 0;
-    padding: 4px;
-    border: 1px solid var(--hj-border);
-    background: rgba(255, 255, 255, 0.03);
-}
-.home-landing .landing-switch a {
-    flex: none;
-    min-width: 96px;
-    padding: 8px 18px;
-    color: var(--hj-muted);
-    font-size: 13px;
-    font-weight: 500;
-    transition: color 0.15s ease, background-color 0.15s ease;
-}
-.home-landing .landing-switch a:hover { color: var(--hj-text); }
-.home-landing .landing-switch .is-active {
-    /* 激活态走品牌青柠：淡青柠底 + 青柠字 + 1px 青柠描边 */
-    background: rgba(216, 255, 62, 0.14);
-    color: #d8ff3e;
-    box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.32);
-}
-
-/* ---------- 生成框 ---------- */
-.home-landing .home-composer {
-    max-width: 960px;
-    padding: 18px 18px 14px;
-    border: 1px solid var(--hj-border);
-    border-radius: 24px;
-    background: var(--hj-surface);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 24px 60px rgba(0, 0, 0, 0.35);
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.home-landing .home-composer:focus-within { border-color: var(--hj-border-focus); }
-.home-landing .home-composer.is-dragging {
-    border-color: color-mix(in srgb, var(--brand) 60%, transparent);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 12%, transparent);
-}
-
-.home-landing .home-editor {
-    display: flex;
-    align-items: flex-start;
-    gap: 16px;
-}
-.home-landing .home-prompt-wrap { flex: 1; min-width: 0; }
-.home-landing .home-editor .home-prompt {
-    height: 96px;
-    min-height: 96px;
-    padding: 6px 40px 8px 2px;
-    background: transparent;
-    color: var(--hj-text);
-    font-size: 15px;
-    line-height: 1.6;
-}
-.home-landing .home-editor .home-prompt::placeholder { color: var(--hj-faint); }
-
-/* 参考素材：左侧倾斜卡片堆叠 */
-.home-landing .home-editor .home-material-bar {
-    order: -1;
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    flex: none;
-    max-width: 260px;
-    margin: 0;
-    padding: 4px 0 0 4px;
-    border: 0;
-    gap: 0;
-}
-.home-landing .home-editor .home-material-hint { display: none; }
-.home-landing .home-editor .home-material-add.is-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    width: 56px;
-    height: 72px;
-    padding: 0;
-    border: 1px dashed rgba(255, 255, 255, 0.22);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--hj-muted);
-    font-size: 11px;
-    transform: rotate(-6deg);
-    transition: transform 0.18s ease, color 0.15s ease, border-color 0.15s ease;
-}
-.home-landing .home-editor .home-material-add.is-card::before { display: none; }
-.home-landing .home-editor .home-material-add.is-card:hover:not(:disabled),
-.home-landing .home-editor .home-material-add.is-card:focus-visible {
-    transform: rotate(0deg);
-    border-color: rgba(255, 255, 255, 0.4);
-    color: var(--hj-text);
-}
-.home-landing .home-editor .home-material-item {
-    width: 56px;
-    height: 72px;
-    margin-left: -18px;
-    border: 2px solid var(--hj-surface);
-    border-radius: 12px;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
-    transform: rotate(4deg);
-}
-.home-landing .home-editor .home-material-item:nth-of-type(even) { transform: rotate(-3deg); }
-.home-landing .home-editor .home-material-item:hover {
-    z-index: 2;
-    transform: rotate(0deg) translateY(-4px);
-}
-.home-landing .home-editor .home-material-item img { object-fit: cover; }
-
-/* 工具栏：胶囊参数 */
-.home-landing .home-composer .home-toolbar {
-    margin-top: 12px;
-    gap: 10px;
-    align-items: center;
-}
-.home-landing .home-toolbar-left { gap: 6px; row-gap: 6px; }
-
-.home-landing .home-mode-pills {
-    display: inline-flex;
-    height: 34px;
-    padding: 3px;
-    border-radius: 999px;
-    background: var(--hj-chip);
-}
-.home-landing .home-mode-pills button {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    height: 28px;
-    padding: 0 12px;
-    border-radius: 999px;
-    color: var(--hj-muted);
-    font-size: 12px;
-    font-weight: 500;
-    transition: background-color 0.15s ease, color 0.15s ease;
-}
-.home-landing .home-mode-pills button:hover:not(:disabled) { color: var(--hj-text); }
-.home-landing .home-mode-pills button.is-active {
-    background: rgba(216, 255, 62, 0.16);
-    color: #d8ff3e;
-    box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.32);
-}
-.home-landing .home-mode-pills button:disabled { cursor: not-allowed; opacity: 0.5; }
-
-.home-landing .home-toolbar .canvas-composer-model-picker {
-    height: 34px !important;
-    min-width: 0 !important;
-    max-width: 240px;
-    gap: 6px;
-    padding-inline: 12px;
-    border: 0 !important;
-    border-radius: 999px !important;
-    background: var(--hj-chip) !important;
-    box-shadow: none !important;
-    color: var(--hj-text);
-    font-size: 12px;
-    font-weight: 500;
-}
-.home-landing .home-toolbar .canvas-composer-model-picker:hover,
-.home-landing .home-toolbar .canvas-composer-model-picker[data-state="open"] { background: var(--hj-chip-hover) !important; }
-
-.home-landing .home-composer .home-param {
-    height: 34px;
-    gap: 0;
-    padding-left: 12px;
-    border-radius: 999px;
-    background: var(--hj-chip);
-    transition: background-color 0.15s ease;
-}
-.home-landing .home-composer .home-param:hover { background: var(--hj-chip-hover); }
-.home-landing .home-composer .home-param > span {
-    color: var(--hj-faint);
-    font-size: 12px;
-}
-.home-landing .home-composer .home-value-trigger {
-    height: 34px;
-    padding: 0 10px 0 6px;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--hj-text);
-    font-size: 12px;
-    font-weight: 500;
-}
-.home-landing .home-composer .home-value-trigger:hover,
-.home-landing .home-composer .home-value-trigger.is-open { background: transparent; }
-.home-landing .home-composer .home-value-trigger svg { opacity: 0.55; }
-.home-landing .home-control-panel {
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    background: #1F1F1F;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-}
-
-/* 右侧：积分 + 发送 */
-.home-landing .home-toolbar-right { gap: 8px; flex: none; }
-.home-landing .home-credit-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    height: 34px;
-    padding: 0 6px;
-    color: var(--hj-muted);
-    font-size: 13px;
-    font-weight: 500;
-    font-variant-numeric: tabular-nums;
-}
-.home-landing .home-credit-chip svg { color: var(--brand); fill: currentColor; }
-.home-landing .home-send {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    flex: none;
-    border-radius: 999px;
-    background: var(--brand);
-    color: var(--brand-ink);
-    box-shadow: none;
-    transition: transform 0.15s ease, background-color 0.15s ease;
-}
-.home-landing .home-send:hover:not(:disabled) { transform: scale(1.02); background: var(--accent-hover); }
-.home-landing .home-send:active:not(:disabled) { transform: scale(0.96); background: var(--accent-active); }
-.home-landing .home-send:disabled {
-    cursor: not-allowed;
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--hj-faint);
-    box-shadow: none;
-}
-.home-landing .home-send:focus-visible,
-.home-landing .home-mode-pills button:focus-visible,
-.home-landing .home-value-trigger:focus-visible,
-.home-landing .home-material-add.is-card:focus-visible {
-    outline: 2px solid var(--brand);
-    outline-offset: 2px;
-}
-.home-landing .home-caption {
-    margin: 12px 0 0;
-    color: var(--hj-faint);
-    font-size: 12px;
-}
-
-/* ---------- 快捷入口 ---------- */
-.home-landing .landing-tools { margin: 40px 0 48px; gap: 12px; }
-.home-landing .landing-tool {
-    gap: 14px;
-    padding: 12px;
-    border: 1px solid var(--hj-border);
-    border-radius: 16px;
-    background: #1A1A1A;
-    transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
-}
-.home-landing .landing-tool:hover {
-    border-color: rgba(255, 255, 255, 0.18);
-    background: #202020;
-    transform: translateY(-1px);
-}
-/* 每个入口一个低饱和主色，只用于底座光晕与图标渐变末端，避免四张卡片花掉 */
-.home-landing .landing-tool[data-tool="image"] { --tool-rgb: 124, 192, 255; }
-.home-landing .landing-tool[data-tool="video"] { --tool-rgb: 176, 158, 255; }
-.home-landing .landing-tool[data-tool="canvas"] { --tool-rgb: 108, 226, 200; }
-.home-landing .landing-tool[data-tool="prompts"] { --tool-rgb: 255, 199, 138; }
-
-/* 玻璃质感底座：顶部高光 + 主色渐变 + 内阴影，比纯色方块更像「图标容器」。
-   选择器带上 .landing-tool 是为了压过 pages-redesign.css 里的 main.home-landing .landing-tool-art。 */
-main.home-landing .landing-tool .landing-tool-art {
-    position: relative;
-    display: grid;
-    place-items: center;
-    width: 64px;
-    height: 64px;
-    flex: 0 0 64px;
-    overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 16px;
-    background:
-        radial-gradient(120% 110% at 26% 6%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 58%),
-        linear-gradient(158deg, rgba(var(--tool-rgb), 0.26) 0%, rgba(var(--tool-rgb), 0.08) 58%, rgba(var(--tool-rgb), 0.16) 100%);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.16),
-        inset 0 -16px 24px -18px rgba(0, 0, 0, 0.7),
-        0 10px 22px -18px rgba(var(--tool-rgb), 0.9);
-    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.28s ease, border-color 0.2s ease;
-}
-/* 顶部一层极淡的玻璃反光，让底座有厚度而不是平涂 */
-main.home-landing .landing-tool .landing-tool-art::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 44%);
-    pointer-events: none;
-}
-main.home-landing .landing-tool .landing-tool-icon {
-    position: relative;
-    z-index: 1;
-    width: 28px;
-    height: 28px;
-    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
-}
-main.home-landing .landing-tool:hover .landing-tool-art {
-    transform: translateY(-1px) scale(1.03);
-    border-color: rgba(255, 255, 255, 0.18);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.2),
-        inset 0 -16px 24px -18px rgba(0, 0, 0, 0.7),
-        0 14px 28px -16px rgba(var(--tool-rgb), 1);
-}
-.home-landing .landing-tool h2 { color: var(--hj-text); font-size: 14px; }
-.home-landing .landing-tool p { margin-top: 4px; color: var(--hj-muted); font-size: 12px; }
-
-@media (prefers-reduced-motion: reduce) {
-    .home-landing .home-send,
-    .home-landing .landing-tool,
-    main.home-landing .landing-tool .landing-tool-art,
-    .home-landing .home-editor .home-material-add.is-card,
-    .home-landing .home-editor .home-material-item { transition: none; }
-    main.home-landing .landing-tool:hover .landing-tool-art { transform: none; }
-}
-
-/* ---------- 窄屏 ---------- */
-@media (max-width: 640px) {
-    .home-landing .landing-welcome { padding-top: 20px; }
-    .home-landing .home-composer { padding: 14px 12px 12px; border-radius: 20px; }
-    .home-landing .home-editor { gap: 12px; padding-inline: 0; }
-    .home-landing .home-editor .home-material-bar { max-width: 120px; }
-    .home-landing .home-editor .home-material-add.is-card,
-    .home-landing .home-editor .home-material-item { width: 46px; height: 60px; }
-    .home-landing .home-editor .home-prompt { height: 84px; min-height: 84px; font-size: 14px; }
-    .home-landing .home-composer .home-toolbar { flex-wrap: wrap; }
-    .home-landing .home-composer .home-toolbar-left {
-        display: flex;
-        flex-wrap: wrap;
-        width: 100%;
-        gap: 6px;
-    }
-    .home-landing .home-toolbar-left > :first-child { grid-column: auto; }
-    .home-landing .home-composer .home-param { flex-direction: row; align-items: center; height: 34px; }
-    .home-landing .home-composer .home-control-wrap { position: static; width: auto; }
-    .home-landing .home-composer .home-value-trigger { width: auto; min-height: 34px; }
-    .home-landing .home-composer .home-control-panel { left: 12px; right: 12px; width: auto; }
-    .home-landing .home-composer .home-toolbar-right { flex-direction: row; align-items: center; justify-content: flex-end; width: 100%; }
-    .home-landing .landing-tool { gap: 10px; }
-    main.home-landing .landing-tool .landing-tool-art {
-        width: 44px;
-        height: 44px;
-        flex-basis: 44px;
-        border-radius: 13px;
-    }
-    main.home-landing .landing-tool .landing-tool-icon { width: 22px; height: 22px; }
-}
-.home-landing .home-editor .home-prompt,
-.home-landing .home-editor .home-prompt:focus,
-.home-landing .home-editor .home-prompt:focus-visible {
-    border: 0;
-    outline: none;
-    box-shadow: none;
-}
-
-
-========================================================================
-FILE: web/src/pages/home/home-landing.css
-LINES: 1-151
-========================================================================
-.home-landing { background: #121212; color: #ffffff; }
-.home-landing .home-content { width: min(1360px, 100%); margin: 0 auto; padding: 36px 40px 64px; }
-.home-landing .landing-welcome { position: relative; text-align: center; padding: 8px 0 30px; background: radial-gradient(ellipse 60% 80% at 50% 0%, rgba(216, 255, 62, 0.06), transparent 72%); }
-.home-landing .landing-eyebrow { color: #9aaba5; font-size: 11px; letter-spacing: .2em; margin-bottom: 14px; }
-.home-landing .landing-welcome h1 { font-size: clamp(24px, 2.4vw, 34px); font-weight: 600; letter-spacing: -.035em; }
-.home-landing .landing-intro { color: #92928c; margin-top: 12px; font-size: 13px; }
-.home-landing .landing-switch { display: flex; width: 320px; padding: 2px; gap: 2px; margin: 22px auto 0; border-radius: 110px; background: rgba(255, 255, 255, 0.08); }
-.home-landing .landing-switch > a,
-.home-landing .landing-switch > button { flex: 1; display: flex; align-items: center; justify-content: center; height: 36px; border: 0; border-radius: 999px; padding: 0 16px; background: transparent; font: inherit; font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.6); cursor: pointer; transition: background-color .16s cubic-bezier(.4,0,.2,1), color .16s cubic-bezier(.4,0,.2,1); }
-.home-landing .landing-switch > a:hover,
-.home-landing .landing-switch > button:hover { color: rgba(255, 255, 255, 0.9); }
-.home-landing .landing-switch .is-active { color: #121212; background: linear-gradient(90deg, #fceae0 0%, #fcf6f2 38%, #eaf7fd 70%, #d8f1fe 100%); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6); }
-.home-landing .landing-switch .is-active:hover { color: #121212; }
-.home-landing .home-composer { max-width: 1040px; margin: 0 auto; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; background: #1a1a1a; box-shadow: none; }
-.home-landing .home-composer::before { display: none; }
-.home-landing .home-prompt { min-height: 88px; }
-.home-landing .home-caption { text-align: center; margin: 12px 0 30px; }
-.home-landing .landing-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 34px 0 44px; }
-.home-landing .landing-tool { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 16px; background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.08); color: #ffffff; transition: background-color .14s cubic-bezier(.4,0,.2,1), border-color .14s cubic-bezier(.4,0,.2,1); }
-.home-landing .landing-tool:hover { background: #202020; border-color: rgba(255, 255, 255, 0.12); }
-.home-landing .landing-tool-art { display: grid; place-items: center; width: 56px; height: 56px; flex-shrink: 0; overflow: hidden; border-radius: 12px; background: rgba(216, 255, 62, 0.12); color: #e3ff6b; }
-.home-landing .landing-tool-art img { width: 100%; height: 100%; object-fit: cover; }
-.home-landing .landing-tool h2 { font-size: 14px; font-weight: 600; }
-.home-landing .landing-tool p { font-size: 12px; color: rgba(255, 255, 255, 0.6); margin-top: 4px; }
-.home-landing .home-prompt-grid { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 18px; }
-.home-landing .home-section { margin-top: 28px; }
-@media (max-width: 1200px) { .home-landing .landing-tools { grid-template-columns: repeat(2,minmax(0,1fr)); } .home-landing .home-prompt-grid { grid-template-columns: repeat(3,minmax(0,1fr)); } }
-@media (max-width: 640px) { .home-landing .home-content { padding: 22px 16px 40px; } .home-landing .landing-tools { gap: 8px; margin: 24px 0; } .home-landing .landing-tool { gap: 8px; } .home-landing .landing-tool-art { width: 42px; height: 56px; } .home-landing .landing-tool p { line-height: 1.5; } .home-landing .landing-tool > svg { display: none; } .home-landing .home-prompt-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; } }
-
-.home-landing .landing-welcome { padding-bottom: 24px; }
-.home-landing .home-composer { padding: 16px 20px; }
-.home-landing .home-mode-row { margin-bottom: 8px; }
-.home-landing .home-mode { padding: 7px 14px; font-size: 13px; }
-.home-landing .home-editor { padding: 0; background: transparent; border: 0; box-shadow: none; }
-.home-landing .home-editor-label { display: none; }
-.home-landing .home-editor .home-prompt { min-height: 66px; height: 66px; margin-top: 0; padding: 8px 38px 12px 4px; font-size: 14px; font-weight: 400; }
-.home-landing .home-editor .home-materials { padding-top: 8px; margin-top: 0; border-top: 0; }
-.home-landing .home-composer .home-toolbar { margin-top: 10px; }
-.home-landing .home-caption { margin-bottom: 12px; }
-.home-landing .landing-tools { margin-top: 24px; }
-
-/* ------------------------------------------------------------ 影幕展示背景
-   顶部铺满竖版片段墙（6 列循环播放），暗幕压到底色，向下渐隐到 #121212，
-   保证标题、合成器与卡片区仍是干净的深色底。 */
-.home-landing .home-backdrop {
-    height: clamp(560px, 88vh, 900px);
-    -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 48%, rgba(0, 0, 0, 0.86) 72%, transparent 99%);
-    mask-image: linear-gradient(180deg, #000 0%, #000 48%, rgba(0, 0, 0, 0.86) 72%, transparent 99%);
-}
-
-/* 暗幕：只在中段与底部压深，顶部保留影片本色，整体比上一版透亮 */
-.home-landing .home-backdrop::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    pointer-events: none;
-    background:
-        radial-gradient(64% 52% at 50% 28%, rgba(18, 18, 18, 0.02), rgba(18, 18, 18, 0.54) 68%, #121212 100%),
-        linear-gradient(180deg, rgba(18, 18, 18, 0.4) 0%, rgba(18, 18, 18, 0.46) 42%, rgba(18, 18, 18, 0.9) 100%);
-}
-
-.home-landing .home-backdrop .home-film-wall {
-    opacity: 0.95;
-    filter: saturate(1.06) brightness(1.06);
-}
-
-/* 影片变亮后给标题补一层柔影，避免文字压在亮画面上发糊 */
-.home-landing .landing-welcome h1 { text-shadow: 0 1px 18px rgba(0, 0, 0, 0.55); }
-.home-landing .landing-eyebrow,
-.home-landing .landing-intro { text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6); }
-
-/* ------------------------------------------------------ 画布页签：最近画布面板
-   点击「画布」后替换生成对话框，宽度跟随 .home-content，与下方灵感大厅同一栅格；
-   一行四格：首格新建，其余三格是最近画布。 */
-.home-landing .home-canvas-panel {
-    margin: 0;
-    padding: 16px 18px 18px;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 16px;
-    background:
-        radial-gradient(120% 150% at 50% -40%, rgba(216, 255, 62, 0.05), rgba(216, 255, 62, 0) 62%),
-        #161616;
-}
-
-.home-landing .home-canvas-panel-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 24px;
-    margin-bottom: 14px;
-}
-
-.home-landing .home-canvas-panel-copy h2 {
-    margin: 0;
-    color: rgba(255, 255, 255, 0.88);
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    line-height: 1.4;
-}
-
-.home-landing .home-canvas-panel-copy p {
-    margin: 3px 0 0;
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 11.5px;
-    line-height: 1.5;
-}
-
-.home-landing .home-canvas-panel-actions {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    padding-top: 1px;
-}
-
-.home-landing .home-canvas-panel-action {
-    border: 0;
-    padding: 0;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.6);
-    font: inherit;
-    font-size: 12px;
-    line-height: 20px;
-    text-decoration: none;
-    cursor: pointer;
-    transition: color .14s cubic-bezier(.4, 0, .2, 1);
-}
-
-.home-landing .home-canvas-panel-action:hover { color: #ffffff; }
-
-/* 卡片外观统一在 jimeng-theme.css 的 .jm-canvas-*（与 /canvas 画布库同一套） */
-
-@media (max-width: 560px) {
-    .home-landing .home-canvas-panel { padding: 14px 14px 16px; }
-    .home-landing .home-canvas-panel-head { gap: 12px; margin-bottom: 12px; }
-    .home-landing .home-canvas-panel-actions { gap: 14px; }
-    /* 窄屏卡宽不够，日期先让位，节点/连线数允许折两行，不做半截省略 */
-    .home-landing .home-canvas-date { display: none; }
-    .home-landing .jm-canvas-meta { white-space: normal; text-overflow: clip; }
-}
-
-@media (max-width: 767px) {
-    .home-landing .home-backdrop {
-        height: clamp(420px, 62vh, 620px);
-    }
-
-    .home-landing .home-backdrop .home-film-wall {
-        opacity: 0.66;
-    }
-}
-
-
-========================================================================
-FILE: web/src/pages/home/home.css
-LINES: 1-1774
-========================================================================
-.home-page {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow-y: auto;
-    background: var(--background);
-}
-
-/* 页脚永远贴底：内容不足一屏（如「发现灵感」）时把 footer 压到页面底部，
-   否则它会紧跟内容浮在中间，下方留一大片空白 */
-.home-page > .home-content {
-    flex: 1 0 auto;
-}
-
-.home-page > .site-footer {
-    flex: 0 0 auto;
-    margin-top: auto;
-}
-
-/* 页面级背景影片墙：全幅铺在首页顶部约一屏高度，向下渐隐 */
-.home-backdrop {
-    position: absolute;
-    top: 0;
-    right: 0;
-    left: 0;
-    z-index: 0;
-    height: clamp(760px, 104vh, 1200px);
-    overflow: hidden;
-    pointer-events: none;
-    -webkit-mask-image: linear-gradient(180deg, #000 26%, transparent 94%);
-    mask-image: linear-gradient(180deg, #000 26%, transparent 94%);
-}
-
-.home-content {
-    position: relative;
-    z-index: 1;
-    width: min(100%, 1360px);
-    margin: 0 auto;
-    padding: 16px 40px 72px;
-}
-
-/* ===== hero stage ===== */
-
-.home-hero {
-    position: relative;
-}
-
-.home-hero-stage {
-    position: relative;
-    height: clamp(360px, 36vw, 440px);
-    /* 箭头骑跨左右边缘；图片和遮罩分别继承圆角，不裁切舞台。 */
-    overflow: visible;
-    isolation: isolate;
-    border-radius: 24px;
-    background:
-        radial-gradient(900px 500px at 85% -10%, rgba(216, 255, 62, 0.08), transparent 60%),
-        linear-gradient(132deg, #101208 0%, #15170e 56%, #0d0f09 100%);
-    box-shadow: 0 0 0 1px var(--border);
-}
-
-.home-hero-media {
-    position: absolute;
-    inset: 0;
-    /* 不设 z-index：避免形成层叠上下文后，箭头被上层遮罩（scrim）压住 */
-}
-
-/* the default carousel fills the whole stage behind the copy */
-.home-hero-media .promo-carousel {
-    position: absolute;
-    inset: 0;
-    aspect-ratio: auto;
-    margin: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    overflow: visible;
-}
-
-/* 圆角裁切下沉到 slide，容器放开后箭头才能骑跨边缘 */
-.home-hero-media .promo-carousel-slide {
-    overflow: hidden;
-    border-radius: 24px;
-}
-
-/* 左右箭头：垂直居中，圆心压在轮播左右边缘线上 */
-.home-hero-media .promo-carousel-arrow {
-    z-index: 6;
-    width: 40px;
-    height: 40px;
-    border-color: rgba(255, 255, 255, 0.22);
-    background: rgba(10, 10, 12, 0.58);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-}
-
-.home-hero-media .promo-carousel-arrow.is-prev {
-    left: -20px;
-}
-
-.home-hero-media .promo-carousel-arrow.is-next {
-    right: -20px;
-}
-
-/* hover 态需同等特异性覆盖，否则只剩深色图标压在深色圆底上（不可见） */
-.home-hero-media .promo-carousel-arrow:hover,
-.home-hero-media .promo-carousel-arrow:focus-visible {
-    border-color: transparent;
-    background: rgba(255, 255, 255, 0.9);
-    color: #121212;
-    box-shadow: none;
-}
-
-.home-hero-media .promo-carousel .promo-carousel-main {
-    height: 100%;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-}
-
-.home-hero-scrim {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
-    pointer-events: none;
-    /* 遮罩必须跟随舞台圆角，否则左上/左下/右下三个直角会把图片的圆角糊掉（stage 是 overflow:visible，不会替它裁） */
-    border-radius: inherit;
-    background:
-        linear-gradient(90deg, rgba(11, 12, 10, 0.94) 0%, rgba(11, 12, 10, 0.72) 32%, rgba(11, 12, 10, 0) 62%),
-        linear-gradient(0deg, rgba(11, 12, 10, 0.8), transparent 40%);
-}
-
-.home-hero-copy {
-    position: absolute;
-    z-index: 3;
-    top: 44px;
-    left: 64px;
-    max-width: 560px;
-}
-
-.home-hero-kicker {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid rgba(216, 255, 62, 0.55);
-    border-radius: 999px;
-    padding: 4px 12px;
-    background: rgba(216, 255, 62, 0.06);
-    color: var(--brand);
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-}
-
-.home-hero-kicker-dot {
-    width: 6px;
-    height: 6px;
-    flex: 0 0 auto;
-    border-radius: 999px;
-    background: var(--brand);
-    box-shadow: none;
-    animation: home-hero-pulse 2s infinite;
-}
-
-@keyframes home-hero-pulse {
-    50% {
-        opacity: 0.35;
-    }
-}
-
-.home-hero-title {
-    margin: 14px 0 0;
-    color: var(--foreground);
-    font-size: clamp(38px, 4.6vw, 62px);
-    font-weight: 600;
-    line-height: 1.08;
-    letter-spacing: -0.01em;
-    text-wrap: balance;
-}
-
-.home-hero-title-accent {
-    font-style: normal;
-    color: var(--brand);
-    text-shadow: none;
-}
-
-.home-hero-description {
-    max-width: 46ch;
-    margin: 16px 0 0;
-    color: rgba(244, 245, 239, 0.85);
-    font-size: 16px;
-    line-height: 1.7;
-}
-
-.home-hero-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 24px;
-}
-
-.home-hero-cta {
-    display: inline-flex;
-    min-height: 42px;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid var(--input);
-    border-radius: 12px;
-    padding: 0 18px;
-    background: rgba(255, 255, 255, 0.02);
-    color: var(--foreground);
-    font: inherit;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
-}
-
-.home-hero-cta:hover {
-    border-color: rgba(216, 255, 62, 0.6);
-    background: var(--brand-soft);
-}
-
-.home-hero-cta.is-primary {
-    min-height: 48px;
-    border-color: transparent;
-    background: var(--brand);
-    color: var(--brand-ink);
-    font-size: 15px;
-    font-weight: 500;
-    box-shadow: none;
-}
-
-.home-hero-cta.is-primary:hover {
-    background: var(--accent-hover);
-    box-shadow: none;
-}
-
-/* ===== composer (overlaps the stage) ===== */
-
-.home-composer {
-    position: relative;
-    z-index: 6;
-    overflow: visible;
-    max-width: 1120px;
-    margin: -81px auto 0;
-    border: 1px solid var(--input);
-    border-radius: 20px;
-    padding: 4px 28px 24px;
-    background: rgba(22, 23, 20, 0.88);
-    backdrop-filter: blur(24px);
-    box-shadow:
-        0 30px 60px -20px rgba(0, 0, 0, 0.7),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-/* 1px 发丝描边（即梦式：不用渐变环），masked to the edges */
-.home-composer::before {
-    content: "";
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1px;
-    pointer-events: none;
-    background: linear-gradient(120deg, rgba(255, 255, 255, 0.16), transparent 30%, transparent 70%, rgba(255, 255, 255, 0.08));
-    -webkit-mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-}
-
-:root:not(.dark) .home-composer {
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow:
-        0 30px 60px -20px rgba(28, 25, 23, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-.home-composer.is-dragging {
-    border-color: rgba(216, 255, 62, 0.7);
-    box-shadow: 0 0 0 3px rgba(216, 255, 62, 0.12);
-}
-
-.home-mode-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    border-bottom: 1px solid var(--border);
-    padding: 0;
-}
-
-.home-mode-switch {
-    display: inline-flex;
-    gap: 2px;
-}
-
-.home-mode {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 16px 12px;
-    border: 0;
-    background: transparent;
-    color: var(--muted-foreground);
-    font: inherit;
-    font-size: 15px;
-    cursor: pointer;
-    transition: color 160ms ease;
-}
-
-.home-mode:hover {
-    color: var(--foreground);
-}
-
-.home-mode.is-active {
-    color: var(--brand);
-    font-weight: 600;
-}
-
-.home-mode.is-active::after {
-    content: "";
-    position: absolute;
-    right: 0;
-    bottom: -1px;
-    left: 0;
-    height: 2px;
-    border-radius: 2px;
-    background: var(--brand);
-}
-
-.home-mode-hint {
-    color: var(--muted-foreground);
-    font-size: 11px;
-}
-
-.home-prompt-wrap {
-    position: relative;
-}
-
-.home-prompt {
-    display: block;
-    width: 100%;
-    min-height: calc(5 * 1.4em); /* 至少 5 行 */
-    resize: vertical;
-    border: 0;
-    outline: 0;
-    margin-top: 18px;
-    padding: 0 38px 28px 0;
-    background: transparent;
-    color: var(--foreground);
-    font: inherit;
-    font-size: 15px;
-    font-weight: 600;
-    line-height: 1.4;
-    letter-spacing: 0.01em;
-}
-
-.home-prompt::placeholder {
-    color: var(--muted-foreground);
-    opacity: 0.45;
-}
-
-/* 下拉输入类控件不用 outline 框（直角生硬），聚焦反馈由控件自身边框承担 */
-.home-page button:focus-visible,
-.home-page a:focus-visible {
-    outline: 2px solid var(--brand);
-    outline-offset: 3px;
-}
-
-/* The composer is the focus surface; a textarea outline would hit the clipped edges. */
-.home-prompt:focus-visible {
-    outline: none;
-}
-
-.home-composer:focus-within {
-    border-color: color-mix(in srgb, var(--brand) 55%, var(--input));
-}
-
-.home-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-top: 18px;
-    padding: 0;
-}
-
-.home-toolbar-left,
-.home-toolbar-right {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 8px;
-}
-
-.home-toolbar-left {
-    flex-wrap: wrap;
-    row-gap: 6px;
-}
-
-.home-param {
-    display: inline-flex;
-    height: 38px;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 5px;
-}
-
-.home-param > span {
-    color: var(--muted-foreground);
-    font-size: 10px;
-    white-space: nowrap;
-}
-
-.home-param-number {
-    height: 38px;
-    width: 48px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--muted);
-    color: var(--foreground);
-    font: inherit;
-    font-size: 11px;
-    outline: 0;
-    padding: 0 4px;
-    text-align: center;
-    appearance: textfield;
-}
-
-.home-param-number::-webkit-inner-spin-button,
-.home-param-number::-webkit-outer-spin-button {
-    margin: 0;
-    appearance: none;
-}
-
-.home-param-number:focus {
-    border-color: var(--brand);
-}
-
-.home-select-trigger {
-    width: auto;
-    min-width: 64px;
-    height: 38px;
-    gap: 5px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 0 7px 0 9px;
-    background: var(--muted);
-    color: var(--foreground);
-    font-size: 12px;
-    font-weight: 400;
-    box-shadow: none;
-}
-
-.home-select-trigger:hover {
-    border-color: var(--input);
-    background: var(--muted);
-}
-
-.home-select-trigger:focus-visible {
-    border-color: var(--brand);
-    --tw-ring-color: transparent;
-}
-
-.home-select-trigger [data-slot="select-value"] {
-    line-height: 1;
-}
-
-.home-select-content {
-    z-index: 1200;
-    min-width: 7rem;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 4px;
-    background: var(--popover);
-    color: var(--popover-foreground);
-    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
-}
-
-.home-select-item {
-    border-radius: 6px;
-    padding: 6px 8px;
-    font-size: 12px;
-}
-
-.home-control-wrap {
-    position: relative;
-    display: inline-flex;
-}
-
-.home-value-trigger {
-    display: inline-flex;
-    height: 38px;
-    align-items: center;
-    gap: 5px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 0 10px;
-    background: var(--muted);
-    color: var(--foreground);
-    font: inherit;
-    font-size: 12px;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: border-color 150ms ease, background 150ms ease;
-}
-
-.home-value-trigger:hover,
-.home-value-trigger.is-open {
-    border-color: var(--input);
-    background: var(--accent);
-}
-
-.home-control-panel {
-    position: absolute;
-    z-index: 80;
-    left: 0;
-    bottom: calc(100% + 8px);
-    width: 330px;
-    max-width: calc(100vw - 32px);
-    overflow: visible;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 15px;
-    background: var(--popover);
-    color: var(--popover-foreground);
-    box-shadow: 0 20px 52px rgba(0, 0, 0, 0.34);
-    animation: home-control-in 140ms ease-out;
-}
-
-.home-control-panel.is-right {
-    right: 0;
-    left: auto;
-}
-
-.home-control-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-}
-
-.home-control-head h3 {
-    margin: 0;
-    color: var(--foreground);
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-}
-
-.home-control-head span {
-    color: var(--muted-foreground);
-    font-size: 10px;
-    letter-spacing: 0.04em;
-}
-
-.home-option-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-    margin-top: 14px;
-}
-
-.home-option {
-    display: flex;
-    min-height: 38px;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: transparent;
-    color: var(--muted-foreground);
-    font: inherit;
-    font-size: 12px;
-    cursor: pointer;
-    transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
-}
-
-.home-option:hover {
-    color: var(--foreground);
-    border-color: rgba(216, 255, 62, 0.6);
-    background: var(--brand-soft);
-}
-
-.home-option.is-selected {
-    border-color: var(--brand);
-    background: var(--brand-soft);
-    color: var(--foreground);
-}
-
-.home-ratio-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px;
-    margin-top: 14px;
-}
-
-.home-ratio-option {
-    display: flex;
-    min-height: 66px;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: transparent;
-    color: var(--muted-foreground);
-    font: inherit;
-    font-size: 10px;
-    cursor: pointer;
-    transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
-}
-
-.home-ratio-option:hover {
-    color: var(--foreground);
-    border-color: rgba(216, 255, 62, 0.6);
-    background: var(--brand-soft);
-}
-
-.home-ratio-option.is-selected {
-    border-color: var(--brand);
-    background: var(--brand-soft);
-    color: var(--foreground);
-}
-
-.home-ratio-shape {
-    display: block;
-    border: 1.5px solid currentColor;
-    border-radius: 3px;
-    color: var(--muted-foreground);
-}
-
-.home-ratio-option.is-selected .home-ratio-shape {
-    border-color: var(--brand);
-    color: var(--brand);
-}
-
-.home-ratio-shape.is-auto {
-    width: 20px;
-    height: 20px;
-    border-style: dashed;
-}
-
-.home-control-hint {
-    margin: 13px 0 0;
-    padding-top: 10px;
-    border-top: 1px solid var(--border);
-    color: var(--muted-foreground);
-    font-size: 10px;
-    line-height: 1.55;
-}
-
-.home-seconds-range {
-    margin-top: 13px;
-    color: var(--foreground);
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-}
-
-.home-seconds-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-top: 8px;
-}
-
-.home-seconds-head > span {
-    color: var(--muted-foreground);
-    font-size: 10px;
-}
-
-.home-seconds-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.home-seconds-actions strong {
-    min-width: 38px;
-    color: var(--foreground);
-    font-size: 22px;
-    font-weight: 700;
-    line-height: 1;
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-}
-
-.home-seconds-actions strong small {
-    margin-left: 1px;
-    color: var(--muted-foreground);
-    font-size: 10px;
-    font-weight: 500;
-}
-
-.home-step-button {
-    display: grid;
-    width: 30px;
-    height: 30px;
-    place-items: center;
-    border: 1px solid var(--input);
-    border-radius: 8px;
-    background: transparent;
-    color: var(--foreground);
-    cursor: pointer;
-}
-
-.home-step-button:hover {
-    border-color: rgba(216, 255, 62, 0.6);
-    background: var(--brand-soft);
-}
-
-.home-range {
-    width: 100%;
-    height: 5px;
-    margin: 18px 0 0;
-    appearance: none;
-    border-radius: 999px;
-    background: linear-gradient(to right, var(--brand) 0 var(--home-range-progress), var(--border) var(--home-range-progress) 100%);
-    outline: none;
-    cursor: pointer;
-}
-
-.home-range::-webkit-slider-thumb {
-    width: 16px;
-    height: 16px;
-    appearance: none;
-    border: 3px solid var(--background);
-    border-radius: 999px;
-    background: var(--brand);
-    box-shadow: 0 0 0 1px rgba(216, 255, 62, 0.5);
-}
-
-.home-range::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
-    border: 2px solid var(--background);
-    border-radius: 999px;
-    background: var(--brand);
-}
-
-.home-range-ends {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 10px;
-    color: var(--muted-foreground);
-    font-size: 9px;
-}
-
-@keyframes home-control-in {
-    from {
-        opacity: 0;
-        transform: translateY(4px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .home-control-panel {
-        animation: none;
-    }
-}
-
-.home-material-bar {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 14px;
-    padding: 0;
-}
-
-.home-material-add {
-    display: flex;
-    width: 66px;
-    height: 66px;
-    flex: 0 0 auto;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    border: 1px dashed var(--input);
-    border-radius: 10px;
-    background: transparent;
-    color: var(--muted-foreground);
-    font: inherit;
-    font-size: 9px;
-    cursor: pointer;
-    transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
-}
-
-.home-material-add:hover:not(:disabled) {
-    border-color: var(--brand);
-    background: var(--brand-soft);
-    color: var(--foreground);
-}
-
-.home-material-add:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-}
-
-.home-material-item {
-    position: relative;
-    width: 66px;
-    height: 66px;
-    flex: 0 0 auto;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--muted);
-}
-
-.home-material-item img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.home-material-file {
-    display: flex;
-    width: 100%;
-    height: 100%;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    padding: 6px;
-    color: var(--muted-foreground);
-}
-
-.home-material-file span {
-    max-width: 100%;
-    overflow: hidden;
-    font-size: 8px;
-    line-height: 1.3;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.home-material-remove {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    display: grid;
-    width: 17px;
-    height: 17px;
-    place-items: center;
-    border: 0;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.72);
-    color: #fff;
-    cursor: pointer;
-}
-
-.home-material-hint {
-    min-width: 180px;
-    flex: 1;
-    color: var(--muted-foreground);
-    font-size: 11px;
-    line-height: 1.6;
-}
-
-.home-toolbar .canvas-composer-model-picker {
-    height: 38px;
-    border-radius: 10px;
-    padding-inline: 9px;
-    font-size: 12px;
-}
-
-.home-ratio {
-    height: 38px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 0 9px;
-    background: var(--muted);
-    color: var(--muted-foreground);
-    font: inherit;
-    font-size: 12px;
-    outline: 0;
-}
-
-.home-ratio:focus {
-    border-color: var(--brand);
-}
-
-.home-submit {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    height: 48px;
-    border: 0;
-    border-radius: 12px;
-    padding: 0 30px;
-    background: var(--brand);
-    color: var(--brand-ink);
-    font: inherit;
-    font-size: 15px;
-    font-weight: 500;
-    cursor: pointer;
-    box-shadow: none;
-    transition: background 160ms ease, transform 160ms ease;
-}
-
-.home-submit:hover:not(:disabled) {
-    background: var(--accent-hover);
-    transform: none;
-}
-
-.home-submit:active:not(:disabled) {
-    background: var(--accent-active);
-    transform: none;
-}
-
-.home-submit:active:not(:disabled) {
-    transform: none;
-}
-
-.home-submit:disabled {
-    cursor: not-allowed;
-    opacity: 0.4;
-    transform: none;
-    box-shadow: none;
-}
-
-.home-caption {
-    max-width: 1120px;
-    margin: 11px auto 0;
-    color: var(--muted-foreground);
-    font-size: 11px;
-    line-height: 1.5;
-}
-
-/* ===== sections ===== */
-
-.home-section {
-    margin-top: 56px;
-}
-
-/* 与站内二级页（素材库 / 提示词中心 / 账户中心 / 我的画布）的 .jm-page-head 完全同一套：
-   标题 30/38、字重 600、字距 -0.01em；副标题 14/22、上间距 8、颜色 text-3；区块下间距 24。 */
-.home-section-head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 24px;
-    margin-bottom: 24px;
-}
-
-.home-section-title {
-    margin: 0;
-    color: var(--text-1);
-    font-family: var(--font-heading);
-    font-size: 30px;
-    line-height: 38px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-}
-
-.home-section + .home-section .home-section-title {
-    font-size: 30px;
-    line-height: 38px;
-    font-weight: 600;
-}
-
-.home-section-note {
-    margin: 8px 0 0;
-    color: var(--text-3);
-    font-size: 14px;
-    line-height: 22px;
-}
-
-.home-section-link {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--muted-foreground);
-    font-size: 13px;
-    text-decoration: none;
-    transition: color 160ms ease;
-}
-
-.home-section-link:hover {
-    color: var(--brand);
-}
-
-/* inspiration grid */
-
-.home-prompt-tabs {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0 0 16px;
-    border-bottom: 0;
-}
-
-/* 频道筛选：即梦胶囊 tab（不用下划线，选中用白 8% 底） */
-.home-prompt-tab {
-    position: relative;
-    display: inline-flex;
-    height: 32px;
-    align-items: center;
-    padding: 0 14px;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.6);
-    font: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition:
-        background-color 140ms cubic-bezier(0.4, 0, 0.2, 1),
-        color 140ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.home-prompt-tab:hover {
-    background: rgba(255, 255, 255, 0.04);
-    color: #ffffff;
-}
-
-.home-prompt-tab.is-active {
-    background: rgba(216, 255, 62, 0.16);
-    box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.32);
-    color: var(--brand);
-    font-weight: 500;
-}
-
-.home-prompt-tab.is-active::after {
-    content: none;
-}
-
-.home-prompt-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 20px;
-}
-
-.home-prompt-card {
-    min-width: 0;
-    border: 0;
-    border-radius: 14px;
-    padding: 10px;
-    /* 负 margin 抵消 padding，悬浮出现背景时不挤动网格布局 */
-    margin: -10px;
-    background: transparent;
-    color: var(--foreground);
-    text-align: left;
-    cursor: pointer;
-    transition: background 160ms ease;
-}
-
-/* 整卡悬浮背景：媒体 + 标题行一起沉入 card 底色（参照 liblib.tv 卡片） */
-.home-prompt-card:hover {
-    background: var(--card);
-}
-
-/* 封面媒体区：圆角裁切 + hover 遮罩 */
-.home-prompt-media {
-    position: relative;
-    display: block;
-    overflow: hidden;
-    border-radius: 12px;
-    background: var(--muted);
-}
-
-.home-prompt-card .home-prompt-cover {
-    display: block;
-    width: 100%;
-    aspect-ratio: 16 / 9.6;
-    object-fit: cover;
-    background: var(--muted);
-    transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-/* hover 遮罩：底部压暗渐变 + 右上爱心胶囊 + 右下分享圆钮（参照 liblib.tv） */
-.home-prompt-hover {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    justify-content: space-between;
-    padding: 10px;
-    background: linear-gradient(180deg, rgba(5, 6, 3, 0.22) 0%, rgba(5, 6, 3, 0) 36%, rgba(5, 6, 3, 0.55) 100%);
-    opacity: 0;
-    transition: opacity 200ms ease;
-}
-
-.home-prompt-like,
-.home-prompt-share {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 28px;
-    min-width: 28px;
-    padding: 0 9px;
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    border-radius: 999px;
-    background: rgba(10, 11, 8, 0.55);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    color: rgba(255, 255, 255, 0.92);
-    transition: background 160ms ease, transform 160ms ease;
-}
-
-.home-prompt-share {
-    width: 30px;
-    height: 30px;
-    min-width: 0;
-    padding: 0;
-}
-
-.home-prompt-card:hover .home-prompt-hover {
-    opacity: 1;
-}
-
-.home-prompt-card:hover .home-prompt-like,
-.home-prompt-card:hover .home-prompt-share {
-    transform: translateY(0);
-}
-
-.home-prompt-card:hover .home-prompt-cover {
-    transform: scale(1.04);
-}
-
-/* 底部信息行：头像圈 + 标题/作者 */
-.home-prompt-body {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 2px 0;
-}
-
-.home-prompt-avatar {
-    display: grid;
-    flex: none;
-    width: 34px;
-    height: 34px;
-    place-items: center;
-    border-radius: 50%;
-    background:
-        radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.32), transparent 46%),
-        linear-gradient(135deg, #33371f 0%, #1c1e12 100%);
-    color: rgba(244, 245, 239, 0.9);
-    font-size: 13px;
-    font-weight: 700;
-}
-
-.home-prompt-card:nth-child(4n + 2) .home-prompt-avatar {
-    background:
-        radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.32), transparent 46%),
-        linear-gradient(135deg, #3d2f1a 0%, #20180d 100%);
-}
-
-.home-prompt-card:nth-child(4n + 3) .home-prompt-avatar {
-    background:
-        radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.32), transparent 46%),
-        linear-gradient(135deg, #1f3230 0%, #0f1b1a 100%);
-}
-
-.home-prompt-card:nth-child(4n) .home-prompt-avatar {
-    background:
-        radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.32), transparent 46%),
-        linear-gradient(135deg, #2e2438 0%, #17111d 100%);
-}
-
-.home-prompt-info {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 3px;
-}
-
-.home-prompt-title {
-    overflow: hidden;
-    color: var(--foreground);
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1.4;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.home-prompt-tags {
-    overflow: hidden;
-    color: var(--muted-foreground);
-    font-size: 12px;
-    line-height: 1.4;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.home-empty {
-    display: flex;
-    min-height: 96px;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    background: #1a1a1a;
-    padding: 24px;
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 12px;
-}
-
-/* ===== 平台数据条 ===== */
-
-.home-stats {
-    --stats-value-from: #17180f;
-    --stats-value-to: #4b4f38;
-    --stats-dot: rgba(23, 24, 15, 0.055);
-    --stats-glow: rgba(216, 255, 62, 0.1);
-    --stats-shadow: 0 24px 60px -38px rgba(23, 24, 15, 0.5);
-    --stats-accent: #5d7a06;
-    --stats-accent-line: rgba(93, 122, 6, 0.4);
-    --stats-accent-glow: rgba(93, 122, 6, 0.18);
-
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    margin: 36px 0 0;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    background:
-        radial-gradient(120% 180% at 0% -60%, var(--stats-glow), transparent 58%),
-        radial-gradient(85% 130% at 100% 150%, rgba(61, 184, 180, 0.06), transparent 62%),
-        var(--card);
-    box-shadow:
-        var(--stats-shadow),
-        inset 0 1px 0 rgba(255, 255, 255, 0.35);
-    isolation: isolate;
-}
-
-/* 顶部品牌发丝线 */
-.home-stats::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto;
-    z-index: 2;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--stats-accent-line) 18%, rgba(216, 255, 62, 0.14) 64%, transparent);
-    pointer-events: none;
-}
-
-/* 点阵底纹：自上而下淡出 */
-.home-stats::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    background-image: radial-gradient(circle at 1px 1px, var(--stats-dot) 1px, transparent 0);
-    background-size: 18px 18px;
-    -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 78%);
-    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 78%);
-    pointer-events: none;
-}
-
-.dark .home-stats {
-    --stats-value-from: #f7f8f1;
-    --stats-value-to: #b3b99c;
-    --stats-dot: rgba(244, 245, 239, 0.05);
-    --stats-glow: rgba(216, 255, 62, 0.09);
-    --stats-shadow: 0 30px 70px -42px rgba(0, 0, 0, 0.9);
-    --stats-accent: #D8FF3E;
-    --stats-accent-line: rgba(216, 255, 62, 0.6);
-    --stats-accent-glow: rgba(216, 255, 62, 0.4);
-    box-shadow:
-        var(--stats-shadow),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.home-stats-item {
-    position: relative;
-    z-index: 1;
-    min-width: 0;
-    padding: 28px 30px 30px;
-    transition: background 260ms ease;
-}
-
-.home-stats-item:hover {
-    background: radial-gradient(120% 140% at 16% 0%, rgba(216, 255, 62, 0.07), transparent 66%);
-}
-
-/* 分割线：上下淡出的渐变竖线，比整条实线更轻 */
-.home-stats-item + .home-stats-item::before {
-    content: "";
-    position: absolute;
-    top: 22%;
-    bottom: 22%;
-    left: 0;
-    width: 1px;
-    background: linear-gradient(180deg, transparent, var(--border) 18%, var(--border) 82%, transparent);
-}
-
-/* 序号：右上角弱化的等宽数字，给四格建立秩序感 */
-.home-stats-index {
-    position: absolute;
-    top: 18px;
-    right: 22px;
-    color: var(--muted-foreground);
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    font-variant-numeric: tabular-nums;
-    opacity: 0.42;
-}
-
-.home-stats-value {
-    display: flex;
-    align-items: flex-start;
-    gap: 3px;
-    line-height: 0.95;
-    font-variant-numeric: tabular-nums;
-}
-
-/* 数值：自上而下的金属渐变，避免纯白/纯黑的呆板 */
-.home-stats-number {
-    font-size: clamp(30px, 2.6vw, 38px);
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    font-variant-numeric: tabular-nums;
-    background: linear-gradient(180deg, var(--stats-value-from) 8%, var(--stats-value-to));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-}
-
-/* 单位/后缀：品牌绿上标，与数值齐顶 */
-.home-stats-unit {
-    margin-top: 3px;
-    color: var(--stats-accent);
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0;
-    text-shadow: none;
-}
-
-.home-stats-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 14px;
-    color: var(--muted-foreground);
-    font-size: 12px;
-    letter-spacing: 0.04em;
-    line-height: 1.4;
-}
-
-/* 标签前的品牌小点 */
-.home-stats-label::before {
-    content: "";
-    flex: 0 0 auto;
-    width: 4px;
-    height: 4px;
-    border-radius: 999px;
-    background: var(--stats-accent);
-    box-shadow: none;
-    opacity: 0.9;
-    transition: transform 260ms ease;
-}
-
-.home-stats-item:hover .home-stats-label::before {
-    transform: scale(1.6);
-}
-
-/* ===== responsive ===== */
-
-@media (max-width: 1100px) {
-    .home-content {
-        padding-inline: 28px;
-    }
-
-    .home-prompt-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .home-hero-copy {
-        left: 36px;
-        right: 36px;
-    }
-}
-
-@media (max-width: 860px) {
-    .home-content {
-        padding: 12px 16px 56px;
-    }
-
-    .home-hero-stage {
-        display: flex;
-        align-items: flex-end;
-        height: auto;
-        min-height: 280px;
-        padding: 24px;
-        border-radius: 18px;
-    }
-
-    .home-hero-media .promo-carousel-slide {
-        border-radius: 18px;
-    }
-
-    /* 窄屏收进容器内，避免骑跨按钮被屏幕边缘裁掉 */
-    .home-hero-media .promo-carousel-arrow {
-        width: 30px;
-        height: 30px;
-        opacity: 1;
-    }
-
-    .home-hero-media .promo-carousel-arrow.is-prev {
-        left: 8px;
-    }
-
-    .home-hero-media .promo-carousel-arrow.is-next {
-        right: 8px;
-    }
-
-    /* 数据条：窄屏两列，分隔线改成「列间竖线 + 行间横线」 */
-    .home-stats {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        margin-top: 24px;
-    }
-
-    .home-stats-item {
-        padding: 20px 18px 22px;
-    }
-
-    .home-stats-item:nth-child(odd)::before {
-        display: none;
-    }
-
-    .home-stats-item:nth-child(n + 3)::after {
-        content: "";
-        position: absolute;
-        top: 0;
-        right: 12%;
-        left: 12%;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, var(--border) 18%, var(--border) 82%, transparent);
-    }
-
-    .home-stats-index {
-        top: 14px;
-        right: 14px;
-        font-size: 10px;
-    }
-
-    .home-stats-label {
-        margin-top: 12px;
-        font-size: 11.5px;
-    }
-
-    .home-hero-scrim {
-        background:
-            linear-gradient(0deg, rgba(11, 12, 10, 0.96) 25%, rgba(11, 12, 10, 0.35) 70%, rgba(11, 12, 10, 0.12));
-    }
-
-    .home-hero-copy {
-        position: relative;
-        inset: auto;
-        width: 100%;
-        min-width: 0;
-        max-width: none;
-    }
-
-    .home-hero-title {
-        font-size: clamp(30px, 8vw, 40px);
-    }
-
-    .home-hero-description {
-        display: none;
-    }
-
-    .home-composer {
-        margin: 16px 0 0;
-        padding: 4px 16px 16px;
-    }
-
-    .home-prompt {
-        font-size: 15px;
-    }
-
-    .home-toolbar {
-        flex-wrap: wrap;
-        align-items: flex-end;
-    }
-
-    .home-toolbar-right {
-        width: 100%;
-        justify-content: flex-end;
-    }
-
-    .home-mode-hint {
-        display: none;
-    }
-
-    .home-prompt-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
-    }
-
-    .home-section {
-        margin-top: 40px;
-    }
-}
-
-@media (max-width: 560px) {
-    .home-hero-actions .home-hero-cta {
-        flex: 1;
-        justify-content: center;
-    }
-
-    .home-prompt-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .home-prompt {
-        min-height: calc(5 * 1.4em);
-        font-size: 15px;
-    }
-}
-
-/* ===== hero 背景影片墙（1:1 移植自 aid-studio 首页）===== */
-
-.home-film-wall {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 10px;
-    opacity: 0.72;
-    transform: perspective(1400px) rotateX(18deg) scale(1.15) translateY(-6%);
-    pointer-events: none;
-    overflow: hidden;
-}
-
-.home-film-column {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.home-film-column:nth-child(even) {
-    margin-top: -100px;
-}
-
-.home-film-slot {
-    position: relative;
-    isolation: isolate;
-    display: block;
-    width: 100%;
-    flex: none;
-    aspect-ratio: 4 / 5;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    background: var(--muted);
-}
-
-/* 影片墙：片段铺满格子，尺寸形状完全由格子决定；海报与色板渐变在加载前兜底 */
-.home-film-slot video {
-    position: absolute;
-    inset: 0;
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: inherit;
-    pointer-events: none;
-}
-
-.home-film-column > :nth-child(2) {
-    aspect-ratio: 9 / 16;
-}
-
-/* 16 色板渐变兜底（与旧项目逐条一致） */
-.home-film-tone-0 { background: radial-gradient(120% 90% at 25% 15%, #ffb36b 0%, #c2410c 28%, #3b0a1e 62%, #07030a 100%); }
-.home-film-tone-1 { background: linear-gradient(160deg, #04121c 0%, #0c3a4a 38%, #13c8d8 70%, #ff7ae6 120%); }
-.home-film-tone-2 { background: radial-gradient(90% 70% at 70% 25%, #f9d29d 0%, #b06ab3 35%, #2b1055 70%, #05030c 100%); }
-.home-film-tone-3 { background: linear-gradient(200deg, #0b0b0f 0%, #1e293b 45%, #94a3b8 100%); }
-.home-film-tone-4 { background: radial-gradient(100% 80% at 50% 0%, #E3FF6B 0%, #0068A8 35%, #071018 75%); }
-.home-film-tone-5 { background: linear-gradient(145deg, #1a0000 0%, #7f1d1d 40%, #f97316 85%, #fde68a 110%); }
-.home-film-tone-6 { background: radial-gradient(80% 80% at 30% 70%, #3ee6ff 0%, #1d4ed8 35%, #0b1020 80%); }
-.home-film-tone-7 { background: linear-gradient(180deg, #fef3c7 -20%, #d97706 25%, #451a03 70%, #0c0603 100%); }
-.home-film-tone-8 { background: radial-gradient(120% 80% at 80% 10%, #ff4fd8 0%, #6d28d9 40%, #0b0420 85%); }
-.home-film-tone-9 { background: linear-gradient(170deg, #e0f2fe -10%, #64748b 40%, #0f172a 90%); }
-.home-film-tone-10 { background: radial-gradient(90% 70% at 40% 30%, #86efac 0%, #166534 40%, #021006 85%); }
-.home-film-tone-11 { background: linear-gradient(120deg, #111827 0%, #374151 30%, #f43f5e 70%, #fda4af 110%); }
-.home-film-tone-12 { background: radial-gradient(70% 60% at 60% 40%, #fff7ed 0%, #fdba74 18%, #9a3412 45%, #1c0a02 85%); }
-.home-film-tone-13 { background: linear-gradient(200deg, #020617 0%, #172554 40%, #7dd3fc 95%); }
-.home-film-tone-14 { background: radial-gradient(100% 70% at 50% 100%, #a78bfa 0%, #4c1d95 40%, #0a0614 85%); }
-.home-film-tone-15 { background: linear-gradient(160deg, #052e16 0%, #14532d 35%, #a3e635 80%, #ecfccb 110%); }
-
-@media (max-width: 767px) {
-    .home-film-wall {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .home-film-column:nth-child(n + 4) {
-        display: none;
-    }
-}
-
-/* 与创作栏同一层级，积分为辅助信息，不增加独立卡片。 */
-.home-credit-estimate {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--muted-foreground);
-    font-size: 12px;
-    line-height: 1.5;
-    white-space: nowrap;
-}
-.home-credit-estimate svg { color: var(--primary); }
-@media (max-width: 640px) {
-    .home-toolbar-right { flex-wrap: wrap; gap: 10px; }
-    .home-credit-estimate { margin-right: auto; }
-    /* 与 .jm-page-head 一致：窄屏标题与右侧动作改纵向排列 */
-    .home-section-head { flex-direction: column; align-items: stretch; gap: 12px; }
-}
-
-.home-composer .home-mode-row {
-    padding-block: 12px;
-    border-bottom: 0;
-}
-
-.home-composer .home-mode-switch {
-    gap: 4px;
-    padding: 4px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--muted);
-}
-
-.home-composer .home-mode-switch::before,
-.home-composer .home-mode.is-active::after {
-    content: none;
-}
-
-.home-composer .home-mode {
-    justify-content: center;
-    min-height: 40px;
-    padding: 0 14px;
-    border-radius: 8px;
-    color: var(--muted-foreground);
-    font-size: 13px;
-    font-weight: 600;
-    transform: none;
-}
-
-.home-composer .home-mode:hover { color: var(--foreground); }
-
-.home-composer .home-mode.is-active {
-    background: var(--brand);
-    color: var(--brand-ink);
-}
-
-.home-editor {
-    min-width: 0;
-    padding: 15px 16px 12px;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--background) 76%, transparent);
-    transition: border-color 160ms ease, box-shadow 160ms ease;
-}
-
-.home-editor:focus-within {
-    border-color: color-mix(in srgb, var(--brand) 66%, var(--border));
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 14%, transparent);
-}
-
-.home-editor-label {
-    display: block;
-    color: var(--foreground);
-    font-size: 13px;
-    font-weight: 600;
-}
-
-.home-editor .home-prompt {
-    min-height: 4.8em;
-    margin-top: 6px;
-    font-weight: 400;
-    line-height: 1.6;
-}
-
-.home-editor .home-prompt:focus {
-    background: transparent;
-    transform: none;
-    box-shadow: none;
-}
-
-.home-editor .home-prompt::placeholder { opacity: 1; }
-
-.home-editor .home-material-bar {
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border);
-}
-
-.home-editor .home-material-add {
-    width: auto;
-    height: 44px;
-    flex-direction: row;
-    gap: 6px;
-    padding-inline: 10px;
-    background: var(--muted);
-    color: var(--foreground);
-    font-size: 12px;
-}
-
-.home-editor .home-material-item {
-    width: 44px;
-    height: 44px;
-}
-
-.home-editor .home-material-hint { min-width: min(100%, 150px); }
-
-.home-composer .home-toolbar { margin-top: 14px; }
-.home-composer .home-param > span { font-size: 11px; }
-
-.home-composer .home-credit-estimate {
-    padding: 6px 9px;
-    border-radius: 8px;
-    background: var(--muted);
-    font-variant-numeric: tabular-nums;
-    white-space: normal;
-}
-
-.home-composer .home-credit-estimate svg { flex: none; }
-
-.home-composer .home-submit {
-    height: 44px;
-    justify-content: center;
-    padding-inline: 20px;
-    font-size: 14px;
-}
-
-.home-composer .home-submit:disabled {
-    background: var(--muted);
-    color: var(--muted-foreground);
-    opacity: 1;
-    box-shadow: inset 0 0 0 1px var(--border);
-}
-
-.home-composer .home-submit:disabled::after { content: none; }
-
-@media (max-width: 640px) {
-    .home-editor { padding-inline: 12px; }
-    .home-composer .home-toolbar-left {
-        position: relative;
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px 8px;
-        width: 100%;
-        min-width: 0;
-    }
-    .home-toolbar-left > :first-child { grid-column: 1 / -1; max-width: 100%; }
-    .home-composer .home-param { height: auto; min-width: 0; flex-direction: column; align-items: stretch; gap: 6px; }
-    .home-composer .home-control-wrap { position: static; width: 100%; }
-    .home-composer .home-control-panel { left: 0; right: auto; width: 100%; max-width: 100%; }
-    .home-composer .home-value-trigger { width: 100%; min-height: 44px; justify-content: space-between; }
-    .home-composer .home-toolbar-right { flex-direction: column; align-items: stretch; gap: 10px; }
-    .home-composer .home-credit-estimate { margin: 0; }
-    .home-composer .home-submit { width: 100%; }
-}
-
 
 ========================================================================
 FILE: web/src/pages/home/index.tsx
-LINES: 1-661
+LINES: 1-651
 ========================================================================
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { App } from "antd";
-import { ArrowUp, ArrowUpRight, ChevronDown, Heart, ImagePlus, LoaderCircle, Minus, Music, PlayCircle, Plus, Share2, Sparkles, Video, X, Zap } from "lucide-react";
+import { ArrowUp, ArrowUpRight, ChevronDown, ImagePlus, LoaderCircle, Minus, Music, PlayCircle, Plus, Sparkles, Video, X, Zap } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { nanoid } from "nanoid";
 import { useTranslation } from "react-i18next";
@@ -2387,10 +35,7 @@ import { modelOptionName, useConfigStore } from "@/stores/use-config-store";
 import { currentMediaOwner, uploadBlobToServer } from "@/services/cloud-media";
 import "./home.css";
 import "./home-landing.css";
-import "./home-enhanced.css";
-import "./home-enhanced-v2.css";
 import "./home-jimeng.css";
-import { initHomePageEnhancements } from "./home-enhancements";
 import { useCreditEstimate } from '@/hooks/use-credit-estimate';
 
 type CreationMode = "image" | "video";
@@ -2541,11 +186,6 @@ export default function HomePage({ landing = false, suppressPromo = false }: { l
         void loadSiteInfo().then((data) => setHome(data.home ?? {})).catch(() => setHome({}));
     }, []);
 
-    const enhancementsRef = useRef<HTMLElement>(null);
-    useEffect(() => {
-        if (enhancementsRef.current) return initHomePageEnhancements(enhancementsRef.current);
-    }, [authReady, viewOwner, viewEpoch]);
-
     // 灵感大厅展示条数：视频/图片页签可分别设置，未设置时沿用统一的 promptLimit，0 表示不限。
     const activeLimit = inspirationMode === "video" ? videoLimit : imageLimit;
     const promptCards = (inspirationMode === "video" ? videoPrompts : imagePrompts).slice(0, activeLimit || undefined);
@@ -2654,7 +294,7 @@ export default function HomePage({ landing = false, suppressPromo = false }: { l
     if (viewOwner !== userId || viewEpoch !== sessionEpoch || !isCurrentView()) return null;
 
     return (
-        <main ref={enhancementsRef} className={landing ? "home-page home-landing" : "home-page home-explore"}>
+        <main className={landing ? "home-page home-landing" : "home-page home-explore"}>
             {/* 影幕展示：首页顶部竖版片段墙循环播放，向下渐隐到纯色底（内容层在其上方） */}
             {landing ? (
                 <div className="home-backdrop" aria-hidden="true">
@@ -2748,7 +388,8 @@ export default function HomePage({ landing = false, suppressPromo = false }: { l
                                 disabled={materialBusy || materials.length >= MAX_MATERIALS}
                                 onClick={() => {
                                     if (!user) {
-                                        message.warning(t("home.referenceLogin"));
+                                        message.info(t("home.referenceLogin"));
+                                        openAuthDialog("login", { redirect: "/" });
                                         return;
                                     }
                                     materialInputRef.current?.click();
@@ -2982,10 +623,7 @@ export default function HomePage({ landing = false, suppressPromo = false }: { l
                                             </span>
                                         ) : null}
                                         {/* 遮罩层必须 pointer-events-none：否则鼠标命中的是遮罩而不是 <video>，悬浮播放不会触发 */}
-                                        <span className="home-prompt-hover pointer-events-none" aria-hidden="true">
-                                            <span className="home-prompt-like"><Heart className="size-3.5" /></span>
-                                            <span className="home-prompt-share"><Share2 className="size-3.5" /></span>
-                                        </span>
+                                        <span className="home-prompt-hover pointer-events-none" aria-hidden="true" />
                                     </span>
                                     <span className="home-prompt-body">
                                         <span className="home-prompt-avatar" aria-hidden="true">{title.slice(0, 1)}</span>
@@ -3168,7 +806,7 @@ export function LandingCanvasPanel({ home }: { home: SiteHomeCopy }) {
 
 ========================================================================
 FILE: web/src/pages/image/index.tsx
-LINES: 1-866
+LINES: 1-1187
 ========================================================================
 import { useCreationChat, handoffCreationToChat, ensureCreationThread, newCreationThread, saveCreationRecord } from "@/pages/chat/chat-store";
 import { RecordActions } from "@/components/creation/record-actions";
@@ -4036,4 +1674,1586 @@ function ResultImageCard({
     index: number;
     onEdit: (image: GeneratedImage, index: number) => void;
     onDownload: (image: GeneratedImage, index: number) => void;
+    onSaveAsset: (image: GeneratedImage, index: number) => void;
+    onVideo: (image: GeneratedImage, index: number) => void; onContinue: (image: GeneratedImage, index: number) => void;
+}) {
+    const { t } = useTranslation();
+    useSyncExternalStore(subscribeImagePreviews, getImagePreviewRevision);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    return (
+        <div className="creation-result-card overflow-hidden rounded-2xl border border-border bg-background dark:border-border">
+            <button type="button" className="block w-full" onClick={() => setPreviewOpen(true)} aria-label={t("imageWorkbench.resultAlt", { count: index + 1 })}>
+                <img loading="lazy" width={image.width || undefined} height={image.height || undefined} src={previewUrlFor(image.storageKey) || image.dataUrl} alt={t("imageWorkbench.resultAlt", { count: index + 1 })} className="h-auto max-h-[65vh] w-full object-contain" />
+            </button>
+            {previewOpen && <Lightbox isOpen={previewOpen} onOpenChange={setPreviewOpen} media={(gallery || [image]).map((item, i) => ({ src: item.dataUrl, alt: t("imageWorkbench.resultAlt", { count: i + 1 }) }))} defaultIndex={gallery ? index : 0} hasZoom />}
+            <div className="space-y-2 border-t border-border px-3 py-2.5 dark:border-border">
+                <div className="flex min-w-0 gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    {image.width > 0 && image.height > 0 && <span>{image.width}x{image.height}</span>}
+                    {image.bytes > 0 && <span>{formatBytes(image.bytes)}</span>}
+                    <span>{formatDuration(image.durationMs)}</span>
+                </div>
+                <RecordActions primary={{ key: "edit", label: "继续改图", icon: <PenLine className="size-3.5" />, run: () => onContinue(image, index) }} secondary={{ key: "video", label: "生成视频", run: () => onVideo(image, index) }} more={[
+                    { key: "download", label: "下载图片", icon: <Download className="size-4" />, run: () => onDownload(image, index) },
+                    { key: "asset", label: "加入素材库", icon: <FolderPlus className="size-4" />, run: () => onSaveAsset(image, index) },
+                    { key: "reference", label: "添加为参考图", icon: <PenLine className="size-4" />, run: () => onEdit(image, index) },
+                ]} />
+            </div>
+        </div>
+    );
+}
+
+function PendingImageCard() {
+    const { t } = useTranslation();
+    return (
+        <div className="relative aspect-square overflow-hidden rounded-lg border border-dashed border-border bg-muted dark:border-border dark:bg-muted">
+            <div
+                className="absolute inset-0 opacity-60"
+                style={{
+                    backgroundImage: "radial-gradient(circle, rgba(120,113,108,0.35) 1.4px, transparent 1.6px)",
+                    backgroundSize: "16px 16px",
+                }}
+            />
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                <LoaderCircle className="size-6 animate-spin" />
+                <span>{t("workbench.generating")}</span>
+            </div>
+        </div>
+    );
+}
+
+function FailedImageCard({ error, onRetry }: { error: string; onRetry: () => void }) {
+    const { t } = useTranslation();
+    return (
+        <div className="overflow-hidden rounded-2xl border border-red-200 bg-red-50 dark:border-red-950 dark:bg-red-950/20">
+            <div className="flex aspect-square flex-col items-center justify-center gap-3 p-5 text-center">
+                <div className="text-sm font-medium text-red-600 dark:text-red-300">{t("workbench.failed")}</div>
+                <Typography.Paragraph ellipsis={{ rows: 4 }} className="!mb-0 !text-xs !text-red-500 dark:!text-red-300">
+                    {error}
+                </Typography.Paragraph>
+            </div>
+            <div className="flex justify-end border-t border-red-200 p-3 dark:border-red-950">
+                <Button size="small" danger onClick={onRetry}>
+                    {t("workbench.retry")}
+                </Button>
+            </div>
+        </div>
+    );
+}
+
+function updateResultAt(results: GenerationResult[], index: number, next: Partial<GenerationResult>) {
+    return results.map((item, itemIndex) => (itemIndex === index ? { ...item, ...next } : item));
+}
+
+function LogPanel({
+    logs,
+    selectedLogIds,
+    activeLogId,
+    onSelectedLogIdsChange,
+    onCreateSession,
+    onDeleteSelected,
+    onPreviewLog,
+}: {
+    logs: GenerationLog[];
+    selectedLogIds: string[];
+    activeLogId?: string;
+    onSelectedLogIdsChange: (ids: string[]) => void;
+    onCreateSession: () => void;
+    onDeleteSelected: () => void;
+    onPreviewLog: (log: GenerationLog) => void;
+}) {
+    const { t } = useTranslation();
+    const allSelected = Boolean(logs.length) && selectedLogIds.length === logs.length;
+    const toggleAll = () => onSelectedLogIdsChange(allSelected ? [] : logs.map((log) => log.id));
+
+    return (
+        <>
+            {/* 标题/计数已移到停靠面板头部，这里只留吸顶工具栏 */}
+            <div className="crec-toolbar">
+                <Button size="small" icon={<Plus className="size-3.5" />} onClick={onCreateSession}>
+                    {t("workbench.new")}
+                </Button>
+                <Button size="small" icon={<CheckSquare className="size-3.5" />} disabled={!logs.length} onClick={toggleAll}>
+                    {allSelected ? t("common.cancel") : t("workbench.selectAll")}
+                </Button>
+                <Button size="small" danger icon={<Trash2 className="size-3.5" />} disabled={!selectedLogIds.length} onClick={onDeleteSelected}>
+                    {t("common.delete")}
+                </Button>
+            </div>
+            <div className="space-y-3">
+                {logs.map((log) => (
+                    <LogCard
+                        key={log.id}
+                        log={log}
+                        selected={selectedLogIds.includes(log.id)}
+                        active={activeLogId === log.id}
+                        onSelectedChange={(checked) => onSelectedLogIdsChange(checked ? [...selectedLogIds, log.id] : selectedLogIds.filter((id) => id !== log.id))}
+                        onClick={() => onPreviewLog(log)}
+                    />
+                ))}
+                {!logs.length ? <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-border text-center text-sm text-muted-foreground dark:border-border">{t("workbench.noLogs")}</div> : null}
+            </div>
+        </>
+    );
+}
+
+function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: GenerationLog; selected: boolean; active: boolean; onSelectedChange: (checked: boolean) => void; onClick: () => void }) {
+    const { t } = useTranslation();
+    useSyncExternalStore(subscribeImagePreviews, getImagePreviewRevision);
+    const thumbnails = log.images.filter((image) => image.dataUrl).slice(0, 4);
+
+    return (
+        <button
+            type="button"
+            className={`block w-full rounded-lg border p-2 text-left transition ${active ? "border-foreground bg-brand-soft dark:bg-brand-soft" : "border-border bg-background hover:bg-muted dark:border-border dark:hover:bg-accent"}`}
+            onClick={onClick}
+        >
+            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
+                <Checkbox className="mt-0.5" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />
+                <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold leading-5">{log.title}</div>
+                    {thumbnails.length ? (
+                        <div className="mt-2 flex gap-1 overflow-hidden">
+                            {thumbnails.map((image) => (
+                                <img key={image.id} src={previewUrlFor(image.storageKey) || image.dataUrl} alt="" className="size-8 shrink-0 rounded-md object-cover" />
+                            ))}
+                        </div>
+                    ) : null}
+                    <div className="mt-2 flex flex-wrap gap-1">
+                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{t("workbench.itemCount", { count: log.imageCount })}</Tag>
+                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{log.time}</Tag>
+                    </div>
+                </div>
+                <div className="grid max-w-[150px] min-w-0 justify-items-end gap-1">
+                    <div className="flex min-w-0 flex-wrap justify-end gap-1">
+                        {log.status === 'pending' ? <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="processing">{t('workbench.generating')}</Tag> : log.status === 'unavailable' ? <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="warning">结果不可用</Tag> : null}
+                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="blue">
+                            {t("workbench.successCount", { count: log.successCount ?? log.imageCount })}
+                        </Tag>
+                        {log.failCount ? (
+                            <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="red">
+                                {t("workbench.failCount", { count: log.failCount })}
+                            </Tag>
+                        ) : null}
+                    </div>
+                    <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="green">
+                        {formatDuration(log.durationMs)}
+                    </Tag>
+                </div>
+            </div>
+        </button>
+    );
+}
+
+function isCurrentUser(owner: string, sessionEpoch: number) {
+    const auth = useAuthStore.getState();
+    return auth.ready && auth.user?.id === owner && auth.sessionEpoch === sessionEpoch;
+}
+
+async function readStoredLogs(owner: string, pager: GenerationHistoryPager, loadMore = false) {
+    if (typeof window === "undefined") return { items: [] as GenerationLog[], hasMore: false };
+    const local = await imageLogStorage.list<GenerationLog>(owner).catch(() => [] as GenerationLog[]);
+    try {
+        const cloud = loadMore ? await pager.loadMore() : await pager.refresh();
+        const remote = cloud.logs as unknown as GenerationLog[];
+        return { items: await Promise.all(mergeGenerationHistory(local, remote, cloud.hiddenTaskIds).map(normalizeLog)), hasMore: cloud.hasMore };
+    } catch {
+        if (loadMore) throw new Error("加载更早记录失败，请重试");
+        return { items: (await Promise.all(local.map(normalizeLog))).sort((a,b)=>b.createdAt-a.createdAt), hasMore: false };
+    }
+}
+
+async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {
+    const references = await Promise.all(
+        (log.references || []).map(async (item) => {
+            void ensureImagePreview(item.storageKey);
+            return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
+        }),
+    );
+    const images = await Promise.all(
+        (log.images || []).map(async (item) => {
+            void ensureImagePreview(item.storageKey);
+            return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
+        }),
+    );
+    const config = normalizeLogConfig(log);
+    return {
+        serverTaskIds: log.serverTaskIds,
+        creditsCharged: log.creditsCharged,
+        reconciliationRequired: log.reconciliationRequired,
+        referenceHistoryUnknown: log.referenceHistoryUnknown,
+        id: log.id || nanoid(),
+        createdAt: log.createdAt || Date.now(),
+        title: log.title || log.model || i18n.t("workbench.untitled"),
+        prompt: log.prompt || log.title || "",
+        time: log.time || new Date().toLocaleString(i18n.resolvedLanguage, { hour12: false }),
+        model: log.model || config.imageModel || "",
+        config,
+        references,
+        durationMs: log.durationMs || 0,
+        successCount: log.successCount ?? log.imageCount ?? 0,
+        failCount: log.failCount || 0,
+        imageCount: log.imageCount || log.successCount || 0,
+        size: log.size || config.size || "",
+        quality: log.quality || config.quality || "",
+        status: log.status || "success",
+        images,
+    };
+}
+
+function serializeLog(log: GenerationLog): GenerationLog {
+    return {
+        ...log,
+        references: log.references.map((item) => ({ ...item, dataUrl: item.storageKey ? "" : item.dataUrl })),
+        images: log.images.map((image) => ({ ...image, dataUrl: image.storageKey ? "" : image.dataUrl })),
+    };
+}
+
+function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
+    return {
+        model: log.config?.model || log.model || "",
+        imageModel: log.config?.imageModel || log.model || "",
+        quality: log.config?.quality || log.quality || "",
+        size: log.config?.size || log.size || "",
+        background: log.config?.background,
+        count: log.config?.count || String(log.imageCount || log.successCount || 1),
+    };
+}
+
+function imageHistoryGaps(log: GenerationLog) {
+    const missing: string[] = [];
+    if (!log.config.size || !log.config.quality || !log.config.background) missing.push("部分历史参数未保存");
+    if (log.referenceHistoryUnknown) missing.push("云端历史未保存参考素材信息");
+    return missing;
+}
+
+function moveListItem<T>(items: T[], index: number, offset: number) {
+    const targetIndex = index + offset;
+    if (targetIndex < 0 || targetIndex >= items.length) return items;
+    const next = [...items];
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    return next;
+}
+
+function ReferenceOrderButtons({ index, total, onMove }: { index: number; total: number; onMove: (offset: number) => void }) {
+    if (total <= 1) return null;
+    return (
+        <div className="absolute inset-x-1 bottom-1 flex justify-between">
+            <Button size="small" className="!h-6 !w-6 !min-w-6 !rounded-full !bg-white/85 !p-0 !shadow-sm" icon={<ArrowLeft className="size-3" />} disabled={index <= 0} onClick={() => onMove(-1)} />
+            <Button size="small" className="!h-6 !w-6 !min-w-6 !rounded-full !bg-white/85 !p-0 !shadow-sm" icon={<ArrowRight className="size-3" />} disabled={index >= total - 1} onClick={() => onMove(1)} />
+        </div>
+    );
+}
+
+function buildLog({
+    prompt,
+    model,
+    config,
+    references,
+    durationMs,
+    successCount,
+    failCount,
+    status,
+    images,
+    taskIds = [],
+}: {
+    prompt: string;
+    model: string;
+    config: GenerationLogConfig;
+    references: ReferenceImage[];
+    durationMs: number;
+    successCount: number;
+    failCount: number;
+    status: GenerationLog["status"];
+    images: GeneratedImage[];
+    taskIds?: string[];
+}): GenerationLog {
+    const logConfig = {
+        model: config.model,
+        imageModel: config.imageModel,
+        quality: config.quality,
+        size: config.size,
+        background: config.background,
+        count: config.count,
+    };
+    return {
+        id: nanoid(),
+        createdAt: Date.now(),
+        title: prompt.slice(0, 12) || i18n.t("workbench.untitled"),
+        prompt,
+        time: new Date().toLocaleString(i18n.resolvedLanguage, { hour12: false }),
+        model,
+        config: logConfig,
+        references,
+        durationMs,
+        successCount,
+        failCount,
+        serverTaskIds: [...new Set([...taskIds, ...images.flatMap(image => image.taskId ? [image.taskId] : [])])],
+        imageCount: Number(logConfig.count) || successCount,
+        size: logConfig.size,
+        quality: logConfig.quality,
+        status,
+        images,
+    };
+}
+
+
+========================================================================
+FILE: web/src/pages/models/index.tsx
+LINES: 1-387
+========================================================================
+import { useState, useMemo } from "react";
+import { Search, SlidersHorizontal, CheckCircle2, AlertCircle, Clock, XCircle, ImageIcon, Clapperboard, FileText, Music } from "lucide-react";
+
+import { SiteFooter } from "@/components/layout/site-footer";
+import { useConfigStore, type ServerModelInfo } from "@/stores/use-config-store";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useUrlState } from "@/hooks/use-url-state";
+import "./models.css";
+
+type ChannelStatus = "available" | "limited" | "unknown" | "coming-soon" | "offline";
+
+const CAPABILITY_OPTIONS = [
+    { value: "image", label: "图像生成", icon: ImageIcon },
+    { value: "video", label: "视频生成", icon: Clapperboard },
+    { value: "text", label: "文本生成", icon: FileText },
+    { value: "audio", label: "音频生成", icon: Music },
+];
+
+const STATUS_OPTIONS: { value: ChannelStatus; label: string; color: string }[] = [
+    { value: "available", label: "可用", color: "green" },
+    { value: "limited", label: "受限", color: "orange" },
+    { value: "unknown", label: "待检测", color: "blue" },
+    { value: "coming-soon", label: "即将上线", color: "blue" },
+    { value: "offline", label: "离线", color: "red" },
+];
+
+function getModelStatus(model: ServerModelInfo): ChannelStatus {
+    if (model.routeCount === 0) return "coming-soon";
+    if (model.health === "healthy") return "available";
+    if (model.health === "degraded") return "limited";
+    if (model.routes.length && model.routes.every(route => route.health === "down")) return "offline";
+    return "unknown";
+}
+
+function getProviderLogo(vendor: string): string {
+    const name = vendor.toLowerCase();
+    if (name.includes("anthropic") || name.includes("claude")) return "/icons/claude.svg";
+    if (name.includes("openai") || name.includes("gpt")) return "/icons/openai.svg";
+    if (name.includes("google") || name.includes("gemini")) return "/icons/gemini.svg";
+    if (name.includes("deepseek")) return "/icons/deepseek.svg";
+    if (name.includes("zhipu") || name.includes("glm")) return "/icons/glm.svg";
+    if (name.includes("xai") || name.includes("grok")) return "/icons/grok.svg";
+    return "";
+}
+
+function StatusBadge({ status }: { status: ChannelStatus }) {
+    const config = STATUS_OPTIONS.find(s => s.value === status);
+    if (!config) return null;
+
+    const icons = {
+        available: CheckCircle2,
+        limited: AlertCircle,
+        unknown: Clock,
+        "coming-soon": Clock,
+        offline: XCircle,
+    };
+    const Icon = icons[status];
+
+    return (
+        <span className={`model-status-badge status-${config.color}`}>
+            <Icon className="size-3" />
+            {config.label}
+        </span>
+    );
+}
+
+export default function ModelsPage() {
+    const serverModels = useConfigStore((state) => state.serverModels);
+
+    const [urlFilters, setUrlFilters] = useUrlState({
+        providers: [] as string[],
+        capabilities: [] as string[],
+        status: [] as string[],
+    });
+
+    const [searchInput, setSearchInput] = useState("");
+    const [showFilters, setShowFilters] = useState(false);
+    const debouncedSearch = useDebouncedValue(searchInput, 300);
+
+    // 提取所有厂商
+    const allProviders = useMemo(() => {
+        const providers = new Set<string>();
+        serverModels.forEach(model => {
+            if (model.familyVendor) providers.add(model.familyVendor);
+        });
+        return Array.from(providers).sort();
+    }, [serverModels]);
+
+    // 筛选模型
+    const filteredModels = useMemo(() => {
+        return serverModels.filter(model => {
+            // 搜索过滤
+            if (debouncedSearch) {
+                const search = debouncedSearch.toLowerCase();
+                const matchName = model.name.toLowerCase().includes(search);
+                const matchVendor = model.familyVendor?.toLowerCase().includes(search);
+                const matchFamily = model.familyName?.toLowerCase().includes(search);
+                if (!matchName && !matchVendor && !matchFamily) return false;
+            }
+
+            // 厂商过滤
+            if (urlFilters.providers.length > 0) {
+                if (!model.familyVendor || !urlFilters.providers.includes(model.familyVendor)) {
+                    return false;
+                }
+            }
+
+            // 能力过滤
+            if (urlFilters.capabilities.length > 0) {
+                if (!urlFilters.capabilities.includes(model.capability)) return false;
+            }
+
+            // 状态过滤
+            if (urlFilters.status.length > 0) {
+                const modelStatus = getModelStatus(model);
+                if (!urlFilters.status.includes(modelStatus)) return false;
+            }
+
+            return true;
+        });
+    }, [serverModels, debouncedSearch, urlFilters]);
+
+    // 按厂商分组
+    const groupedModels = useMemo(() => {
+        const groups = new Map<string, ServerModelInfo[]>();
+        filteredModels.forEach(model => {
+            const vendor = model.familyVendor || "其他";
+            if (!groups.has(vendor)) {
+                groups.set(vendor, []);
+            }
+            groups.get(vendor)!.push(model);
+        });
+        return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    }, [filteredModels]);
+
+    const toggleFilter = (type: keyof typeof urlFilters, value: string) => {
+        const current = urlFilters[type] as string[];
+        const next = current.includes(value)
+            ? current.filter(v => v !== value)
+            : [...current, value];
+        setUrlFilters({ [type]: next });
+    };
+
+    return (
+        <div className="models-page">
+            <div className="models-content">
+                {/* 头部 */}
+                <header className="models-header">
+                    <div className="models-header-content">
+                        <div>
+                            <h1 className="models-title">模型广场</h1>
+                            <p className="models-subtitle">
+                                探索 {serverModels.length} 个 AI 模型，涵盖图像、视频、文本和音频生成
+                            </p>
+                        </div>
+                        <div className="models-stats">
+                            <div className="models-stat-item">
+                                <span className="models-stat-value">{allProviders.length}</span>
+                                <span className="models-stat-label">厂商</span>
+                            </div>
+                            <div className="models-stat-item">
+                                <span className="models-stat-value">{serverModels.length}</span>
+                                <span className="models-stat-label">模型</span>
+                            </div>
+                            <div className="models-stat-item">
+                                <span className="models-stat-value">
+                                    {serverModels.filter(m => getModelStatus(m) === "available").length}
+                                </span>
+                                <span className="models-stat-label">可用</span>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                {/* 筛选栏 */}
+                <div className="models-filters-bar">
+                    <div className="models-search-wrapper">
+                        <Search className="models-search-icon" />
+                        <input
+                            type="text"
+                            className="models-search-input"
+                            placeholder="搜索模型、厂商..."
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        className={`models-filter-toggle ${showFilters ? "is-active" : ""}`}
+                        onClick={() => setShowFilters(!showFilters)}
+                    >
+                        <SlidersHorizontal className="size-4" />
+                        筛选
+                        {(urlFilters.providers.length + urlFilters.capabilities.length + urlFilters.status.length) > 0 && (
+                            <span className="models-filter-count">
+                                {urlFilters.providers.length + urlFilters.capabilities.length + urlFilters.status.length}
+                            </span>
+                        )}
+                    </button>
+                </div>
+
+                {/* 筛选面板 */}
+                {showFilters && (
+                    <div className="models-filters-panel">
+                        {/* 厂商筛选 */}
+                        <div className="models-filter-group">
+                            <h3 className="models-filter-title">厂商</h3>
+                            <div className="models-filter-options">
+                                {allProviders.map(provider => (
+                                    <button
+                                        key={provider}
+                                        type="button"
+                                        className={`models-filter-chip ${
+                                            urlFilters.providers.includes(provider) ? "is-selected" : ""
+                                        }`}
+                                        onClick={() => toggleFilter("providers", provider)}
+                                    >
+                                        {getProviderLogo(provider) && (
+                                            <img
+                                                src={getProviderLogo(provider)}
+                                                alt={provider}
+                                                className="models-filter-chip-logo"
+                                            />
+                                        )}
+                                        {provider}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 能力筛选 */}
+                        <div className="models-filter-group">
+                            <h3 className="models-filter-title">能力</h3>
+                            <div className="models-filter-options">
+                                {CAPABILITY_OPTIONS.map(cap => (
+                                    <button
+                                        key={cap.value}
+                                        type="button"
+                                        className={`models-filter-chip ${
+                                            urlFilters.capabilities.includes(cap.value) ? "is-selected" : ""
+                                        }`}
+                                        onClick={() => toggleFilter("capabilities", cap.value)}
+                                    >
+                                        <cap.icon className="size-3.5" aria-hidden="true" />
+                                        {cap.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 状态筛选 */}
+                        <div className="models-filter-group">
+                            <h3 className="models-filter-title">渠道状态</h3>
+                            <div className="models-filter-options">
+                                {STATUS_OPTIONS.map(status => (
+                                    <button
+                                        key={status.value}
+                                        type="button"
+                                        className={`models-filter-chip ${
+                                            urlFilters.status.includes(status.value) ? "is-selected" : ""
+                                        }`}
+                                        onClick={() => toggleFilter("status", status.value)}
+                                    >
+                                        {status.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 重置按钮 */}
+                        {(urlFilters.providers.length + urlFilters.capabilities.length + urlFilters.status.length) > 0 && (
+                            <button
+                                type="button"
+                                className="models-filter-reset"
+                                onClick={() => setUrlFilters({ providers: [], capabilities: [], status: [] })}
+                            >
+                                重置筛选
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* 模型列表 */}
+                <div className="models-list">
+                    {groupedModels.length > 0 ? (
+                        groupedModels.map(([vendor, models]) => (
+                            <div key={vendor} className="models-vendor-group">
+                                <div className="models-vendor-header">
+                                    {getProviderLogo(vendor) && (
+                                        <img
+                                            src={getProviderLogo(vendor)}
+                                            alt={vendor}
+                                            className="models-vendor-logo"
+                                        />
+                                    )}
+                                    <h2 className="models-vendor-name">{vendor}</h2>
+                                    <span className="models-vendor-count">{models.length} 个模型</span>
+                                </div>
+                                <div className="models-grid">
+                                    {models.map(model => {
+                                        const status = getModelStatus(model);
+                                        const capability = CAPABILITY_OPTIONS.find(option => option.value === model.capability);
+                                        const minCredits = Number.isInteger(model.minCredits)
+                                            ? model.minCredits
+                                            : Number(model.minCredits.toFixed(2));
+                                        const maxCredits = Number.isInteger(model.maxCredits)
+                                            ? model.maxCredits
+                                            : Number(model.maxCredits.toFixed(2));
+                                        const priceText = model.routeCount > 0 && model.minCredits > 0
+                                            ? `${minCredits === maxCredits ? minCredits : `${minCredits}-${maxCredits}`} 积分${
+                                                model.unit === "second" ? "/秒" :
+                                                model.unit === "request" ? "/次" :
+                                                model.unit === "image" ? "/张" : ""
+                                            }`
+                                            : "价格待定";
+
+                                        return (
+                                            <div key={model.id} className="model-card">
+                                                <div className="model-card-header">
+                                                    <div className="model-card-icon">
+                                                        {model.familyIcon ? (
+                                                            <img
+                                                                src={model.familyIcon}
+                                                                alt={model.name}
+                                                                className="model-icon-img"
+                                                            />
+                                                        ) : (
+                                                            <span className="model-icon-text">
+                                                                {model.name.slice(0, 2).toUpperCase()}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <StatusBadge status={status} />
+                                                </div>
+
+                                                <div className="model-card-body">
+                                                    <h3 className="model-card-title">{model.name}</h3>
+                                                    {model.description && (
+                                                        <p className="model-card-description">{model.description}</p>
+                                                    )}
+                                                </div>
+
+                                                <div className="model-card-footer">
+                                                    <div className="model-card-capabilities">
+                                                        {capability && (
+                                                            <span className="model-capability-badge" aria-label={capability.label} title={capability.label}>
+                                                                <capability.icon className="size-3.5" aria-hidden="true" />
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="model-card-meta">
+                                                        <span className="model-card-price">{priceText}</span>
+                                                        {model.routeCount > 0 && (
+                                                            <div className="model-card-routes">
+                                                                <span className="model-routes-count">{model.routeCount} 条线路</span>
+                                                                <div className="model-routes-dots">
+                                                                    {Array.from({ length: Math.min(model.routeCount, 5) }).map((_, i) => (
+                                                                        <span key={i} className="model-route-dot" />
+                                                                    ))}
+                                                                    {model.routeCount > 5 && (
+                                                                        <span className="model-routes-more">+{model.routeCount - 5}</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="models-empty">
+                            <p className="models-empty-text">没有找到匹配的模型</p>
+                            <p className="models-empty-hint">尝试调整筛选条件或搜索关键词</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <SiteFooter />
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/pages/models/models.css
+LINES: 1-732
+========================================================================
+/**
+ * 模型广场样式 - 学习 Orbi 定价页面设计
+ */
+
+.models-page {
+    position: relative;
+    /* 页面在 UserLayout 的 main（overflow:hidden）内滚动：必须撑满可用高度而不是跟随内容增高，
+       否则内容会溢出被父级裁掉，页面永远没有可滚动的余量。 */
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--background);
+    /* 全局默认是「滚动时才出现的透明滚动条」；模型广场需要常驻可见的右侧滚动条，
+       所以这里把标准滚动条属性交回浏览器，让下面的 ::-webkit-scrollbar 生效。 */
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+}
+
+.models-content {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 1360px);
+    margin: 0 auto;
+    padding: 40px 40px 72px;
+}
+
+/* ==================== 头部 ==================== */
+
+.models-header {
+    margin-bottom: 32px;
+}
+
+.models-header-content {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 32px;
+}
+
+.models-title {
+    margin: 0;
+    color: var(--foreground);
+    font-size: clamp(32px, 4vw, 48px);
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+}
+
+.models-subtitle {
+    margin: 12px 0 0;
+    color: var(--muted-foreground);
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+.models-stats {
+    display: flex;
+    gap: 24px;
+    padding: 20px 24px;
+    border: 1px solid var(--input);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.models-stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.models-stat-value {
+    color: var(--brand);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.models-stat-label {
+    color: var(--muted-foreground);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* ==================== 筛选栏 ==================== */
+
+.models-filters-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.models-search-wrapper {
+    position: relative;
+    flex: 1;
+    max-width: 480px;
+}
+
+.models-search-icon {
+    position: absolute;
+    top: 50%;
+    left: 16px;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    color: var(--muted-foreground);
+    pointer-events: none;
+}
+
+.models-search-input {
+    width: 100%;
+    height: 44px;
+    padding: 0 16px 0 44px;
+    border: 1px solid var(--input);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--foreground);
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.models-search-input::placeholder {
+    color: var(--muted-foreground);
+}
+
+.models-search-input:focus {
+    outline: none;
+    border-color: var(--brand);
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 0 0 3px rgba(216, 255, 62, 0.1);
+}
+
+.models-filter-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 44px;
+    padding: 0 20px;
+    border: 1px solid var(--input);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--foreground);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.models-filter-toggle:hover {
+    border-color: rgba(216, 255, 62, 0.4);
+    background: rgba(216, 255, 62, 0.05);
+}
+
+.models-filter-toggle.is-active {
+    border-color: var(--brand);
+    background: rgba(216, 255, 62, 0.1);
+    color: var(--brand);
+}
+
+.models-filter-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: var(--brand);
+    color: var(--brand-ink);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* ==================== 筛选面板 ==================== */
+
+.models-filters-panel {
+    margin-bottom: 32px;
+    padding: 24px;
+    border: 1px solid var(--input);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.02);
+    animation: slideInBounce 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes slideInBounce {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.models-filter-group {
+    margin-bottom: 24px;
+}
+
+.models-filter-group:last-of-type {
+    margin-bottom: 0;
+}
+
+.models-filter-title {
+    margin: 0 0 12px;
+    color: var(--foreground);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.models-filter-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.models-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    border: 1px solid var(--input);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--foreground);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.models-filter-chip:hover {
+    border-color: rgba(216, 255, 62, 0.4);
+    background: rgba(216, 255, 62, 0.05);
+    transform: translateY(-1px);
+}
+
+.models-filter-chip.is-selected {
+    border-color: var(--brand);
+    background: var(--brand);
+    color: var(--brand-ink);
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(216, 255, 62, 0.25);
+}
+
+.models-filter-chip-logo {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+}
+
+.models-filter-chip.is-selected .models-filter-chip-logo {
+    filter: brightness(0);
+}
+
+.models-filter-reset {
+    width: 100%;
+    height: 36px;
+    margin-top: 16px;
+    border: 1px solid var(--input);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted-foreground);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.models-filter-reset:hover {
+    border-color: rgba(255, 60, 60, 0.5);
+    background: rgba(255, 60, 60, 0.1);
+    color: rgba(255, 80, 80, 0.9);
+}
+
+/* ==================== 厂商分组 ==================== */
+
+.models-list {
+    display: flex;
+    flex-direction: column;
+    gap: 48px;
+}
+
+.models-vendor-group {
+    animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.models-vendor-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--input);
+}
+
+.models-vendor-logo {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+}
+
+:root:not(.dark) .models-vendor-logo,
+:root:not(.dark) .model-icon-img {
+    filter: brightness(0);
+}
+
+.models-vendor-name {
+    margin: 0;
+    color: var(--foreground);
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.models-vendor-count {
+    margin-left: auto;
+    color: var(--muted-foreground);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* ==================== 模型网格 ==================== */
+
+.models-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+/* ==================== 模型卡片 - 学习 Orbi ==================== */
+
+.model-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--card);
+    transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
+    cursor: pointer;
+}
+
+/* 渐变边框效果 - 学习 Orbi */
+.model-card::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+        135deg,
+        rgba(216, 255, 62, 0) 0%,
+        rgba(216, 255, 62, 0.6) 50%,
+        rgba(216, 255, 62, 0) 100%
+    );
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    pointer-events: none;
+}
+
+.model-card:hover::before {
+    opacity: 1;
+}
+
+.model-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(216, 255, 62, 0.3);
+    background: var(--card);
+    box-shadow:
+        0 20px 40px -10px rgba(0, 0, 0, 0.6),
+        0 0 0 1px rgba(216, 255, 62, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.model-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.model-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border: 1px solid var(--input);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    overflow: hidden;
+}
+
+.model-icon-img {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+}
+
+.model-icon-text {
+    color: var(--brand);
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.model-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.model-status-badge.status-green {
+    background: rgba(34, 197, 94, 0.15);
+    color: rgb(34, 197, 94);
+}
+
+.model-status-badge.status-orange {
+    background: rgba(251, 146, 60, 0.15);
+    color: rgb(251, 146, 60);
+}
+
+.model-status-badge.status-blue {
+    background: rgba(59, 130, 246, 0.15);
+    color: rgb(59, 130, 246);
+}
+
+.model-status-badge.status-red {
+    background: rgba(239, 68, 68, 0.15);
+    color: rgb(239, 68, 68);
+}
+
+.model-card-body {
+    flex: 1;
+    margin-bottom: 16px;
+}
+
+.model-card-title {
+    margin: 0 0 8px;
+    color: var(--foreground);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.model-card-description {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: 14px;
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+}
+
+.model-card-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.model-card-capabilities {
+    display: flex;
+    gap: 8px;
+}
+
+.model-capability-badge {
+    display: inline-grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border-radius: 9px;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.model-card:hover .model-capability-badge {
+    background: var(--brand-soft);
+    color: var(--foreground);
+}
+
+.model-card-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.model-card-price {
+    color: var(--brand);
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.model-card-routes {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.model-routes-count {
+    color: var(--muted-foreground);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.model-routes-dots {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.model-route-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.8);
+    box-shadow: none;
+}
+
+.model-routes-more {
+    color: var(--muted-foreground);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* ==================== 空状态 ==================== */
+
+.models-empty {
+    padding: 80px 20px;
+    text-align: center;
+}
+
+.models-empty-text {
+    margin: 0 0 8px;
+    color: var(--foreground);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.models-empty-hint {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: 14px;
+}
+
+/* ==================== 响应式 ==================== */
+
+@media (max-width: 1024px) {
+    .models-content {
+        padding: 32px 24px 48px;
+    }
+
+    .models-header-content {
+        flex-direction: column;
+    }
+
+    .models-stats {
+        width: 100%;
+        justify-content: space-around;
+    }
+
+    .models-grid {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 16px;
+    }
+}
+
+@media (max-width: 768px) {
+    .models-content {
+        padding: 24px 16px 32px;
+    }
+
+    .models-title {
+        font-size: 28px;
+    }
+
+    .models-subtitle {
+        font-size: 14px;
+    }
+
+    .models-filters-bar {
+        flex-direction: column;
+    }
+
+    .models-search-wrapper {
+        width: 100%;
+        max-width: none;
+    }
+
+    .models-filter-toggle {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .models-filters-panel {
+        padding: 20px;
+    }
+
+    .models-vendor-header {
+        flex-wrap: wrap;
+    }
+
+    .models-vendor-logo {
+        width: 24px;
+        height: 24px;
+    }
+
+    .models-vendor-name {
+        font-size: 20px;
+    }
+
+    .models-vendor-count {
+        flex-basis: 100%;
+        margin-left: 36px;
+    }
+
+    .models-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .model-card:hover {
+        transform: translateY(-2px);
+    }
+}
+
+/* ==================== 自定义滚动条 ==================== */
+
+/* 全局 useGlobalScrollbar 会在滚动时给容器加 .scrollbar-active（灰色半透明滑块），
+   模型广场要常驻品牌色滚动条，这里用更高优先级压住它，不依赖样式加载顺序。 */
+.models-page.scrollbar-active {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+}
+
+.models-page::-webkit-scrollbar {
+    width: 8px;
+}
+
+.models-page::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.models-page::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(216, 255, 62, 0.38);
+}
+
+.models-page::-webkit-scrollbar-thumb:hover {
+    background: rgba(216, 255, 62, 0.6);
+}
+
+/* 触屏设备用系统浮层滚动条：窄屏上不占用 8px 宽度挤压卡片 */
+@media (hover: none) {
+    .models-page,
+    .models-page.scrollbar-active {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(216, 255, 62, 0.5) transparent;
+    }
+}
+
+/* ==================== 加载动画 ==================== */
+
+.model-card {
+    animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.model-card:nth-child(1) { animation-delay: 0.05s; }
+.model-card:nth-child(2) { animation-delay: 0.1s; }
+.model-card:nth-child(3) { animation-delay: 0.15s; }
+.model-card:nth-child(4) { animation-delay: 0.2s; }
+
+/* ==================== 可访问性 ==================== */
+
+.model-card:focus-visible,
+.models-filter-chip:focus-visible,
+.models-filter-toggle:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+
+========================================================================
+FILE: web/src/pages/not-found/index.tsx
+LINES: 1-25
+========================================================================
+import { Home } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { PageTransition } from "@/components/layout/page-transition";
+
+export default function NotFound() {
+    const { t } = useTranslation();
+    return (
+        <PageTransition className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+            <main className="flex h-full min-h-0 items-center justify-center overflow-y-auto bg-page px-6 py-10 text-foreground">
+                <section className="w-full max-w-md text-center">
+                    <div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-[16px] border border-border bg-card text-[22px] font-semibold tabular-nums text-muted-foreground">404</div>
+                    <h1 className="text-[26px] font-semibold leading-9 tracking-[-0.01em]">{t("notFound.title")}</h1>
+                    <p className="mt-3 text-[13px] leading-6 text-muted-foreground">{t("notFound.description")}</p>
+                    <div className="mt-8 flex flex-wrap justify-center gap-3">
+                        <Link to="/" className="jm-btn jm-btn-primary h-9 px-4">
+                            <Home className="size-4" />
+                            {t("notFound.home")}
+                        </Link>
+                    </div>
+                </section>
+            </main>
+        </PageTransition>
+    );
+}
+
+
+========================================================================
+FILE: web/src/pages/prompts/index.tsx
+LINES: 1-93
+========================================================================
+import { FolderPlus, Search } from "lucide-react";
+import { type ReactNode, type UIEvent, useEffect, useState } from "react";
+import { App, Button, Empty, Spin, Tag } from "antd";
+import { useTranslation } from "react-i18next";
+
+import { PromptCard } from "@/components/prompts/prompt-card";
+import { usePromptList } from "@/components/prompts/use-prompt-list";
+import { PromptDetailDialog } from "@/components/prompts/prompt-detail-dialog";
+import { useCopyText } from "@/hooks/use-copy-text";
+import { cn } from "@/lib/utils";
+import { useAssetStore } from "@/stores/use-asset-store";
+import { promptImageUrl } from "@/lib/prompt-image";
+import { ALL_PROMPTS_OPTION, type Prompt } from "@/services/api/prompts";
+
+export default function PromptsPage() {
+    const { message } = App.useApp();
+    const { t } = useTranslation();
+    const [titleKeyword, setTitleKeyword] = useState("");
+    const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const [selectedCategory, setSelectedCategory] = useState(ALL_PROMPTS_OPTION);
+    const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null);
+    const addAsset = useAssetStore((state) => state.addAsset);
+    const copyText = useCopyText();
+    const { query, items: promptItems, tags: promptTags, categories: promptCategoryOptions, total: totalPrompts } = usePromptList({ keyword: titleKeyword, tags: selectedTags, category: selectedCategory });
+
+    useEffect(() => {
+        if (query.isError) message.error(query.error instanceof Error ? query.error.message : t("prompts.loadFailed"));
+    }, [message, query.error, query.isError, t]);
+
+    const toggleTag = (tag: string) => {
+        if (tag === ALL_PROMPTS_OPTION) return setSelectedTags([]);
+        setSelectedTags((items) => (items.includes(tag) ? items.filter((item) => item !== tag) : [...items, tag]));
+    };
+
+    const savePromptAsset = (item: Prompt) => {
+        addAsset({ kind: "text", title: item.title, coverUrl: promptImageUrl(item.coverUrl), tags: item.tags, source: item.category, data: { content: item.prompt }, metadata: { source: "prompt-library", promptId: item.id, githubUrl: item.githubUrl } });
+        message.success(t("common.addedToAssets"));
+    };
+
+    const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
+        const target = event.currentTarget;
+        if (query.hasNextPage && !query.isFetching && !query.isFetchNextPageError && target.scrollTop + target.clientHeight >= target.scrollHeight - 160) void query.fetchNextPage();
+    };
+
+    return (
+        <div className="page-surface flex h-full flex-col overflow-hidden bg-background text-foreground dark:text-foreground">
+            <main className="prompts-main jm-page" onScroll={handleListScroll}>
+                <div className="prompts-band jm-page-inner">
+                    <header className="jm-page-head">
+                    <div className="min-w-0">
+                        <h1 className="jm-page-title">{t("prompts.title")}</h1>
+                        <p className="jm-page-desc">{t("prompts.total", { count: totalPrompts })}</p>
+                    </div>
+                    <label className="jm-search shrink-0">
+                        <Search className="size-4 shrink-0" />
+                        <input value={titleKeyword} placeholder={t("prompts.search")} onChange={(event) => setTitleKeyword(event.target.value)} />
+                    </label>
+                    </header>
+                    <div className="prompts-layout mt-7 space-y-6">
+                        <section aria-label="提示词筛选" className="space-y-3 border-b border-border pb-5">
+                            <PromptFilter label={t("prompts.category")} options={promptCategoryOptions} selected={selectedCategory} onChange={setSelectedCategory} />
+                            <div className="prompt-filter-row">
+                                <div className="prompt-filter-label is-tags">{t("prompts.tags")}</div>
+                                <div className="prompt-tag-scroll" role="group" aria-label={t("prompts.tags")}>
+                                    {promptTags.map((tag) => {
+                                        const active = tag === ALL_PROMPTS_OPTION ? selectedTags.length === 0 : selectedTags.includes(tag);
+                                        return <Tag.CheckableTag key={tag} checked={active} className={cn("prompt-filter-tag", active && "is-active")} onChange={() => toggleTag(tag)}>{tag === ALL_PROMPTS_OPTION ? t("common.all") : tag}</Tag.CheckableTag>;
+                                    })}
+                                </div>
+                            </div>
+                        </section>
+                        <section className="min-w-0">
+                            {query.isLoading ? <div className="flex h-60 items-center justify-center"><Spin /></div> : null}
+                            {!query.isLoading ? <div><PromptGrid items={promptItems} onOpen={setSelectedPrompt} renderActions={(item) => <Button type="text" size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => savePromptAsset(item)}>{t("common.addToAssets")}</Button>} onCopy={(item) => copyText(item.prompt, t("common.promptCopied"))} emptyText={t("prompts.empty")} /></div> : null}
+                            <div className="mt-6 text-center text-xs text-muted-foreground">{query.hasNextPage ? <Button type="text" loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{query.isFetchNextPageError ? t("canvas.sidePanel.loadFailedRetry") : t("prompts.loadMore")}</Button> : promptItems.length > 0 ? t("prompts.end") : null}</div>
+                        </section>
+                    </div>
+                </div>
+            </main>
+
+            <PromptDetailDialog prompt={selectedPrompt} onClose={() => setSelectedPrompt(null)} onCopy={(prompt) => copyText(prompt, t("common.promptCopied"))} onSaveAsset={savePromptAsset} />
+        </div>
+    );
+}
+
+function PromptFilter({ label, options, selected, onChange }: { label: string; options: string[]; selected: string; onChange: (value: string) => void }) {
+    const { t } = useTranslation();
+    return <div className="prompt-filter-row"><div className="prompt-filter-label">{label}</div><div className="prompt-filter-options">{options.map((option) => <Tag.CheckableTag key={option} checked={selected === option} className={cn("prompt-filter-tag", selected === option && "is-active")} onChange={() => onChange(option)}>{option === ALL_PROMPTS_OPTION ? t("common.all") : option}</Tag.CheckableTag>)}</div></div>;
+}
+
+function PromptGrid({ items, onOpen, onCopy, renderActions, emptyText }: { items: Prompt[]; onOpen: (item: Prompt) => void; onCopy: (item: Prompt) => void; renderActions: (item: Prompt) => ReactNode; emptyText: string }) {
+    return <div><div className="prompts-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{items.map((item) => <PromptCard key={`${item.sourceId}:${item.id}`} item={item} onOpen={() => onOpen(item)} onCopy={() => onCopy(item)} extraAction={renderActions(item)} />)}</div>{items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} className="!m-0 jm-card jm-empty min-h-[320px]" /> : null}</div>;
+}
 

@@ -61,7 +61,7 @@ export function CatalogTab() {
     const [activeTab, setActiveTab] = useState(() => permissions.includes("channels.read") ? "channels" : permissions.includes("models.read") ? "models" : "tiers");
     const permissionKey = permissions.join("|");
 
-    const [channelModal, setChannelModal] = useState<{ open: boolean; id?: string; name: string; textMode: string; baseUrl: string; apiKey: string; protocol?: string; accessKeyId?: string; accessKeySecret?: string }>({ open: false, name: "", textMode: "responses", baseUrl: "", apiKey: "" });
+    const [channelModal, setChannelModal] = useState<{ open: boolean; id?: string; name: string; textMode: string; baseUrl: string; apiKey: string; protocol?: string; accessKeyId?: string; accessKeySecret?: string; sameAccountRotation?:boolean }>({ open: false, name: "", textMode: "responses", baseUrl: "", apiKey: "" });
     const [testingChannel, setTestingChannel] = useState(false);
     const [channelModels, setChannelModels] = useState<string[]>([]);
     const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
@@ -119,7 +119,7 @@ export function CatalogTab() {
         const aliyun = channelModal.protocol === 'aliyun-viapi';
         if (aliyun && (channelModal.accessKeyId || channelModal.accessKeySecret) && (!channelModal.accessKeyId || !channelModal.accessKeySecret)) { message.error('请同时填写 AccessKey ID 和 Secret'); return; }
         const apiKey = aliyun ? (channelModal.accessKeyId && channelModal.accessKeySecret ? JSON.stringify({ accessKeyId: channelModal.accessKeyId, accessKeySecret: channelModal.accessKeySecret }) : '') : channelModal.apiKey;
-        const payload = { name: channelModal.name, protocol: channelModal.protocol || 'openai', textMode: channelModal.textMode, baseUrl: channelModal.baseUrl, ...(apiKey ? { apiKey } : {}) };
+        const payload = { sameAccountRotation:channelModal.sameAccountRotation === true, name: channelModal.name, protocol: channelModal.protocol || 'openai', textMode: channelModal.textMode, baseUrl: channelModal.baseUrl, ...(apiKey ? { apiKey } : {}) };
         try {
             await apiRequest(channelModal.id ? `/api/admin/channels/${channelModal.id}` : "/api/admin/channels", { method: channelModal.id ? "PATCH" : "POST", json: payload });
             setChannelModal({ open: false, name: "", textMode: "responses", baseUrl: "", apiKey: "" });
@@ -481,6 +481,7 @@ export function CatalogTab() {
                         </div>
                     ) : null}
                 </div>
+            {channelModal.id && <label><input type="checkbox" checked={!!channelModal.sameAccountRotation} onChange={e=>setChannelModal({...channelModal,sameAccountRotation:e.target.checked})}/> 同一上游账户换钥，同时更新历史任务使用的凭据</label>}
             </Modal>
 
             <Modal title={familyModal.id ? "编辑模型族" : "新增模型族"} open={familyModal.open} onCancel={() => setFamilyModal({ ...familyModal, open: false })} onOk={() => void saveFamily()} okText="保存" width={500}>

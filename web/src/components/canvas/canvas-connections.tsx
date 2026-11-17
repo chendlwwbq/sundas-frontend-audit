@@ -62,7 +62,6 @@ export function ConnectionPath({
                 style={{
                     pointerEvents: "none",
                     transition: "stroke 140ms ease, stroke-width 140ms ease, stroke-opacity 140ms ease",
-                    filter: active ? `drop-shadow(0 0 6px ${accent}55)` : undefined,
                 }}
             />
             {active ? <path d={pathD} stroke={accent} strokeWidth="2.4" strokeOpacity="0.9" fill="none" strokeLinecap="round" strokeDasharray="2 14" style={{ pointerEvents: "none", animation: "canvas-connection-flow 1.1s linear infinite" }} /> : null}
