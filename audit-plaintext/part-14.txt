@@ -1,0 +1,3418 @@
+SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
+This is uncompressed source text, not a directory index or archive.
+Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
+Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-panorama-sphere.ts
+LINES: 1-23
+========================================================================
+import type { Object3D } from "three";
+
+import type { DirectorScene } from "@/types/director";
+
+export const DIRECTOR_PANORAMA_DEFAULT_RADIUS = 60;
+
+export function directorPanoramaSphere(scene: DirectorScene) {
+    return {
+        radius: scene.panoramaRadius ?? DIRECTOR_PANORAMA_DEFAULT_RADIUS,
+        rotation: scene.panoramaRotation ?? scene.panorama?.rotation ?? 0,
+    };
+}
+
+/** Hide the colored sphere for non-beauty passes; the fallback background remains. */
+export function suspendDirectorPanoramaSphere(scene: Object3D): () => void {
+    const previous: Array<{ object: Object3D; visible: boolean }> = [];
+    scene.traverse((object) => {
+        if (object.userData.directorPanoramaSphere !== true) return;
+        previous.push({ object, visible: object.visible });
+        object.visible = false;
+    });
+    return () => { for (const item of previous) item.object.visible = item.visible; };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-path-sampling.ts
+LINES: 1-33
+========================================================================
+export type DirectorGroundPathPoint = { x: number; z: number };
+
+/**
+ * Convert a freehand polyline into a fixed number of editable nodes by arc length.
+ * The user's sampled pointer events stay an implementation detail; only the
+ * normalized nodes are persisted as path keyframes.
+ */
+export function resampleDirectorGroundPath(points: DirectorGroundPathPoint[], controlPointCount = 10): DirectorGroundPathPoint[] {
+    const clean = points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.z))
+        .filter((point, index, all) => index === 0 || Math.hypot(point.x - all[index - 1].x, point.z - all[index - 1].z) > 1e-6);
+    if (clean.length < 2) return clean;
+
+    const cumulative = [0];
+    for (let index = 1; index < clean.length; index += 1) {
+        cumulative.push(cumulative[index - 1] + Math.hypot(clean[index].x - clean[index - 1].x, clean[index].z - clean[index - 1].z));
+    }
+    const length = cumulative.at(-1) || 0;
+    if (length <= 1e-6) return [clean[0]];
+
+    const segments = Math.max(1, Math.min(127, Math.round(controlPointCount) - 1));
+    return Array.from({ length: segments + 1 }, (_, index) => {
+        const distance = length * index / segments;
+        let segment = 1;
+        while (segment < cumulative.length - 1 && cumulative[segment] < distance) segment += 1;
+        const startDistance = cumulative[segment - 1];
+        const segmentLength = cumulative[segment] - startDistance;
+        const amount = segmentLength > 1e-6 ? (distance - startDistance) / segmentLength : 0;
+        return {
+            x: clean[segment - 1].x + (clean[segment].x - clean[segment - 1].x) * amount,
+            z: clean[segment - 1].z + (clean[segment].z - clean[segment - 1].z) * amount,
+        };
+    });
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-placement.ts
+LINES: 1-144
+========================================================================
+import type { DirectorObject, DirectorVec3 } from "../../../types/director";
+
+export type DirectorFootprint = { width: number; depth: number };
+export type DirectorPlacementCandidate = { footprint: DirectorFootprint; position: DirectorVec3 };
+
+/** 摆放最小间隙，保证新对象与既有对象之间肉眼可分。 */
+export const DIRECTOR_PLACEMENT_MARGIN = 0.25;
+const SEARCH_STEP = 0.75;
+const MAX_RINGS = 24;
+const SAMPLES_PER_RING = 12;
+// 模型导入后被 normalizeModel 缩放到最大边 2，未知尺寸时按此保守占位。
+const MODEL_FOOTPRINT = 2;
+const GRID_STEP = 0.5;
+
+/** Ground grid is XZ-only: object height stays under its constructor/inspector's control. */
+export function snapDirectorGroundPosition(position: DirectorVec3, enabled: boolean): DirectorVec3 {
+    if (!enabled) return position;
+    const snap = (value: number) => Math.round(value / GRID_STEP) * GRID_STEP || 0;
+    return [snap(position[0]), position[1], snap(position[2])];
+}
+
+function baseFootprint(object: Pick<DirectorObject, "kind" | "primitive">): DirectorFootprint {
+    if (object.kind === "actor" || object.primitive === "character") return { width: 0.8, depth: 0.8 };
+    if (object.kind === "model") return { width: MODEL_FOOTPRINT, depth: MODEL_FOOTPRINT };
+    if (object.kind === "billboard" || object.primitive === "plane") return { width: 1.6, depth: 0.3 };
+    if (object.primitive === "sphere") return { width: 1.2, depth: 1.2 };
+    if (object.primitive === "cylinder") return { width: 1, depth: 1 };
+    if (object.primitive === "torus") return { width: 1.16, depth: 1.16 };
+    if (object.primitive === "cone" || object.primitive === "pyramid") return { width: 1.1, depth: 1.1 };
+    if (object.primitive === "empty") return { width: 0.24, depth: 0.24 };
+    return { width: 1, depth: 1 };
+}
+
+/** XZ 平面占位：只用 scale 的 x/z，取绝对值以容忍负缩放；不参与 Y 判断。 */
+export function directorObjectFootprint(object: Pick<DirectorObject, "kind" | "primitive" | "transform">): DirectorFootprint {
+    const base = baseFootprint(object);
+    const scaleX = Math.abs(object.transform?.scale?.[0] ?? 1);
+    const scaleZ = Math.abs(object.transform?.scale?.[2] ?? 1);
+    return {
+        width: Math.max(0.05, base.width * (Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1)),
+        depth: Math.max(0.05, base.depth * (Number.isFinite(scaleZ) && scaleZ > 0 ? scaleZ : 1)),
+    };
+}
+
+function overlaps(a: DirectorPlacementCandidate, b: DirectorPlacementCandidate, margin: number) {
+    const halfX = (a.footprint.width + b.footprint.width) / 2 + margin;
+    const halfZ = (a.footprint.depth + b.footprint.depth) / 2 + margin;
+    return Math.abs(a.position[0] - b.position[0]) < halfX && Math.abs(a.position[2] - b.position[2]) < halfZ;
+}
+
+/** 确定性 ring 采样：先原位，再逐环外扩；索引顺序固定，便于测试与复现。 */
+function candidateOffsets() {
+    const offsets: Array<[number, number]> = [[0, 0]];
+    for (let ring = 1; ring <= MAX_RINGS; ring += 1) {
+        const radius = ring * SEARCH_STEP;
+        for (let sample = 0; sample < SAMPLES_PER_RING; sample += 1) {
+            const angle = (sample / SAMPLES_PER_RING) * Math.PI * 2;
+            offsets.push([radius * Math.cos(angle), radius * Math.sin(angle)]);
+        }
+    }
+    return offsets;
+}
+
+/**
+ * 为新对象求不与任何既有对象 XZ 占位相交的位置。
+ * 只改 X/Z，保留调用方给定的 Y（actor/model 的地面 y、primitive 的 0.5、billboard 的 1.1）。
+ * 隐藏对象同样占位；ring 采样耗尽时回退到「所有占位最右边界之外」的确定性位置，
+ * 该位置在有限 existing 集合下必然不与任何 AABB 相交。
+ */
+export function resolveDirectorPlacement(input: { object: Pick<DirectorObject, "kind" | "primitive" | "transform">; existing: Array<Pick<DirectorObject, "kind" | "primitive" | "transform">>; margin?: number; gridSnap?: boolean }): DirectorVec3 {
+    const { object, existing } = input;
+    const margin = input.margin ?? DIRECTOR_PLACEMENT_MARGIN;
+    const desired = object.transform?.position ?? [0, 0, 0];
+    const safeY = Number.isFinite(desired[1]) ? desired[1] : 0;
+    const originX = Number.isFinite(desired[0]) ? desired[0] : 0;
+    const originZ = Number.isFinite(desired[2]) ? desired[2] : 0;
+    const footprint = directorObjectFootprint(object);
+    const occupied = existing.flatMap((item) => {
+        const position = item.transform?.position;
+        const x = Number.isFinite(position?.[0]) ? position![0] : 0;
+        const z = Number.isFinite(position?.[2]) ? position![2] : 0;
+        return [{ footprint: directorObjectFootprint(item), position: [x, safeY, z] as DirectorVec3 }];
+    });
+    for (const [offsetX, offsetZ] of candidateOffsets()) {
+        const position = snapDirectorGroundPosition([originX + offsetX, safeY, originZ + offsetZ], input.gridSnap === true);
+        if (!occupied.some((item) => overlaps({ footprint, position }, item, margin))) return position;
+    }
+    const right = clearRightOfAll(occupied, footprint, margin, originX);
+    return [input.gridSnap ? Math.ceil(right / GRID_STEP) * GRID_STEP : right, safeY, input.gridSnap ? snapDirectorGroundPosition([0, safeY, originZ], true)[2] : originZ];
+}
+
+/**
+ * 取所有占位的最右边界，再让新对象整体位于其右侧。
+ * 因为 |dx| >= halfX + margin 恒成立，overlaps 的 X 条件必然为假，故一定不相交。
+ */
+function clearRightOfAll(occupied: DirectorPlacementCandidate[], footprint: DirectorFootprint, margin: number, originX: number) {
+    const maxRight = occupied.reduce((rightmost, item) => Math.max(rightmost, item.position[0] + item.footprint.width / 2), Number.NEGATIVE_INFINITY);
+    if (!Number.isFinite(maxRight)) return originX;
+    // 额外加一个 margin 抵消浮点误差，保证严格大于 overlaps 的阈值。
+    return maxRight + footprint.width / 2 + margin * 2;
+}
+
+/** 地面锚点：只有 XZ，Y 恒由构造器决定，绝不从这里流入。 */
+export type DirectorGroundPoint = { x: number; z: number };
+
+/**
+ * 新增对象时的空间意图。两个来源都可能缺失（尚未移动过 pointer、上下文不可用）。
+ * 顺序固定：pointer > orbit target > 对象自身默认 XZ。
+ */
+export type DirectorPlacementIntent = {
+    pointer: DirectorGroundPoint | null;
+    orbitTarget: DirectorGroundPoint | null;
+};
+
+export const emptyDirectorPlacementIntent: DirectorPlacementIntent = { pointer: null, orbitTarget: null };
+
+/**
+ * 归一化任意数值来源为合法地面点：非有限（NaN / ±Infinity）一律判为不可用。
+ * 射线与地面平行、相机在平面内、上下文半失效时都会产出这类值，必须在入口挡掉。
+ */
+export function finiteDirectorGroundPoint(x: unknown, z: unknown): DirectorGroundPoint | null {
+    if (typeof x !== "number" || typeof z !== "number") return null;
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+    return { x, z };
+}
+
+/**
+ * 按固定优先级选出锚点 XZ，并严格保留 fallback 的 Y。
+ * fallback 来自构造器（primitive 0.5 / actor 0 / model 0 / billboard 1.1），
+ * 因此「贴地对象不悬空、billboard 不落地」这一语义只依赖构造器，不受指针高度影响。
+ *
+ * 两个来源都在选择时重新归一化：intent 可能携带结构完整但数值非法的点
+ * （NaN / ±Infinity）。若只用 `??` 判空，非法 pointer 会遮蔽合法 orbitTarget，
+ * 两者都非法时也无法可靠回退 fallback。
+ */
+export function resolveDirectorPlacementAnchor(input: { intent: DirectorPlacementIntent | null; fallback: DirectorVec3 }): DirectorVec3 {
+    const { intent, fallback } = input;
+    const fallbackY = Number.isFinite(fallback?.[1]) ? fallback[1] : 0;
+    const pointer = finiteDirectorGroundPoint(intent?.pointer?.x, intent?.pointer?.z);
+    const orbitTarget = finiteDirectorGroundPoint(intent?.orbitTarget?.x, intent?.orbitTarget?.z);
+    const fallbackPoint = finiteDirectorGroundPoint(fallback?.[0], fallback?.[2]);
+    const chosen = pointer ?? orbitTarget ?? fallbackPoint ?? { x: 0, z: 0 };
+    return [chosen.x, fallbackY, chosen.z];
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-pose-rig.ts
+LINES: 1-242
+========================================================================
+import { Box3, Euler, Matrix4, Object3D, Quaternion, Vector3 } from "three";
+
+import { directorPoseChainBones, hasDirectorSolvedPose, resolveDirectorPoseTargets, resolveDirectorTwoBoneJoint } from "@/lib/canvas/director/director-pose-solving";
+import type { DirectorHumanoidBone, DirectorPose, DirectorRig, DirectorVec3 } from "@/types/director";
+
+type EndBone = "leftHand" | "rightHand" | "leftFoot" | "rightFoot";
+type HandBasis = { fingers: Vector3; palm: Vector3 };
+type PoseRig = {
+    bones: Partial<Record<DirectorHumanoidBone, Object3D>>;
+    positions: Partial<Record<DirectorHumanoidBone, Vector3>>;
+    rotations: Partial<Record<DirectorHumanoidBone, Quaternion>>;
+    hands: Partial<Record<"leftHand" | "rightHand", HandBasis>>;
+    localPositions: Partial<Record<DirectorHumanoidBone, Vector3>>;
+    localRotations: Partial<Record<DirectorHumanoidBone, Quaternion>>;
+    height: number;
+    mirrorX: number;
+};
+const profiles = new WeakMap<Object3D, PoseRig>();
+const vector = (point: DirectorVec3) => new Vector3(...point);
+const tuple = (point: Vector3) => point.toArray() as DirectorVec3;
+
+function actorPoint(model: Object3D, bone: Object3D) {
+    const point = bone.getWorldPosition(new Vector3());
+    return model.parent ? model.parent.worldToLocal(point) : point;
+}
+function actorRotation(model: Object3D, bone: Object3D) {
+    bone.updateWorldMatrix(true, false);
+    const matrix = bone.matrixWorld.clone();
+    if (model.parent) matrix.premultiply(model.parent.matrixWorld.clone().invert());
+    return new Quaternion().setFromRotationMatrix(matrix.extractRotation(matrix));
+}
+function setActorRotation(model: Object3D, bone: Object3D, rotation: Quaternion) {
+    const parent = bone.parent ? actorRotation(model, bone.parent) : new Quaternion();
+    bone.quaternion.copy(parent.invert().multiply(rotation));
+    bone.updateWorldMatrix(false, true);
+}
+function setActorPosition(model: Object3D, bone: Object3D, position: Vector3) {
+    const world = model.parent ? model.parent.localToWorld(position.clone()) : position.clone();
+    bone.position.copy(bone.parent ? bone.parent.worldToLocal(world) : world);
+    bone.updateWorldMatrix(false, true);
+}
+
+/** Capture the unposed rig in character space, before mixer, preset, or user edits. */
+export function prepareDirectorPoseRig(model: Object3D, rig: DirectorRig, height?: number) {
+    const existing = profiles.get(model);
+    if (existing) return existing;
+    model.updateWorldMatrix(true, true);
+    const bones: PoseRig["bones"] = {};
+    const positions: PoseRig["positions"] = {};
+    const rotations: PoseRig["rotations"] = {};
+    const localPositions: PoseRig["localPositions"] = {};
+    const localRotations: PoseRig["localRotations"] = {};
+    for (const [key, name] of Object.entries(rig.boneMap)) {
+        const bone = name ? model.getObjectByName(name) : null;
+        if (!bone) continue;
+        const keyName = key as DirectorHumanoidBone;
+        bones[keyName] = bone;
+        localPositions[keyName] = bone.position.clone();
+        localRotations[keyName] = bone.quaternion.clone();
+        positions[keyName] = actorPoint(model, bone);
+        rotations[keyName] = actorRotation(model, bone);
+    }
+    const left = positions.leftUpperLeg?.x ?? positions.leftUpperArm?.x ?? -1;
+    const right = positions.rightUpperLeg?.x ?? positions.rightUpperArm?.x ?? 1;
+    const hands: PoseRig["hands"] = {};
+    for (const side of ["left", "right"] as const) {
+        const hand = positions[`${side}Hand`];
+        const forearm = positions[`${side}LowerArm`];
+        if (!hand || !forearm) continue;
+        const middle = positions[`${side}Middle1`];
+        const index = positions[`${side}Index1`];
+        const pinky = positions[`${side}Pinky1`];
+        const fingers = (middle || hand.clone().add(hand.clone().sub(forearm))).clone().sub(hand).normalize();
+        const palm = index && pinky
+            ? fingers.clone().cross(index.clone().sub(pinky)).multiplyScalar(side === "left" ? 1 : -1).normalize()
+            : new Vector3(side === "left" ? 1 : -1, 0, 0);
+        hands[`${side}Hand`] = { fingers, palm };
+    }
+    const measuredHeight = height || model.userData.directorRestHeight || new Box3().setFromObject(model, true).getSize(new Vector3()).y;
+    const profile: PoseRig = { bones, positions, rotations, hands, localPositions, localRotations, height: Math.max(0.1, measuredHeight), mirrorX: left > right ? -1 : 1 };
+    profiles.set(model, profile);
+    return profile;
+}
+
+/** Restore before starting a clip, including bones for which that clip has no tracks. */
+export function restoreDirectorPoseRigRest(model: Object3D) {
+    const profile = profiles.get(model);
+    if (!profile) return;
+    for (const [key, bone] of Object.entries(profile.bones)) {
+        const name = key as DirectorHumanoidBone;
+        if (profile.localPositions[name]) bone!.position.copy(profile.localPositions[name]!);
+        if (profile.localRotations[name]) bone!.quaternion.copy(profile.localRotations[name]!);
+    }
+    model.updateWorldMatrix(true, true);
+}
+
+/** Rotate in the bone parent's space so armature axis/scale does not leak into IK. */
+function aimBone(model: Object3D, bone: Object3D, child: Object3D, target: Vector3) {
+    model.updateWorldMatrix(true, true);
+    const worldTarget = model.parent ? model.parent.localToWorld(target.clone()) : target.clone();
+    const childWorld = child.getWorldPosition(new Vector3());
+    const localTarget = bone.parent ? bone.parent.worldToLocal(worldTarget) : worldTarget;
+    const localChild = bone.parent ? bone.parent.worldToLocal(childWorld) : childWorld;
+    const from = localChild.sub(bone.position);
+    const to = localTarget.sub(bone.position);
+    if (from.lengthSq() < 1e-10 || to.lengthSq() < 1e-10) return;
+    bone.quaternion.premultiply(new Quaternion().setFromUnitVectors(from.normalize(), to.normalize()));
+    bone.updateWorldMatrix(false, true);
+}
+
+function basisRotation(from: HandBasis, to: HandBasis) {
+    const basis = ({ fingers, palm }: HandBasis) => {
+        const y = fingers.clone().normalize();
+        const z = palm.clone().addScaledVector(y, -palm.dot(y)).normalize();
+        const x = y.clone().cross(z).normalize();
+        return new Matrix4().makeBasis(x, y, z);
+    };
+    return new Quaternion().setFromRotationMatrix(basis(to).multiply(basis(from).invert()));
+}
+
+/** Shared solver for imported rigs and the offline mannequin; user layers run afterwards. */
+export function applyDirectorRigPose(model: Object3D, rig: DirectorRig, pose: DirectorPose, timeSeconds: number) {
+    if (!hasDirectorSolvedPose(pose)) return;
+    const profile = profiles.get(model) || prepareDirectorPoseRig(model, rig);
+    const targets = resolveDirectorPoseTargets(pose, timeSeconds);
+    const scale = profile.height / 1.8;
+    const point = (value: DirectorVec3) => vector(value).multiply(new Vector3(profile.mirrorX * scale, scale, scale));
+    const direction = (value: DirectorVec3) => vector(value).multiply(new Vector3(profile.mirrorX, 1, 1)).normalize();
+    const pelvis = profile.bones.hips;
+    if (pelvis) setActorPosition(model, pelvis, actorPoint(model, pelvis).add(point(targets.pelvisOffset)));
+
+    // Absolute deltas in character space keep the spine/neck bend independent of
+    // each model's local rest axes. Hierarchy order is essential here.
+    for (const boneName of ["hips", "spine", "chest", "neck", "head"] as const) {
+        const angle = targets.torso?.[boneName];
+        const bone = profile.bones[boneName];
+        const rest = profile.rotations[boneName];
+        if (!angle || !bone || !rest) continue;
+        const delta = new Quaternion().setFromEuler(new Euler(angle[0], angle[1] * profile.mirrorX, angle[2] * profile.mirrorX));
+        setActorRotation(model, bone, delta.multiply(rest));
+    }
+    model.updateWorldMatrix(true, true);
+
+    // Put a kneeling thigh exactly one bone-length from the knee contact, rather
+    // than stretching the thigh or accepting a floating knee at an arbitrary height.
+    if (pelvis && targets.knees) {
+        const corrections: number[] = [];
+        for (const side of ["left", "right"] as const) {
+            const knee = targets.knees[`${side}Knee`];
+            const upper = profile.bones[`${side}UpperLeg`];
+            const middle = profile.bones[`${side}LowerLeg`];
+            if (!knee || !upper || !middle) continue;
+            const start = actorPoint(model, upper);
+            const contact = point(knee);
+            const length = start.distanceTo(actorPoint(model, middle));
+            const horizontal = (start.x - contact.x) ** 2 + (start.z - contact.z) ** 2;
+            corrections.push(contact.y + Math.sqrt(Math.max(0, length * length - horizontal)) - start.y);
+        }
+        if (corrections.length) {
+            const position = actorPoint(model, pelvis);
+            position.y += corrections.reduce((sum, correction) => sum + correction, 0) / corrections.length;
+            setActorPosition(model, pelvis, position);
+        }
+    }
+
+    const solve = (end: EndBone, target: Vector3, kneeContact?: Vector3) => {
+        const chain = directorPoseChainBones(end);
+        const upper = profile.bones[chain.upper];
+        const middle = profile.bones[chain.middle];
+        const terminal = profile.bones[end];
+        if (!upper || !middle || !terminal) return;
+        const start = actorPoint(model, upper);
+        const joint = actorPoint(model, middle);
+        const finish = actorPoint(model, terminal);
+        const upperLength = start.distanceTo(joint);
+        const lowerLength = joint.distanceTo(finish);
+        if (kneeContact) {
+            // Shins lie behind the knee and keep their original length. The small
+            // ankle lift leaves room for the instep instead of burying the foot.
+            target.copy(kneeContact).add(new Vector3(0, scale * 0.025, -Math.sqrt(Math.max(0, lowerLength ** 2 - (scale * 0.025) ** 2))));
+        }
+        const distance = target.distanceTo(start);
+        if (!kneeContact && distance > upperLength + lowerLength - 1e-5) target.sub(start).setLength(upperLength + lowerLength - 1e-5).add(start);
+        const pole = end.endsWith("Hand")
+            ? targets.elbowPoles[chain.upper as "leftUpperArm" | "rightUpperArm"] || [0, -1, 0.3]
+            : targets.kneePoles[chain.upper as "leftUpperLeg" | "rightUpperLeg"] || [0, 0, 1];
+        const middleTarget = kneeContact || vector(resolveDirectorTwoBoneJoint(tuple(start), tuple(target), upperLength, lowerLength, tuple(direction(pole))));
+        aimBone(model, upper, middle, middleTarget);
+        aimBone(model, middle, terminal, target);
+    };
+
+    for (const side of ["left", "right"] as const) {
+        const end = `${side}Foot` as const;
+        const rest = profile.positions[end];
+        if (!rest) continue;
+        const authored = targets.feet?.[end];
+        const target = authored ? point(authored) : rest.clone();
+        if (authored) {
+            target.y += rest.y - 0.035 * scale;
+            target.z += rest.z;
+        }
+        const knee = targets.knees?.[`${side}Knee`];
+        solve(end, target, knee ? point(knee) : undefined);
+        const bone = profile.bones[end];
+        const rotation = profile.rotations[end];
+        if (bone && rotation) {
+            const delta = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), knee ? 2.55 : 0);
+            setActorRotation(model, bone, delta.multiply(rotation));
+        }
+    }
+
+    for (const side of ["left", "right"] as const) {
+        const end = `${side}Hand` as const;
+        const authored = targets.hands?.[end];
+        if (!authored) continue;
+        solve(end, point(authored));
+        const hand = profile.bones[end];
+        const restRotation = profile.rotations[end];
+        const restBasis = profile.hands[end];
+        if (!hand || !restRotation || !restBasis) continue;
+        const style = targets.handStyle;
+        const fingers = style === "relaxed" ? direction([0, -1, 0]) : style === "crossed" ? direction([side === "left" ? 1 : -1, 0.1, -0.8])
+            : style === "reach" ? direction([0, 0, 1]) : direction([0, 1, 0]);
+        const palm = style === "relaxed" ? direction([side === "left" ? 1 : -1, 0, 0]) : style === "reach" ? direction([0, -1, 0]) : direction([0, 0, -1]);
+        const handDelta = basisRotation(restBasis, { fingers, palm });
+        setActorRotation(model, hand, handDelta.clone().multiply(restRotation));
+        const curl = style === "guard" ? 1.15 : style === "chin" ? 0.45 : style === "phone" ? 0.3 : style === "crossed" ? 0.45 : style === "relaxed" ? 0.1 : 0;
+        const across = fingers.clone().cross(palm).normalize();
+        for (const finger of ["Thumb", "Index", "Middle", "Ring", "Pinky"] as const) {
+            for (const segment of [1, 2, 3] as const) {
+                const name = `${side}${finger}${segment}` as DirectorHumanoidBone;
+                const bone = profile.bones[name];
+                const rest = profile.rotations[name];
+                if (!bone || !rest) continue;
+                const angle = curl * (finger === "Thumb" ? 0.35 : 0.8) * segment;
+                const rotation = new Quaternion().setFromAxisAngle(across, angle).multiply(handDelta).multiply(rest);
+                setActorRotation(model, bone, rotation);
+            }
+        }
+    }
+    model.updateWorldMatrix(true, true);
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-pose-solving.ts
+LINES: 1-154
+========================================================================
+import { Vector3 } from "three";
+
+import type { DirectorHumanoidBone, DirectorPose, DirectorVec3 } from "@/types/director";
+
+export type DirectorPoseTargets = {
+    /** Character-local translation added to the rest pelvis, in units per 1.8 m actor. */
+    pelvisOffset: DirectorVec3;
+    hands?: Partial<Record<"leftHand" | "rightHand", DirectorVec3>>;
+    feet?: Partial<Record<"leftFoot" | "rightFoot", DirectorVec3>>;
+    /** Ground contacts for kneeling; other knees follow the two-bone solver. */
+    knees?: Partial<Record<"leftKnee" | "rightKnee", DirectorVec3>>;
+    torso?: Partial<Record<"hips" | "spine" | "chest" | "neck" | "head", DirectorVec3>>;
+    handStyle?: "relaxed" | "chin" | "guard" | "reach" | "crossed" | "phone";
+    elbowPoles: Partial<Record<"leftUpperArm" | "rightUpperArm", DirectorVec3>>;
+    kneePoles: Partial<Record<"leftUpperLeg" | "rightUpperLeg", DirectorVec3>>;
+    /** Present only for a cyclic pose whose phase is driven by the shot playhead. */
+    period?: number;
+};
+
+const vec = (x: number, y: number, z: number): DirectorVec3 => [x, y, z];
+const staticTargets = (partial: Partial<DirectorPoseTargets> = {}): DirectorPoseTargets => ({
+    pelvisOffset: vec(0, 0, 0),
+    elbowPoles: { leftUpperArm: vec(-0.3, -1, 0.15), rightUpperArm: vec(0.3, -1, 0.15) },
+    kneePoles: { leftUpperLeg: vec(-0.1, 0, 1), rightUpperLeg: vec(0.1, 0, 1) },
+    ...partial,
+});
+
+/** Resolve authored end-effector targets in a ground-origin character space (1.8 units tall). */
+export function resolveDirectorPoseTargets(pose: DirectorPose, timeSeconds = 0): DirectorPoseTargets {
+    if (pose === "walk") {
+        const period = 1.2;
+        const phase = ((timeSeconds % period) + period) % period / period * Math.PI * 2;
+        const stride = Math.sin(phase);
+        const depth = Math.cos(phase);
+        return staticTargets({
+            period,
+            pelvisOffset: vec(0, -0.025 + Math.cos(phase * 2) * 0.008, 0),
+            feet: {
+                leftFoot: vec(-0.11, 0.035 + Math.max(0, stride) * 0.08, depth * 0.18),
+                rightFoot: vec(0.11, 0.035 + Math.max(0, -stride) * 0.08, -depth * 0.18),
+            },
+            hands: {
+                leftHand: vec(-0.24, 0.86, -depth * 0.12),
+                rightHand: vec(0.24, 0.86, depth * 0.12),
+            },
+            handStyle: "relaxed",
+        });
+    }
+    if (pose === "run") {
+        const period = 0.8;
+        const phase = ((timeSeconds % period) + period) % period / period * Math.PI * 2 + Math.PI / 2;
+        const stride = Math.sin(phase);
+        const depth = Math.cos(phase);
+        const leftLift = Math.max(0, stride);
+        const rightLift = Math.max(0, -stride);
+        return staticTargets({
+            period,
+            pelvisOffset: vec(0, -0.015 + Math.sin(phase * 2) * 0.018, 0),
+            feet: {
+                leftFoot: vec(-0.11, 0.035 + leftLift * 0.2, 0.08 + depth * 0.16),
+                rightFoot: vec(0.11, 0.035 + rightLift * 0.2, 0.08 - depth * 0.16),
+            },
+            torso: { hips: vec(0.13, 0, 0), spine: vec(0.15, 0, 0), chest: vec(0.15, 0, 0), neck: vec(0.04, 0, 0), head: vec(0.02, 0, 0) },
+            handStyle: "guard",
+            elbowPoles: { leftUpperArm: vec(-0.3, -0.2, -1), rightUpperArm: vec(0.3, -0.2, -1) },
+            hands: {
+                leftHand: vec(-0.17, 1.25 + depth * 0.12, 0.15 - stride * 0.18),
+                rightHand: vec(0.17, 1.25 - depth * 0.12, 0.15 + stride * 0.18),
+            },
+        });
+    }
+
+    const poses: Partial<Record<DirectorPose, DirectorPoseTargets>> = {
+        squat: staticTargets({
+            pelvisOffset: vec(0, -0.34, -0.07),
+            torso: { hips: vec(0.2, 0, 0), spine: vec(0.14, 0, 0), chest: vec(0.1, 0, 0), neck: vec(0, 0, 0), head: vec(0, 0, 0) },
+            feet: { leftFoot: vec(-0.12, 0.035, 0.04), rightFoot: vec(0.12, 0.035, 0.04) },
+        }),
+        kneel_single: staticTargets({
+            pelvisOffset: vec(0, -0.53, 0),
+            knees: { leftKnee: vec(-0.11, 0.065, 0.08) },
+            feet: { leftFoot: vec(-0.11, 0.035, -0.33), rightFoot: vec(0.13, 0.035, 0.33) },
+        }),
+        kneel_double: staticTargets({
+            pelvisOffset: vec(0, -0.55, 0),
+            knees: { leftKnee: vec(-0.11, 0.065, 0.02), rightKnee: vec(0.11, 0.065, 0.02) },
+            feet: { leftFoot: vec(-0.11, 0.035, -0.38), rightFoot: vec(0.11, 0.035, -0.38) },
+        }),
+        bow: staticTargets({
+            pelvisOffset: vec(0, 0, -0.04),
+            hands: { leftHand: vec(-0.2, 0.84, 0.25), rightHand: vec(0.2, 0.84, 0.25) },
+            handStyle: "relaxed",
+            torso: { hips: vec(0.35, 0, 0), spine: vec(0.6, 0, 0), chest: vec(0.72, 0, 0), neck: vec(0.76, 0, 0), head: vec(0.82, 0, 0) },
+        }),
+        think: staticTargets({ hands: { rightHand: vec(0.07, 1.46, 0.15) }, torso: { head: vec(0.1, -0.12, 0) }, handStyle: "chin" }),
+        fight: staticTargets({
+            torso: { hips: vec(0.04, 0.12, 0), spine: vec(0.04, 0.16, 0), chest: vec(0.04, 0.2, 0), head: vec(0, 0, 0) },
+            handStyle: "guard",
+            hands: { leftHand: vec(-0.22, 1.34, 0.22), rightHand: vec(0.22, 1.34, 0.22) },
+            feet: { leftFoot: vec(-0.13, 0.035, 0.16), rightFoot: vec(0.14, 0.035, -0.16) },
+        }),
+        kick: staticTargets({
+            hands: { leftHand: vec(-0.45, 1.1, -0.08), rightHand: vec(0.38, 1.1, -0.15) },
+            handStyle: "relaxed",
+            torso: { hips: vec(-0.08, 0, 0), spine: vec(-0.1, 0, 0), chest: vec(-0.08, 0, 0), head: vec(0, 0, 0) },
+            feet: { leftFoot: vec(-0.13, 0.035, 0.02), rightFoot: vec(0.15, 0.28, 0.8) },
+        }),
+        reach: staticTargets({ hands: { rightHand: vec(0.26, 1.3, 0.43) }, torso: { chest: vec(0, 0.1, 0) }, handStyle: "reach" }),
+        arms_crossed: staticTargets({
+            // Leave room for the palm/fingers to wrap onto the opposite upper arm.
+            hands: { leftHand: vec(0.08, 1.24, 0.16), rightHand: vec(-0.08, 1.29, 0.21) },
+            elbowPoles: { leftUpperArm: vec(-1, -0.5, 0.2), rightUpperArm: vec(1, -0.5, 0.2) },
+            handStyle: "crossed",
+        }),
+        phone: staticTargets({ hands: { leftHand: vec(-0.065, 1.14, 0.28), rightHand: vec(0.065, 1.14, 0.28) }, torso: { neck: vec(0.1, 0, 0), head: vec(0.42, 0, 0) }, handStyle: "phone" }),
+    };
+    return poses[pose] || staticTargets();
+}
+
+/** Find the elbow/knee point of a two-bone chain, clamping unreachable endpoints to its reach. */
+export function resolveDirectorTwoBoneJoint(start: DirectorVec3, end: DirectorVec3, upperLength: number, lowerLength: number, pole: DirectorVec3): DirectorVec3 {
+    const origin = new Vector3(...start);
+    const endpoint = new Vector3(...end);
+    const upper = Math.max(1e-5, upperLength);
+    const lower = Math.max(1e-5, lowerLength);
+    const vector = endpoint.clone().sub(origin);
+    const rawDistance = vector.length();
+    const direction = rawDistance > 1e-5 ? vector.multiplyScalar(1 / rawDistance) : new Vector3(0, -1, 0);
+    const minimum = Math.abs(upper - lower) + 1e-5;
+    const maximum = upper + lower - 1e-5;
+    const distance = Math.max(minimum, Math.min(maximum, rawDistance));
+    const projectedPole = new Vector3(...pole).addScaledVector(direction, -new Vector3(...pole).dot(direction));
+    if (projectedPole.lengthSq() < 1e-8) {
+        projectedPole.set(1, 0, 0).addScaledVector(direction, -direction.x);
+        if (projectedPole.lengthSq() < 1e-8) projectedPole.set(0, 0, 1).addScaledVector(direction, -direction.z);
+    }
+    projectedPole.normalize();
+    const along = (upper * upper + distance * distance - lower * lower) / (2 * distance);
+    const height = Math.sqrt(Math.max(0, upper * upper - along * along));
+    return origin.addScaledVector(direction, along).addScaledVector(projectedPole, height).toArray() as DirectorVec3;
+}
+
+/** Convert an end-effector chain name to the end and middle bone names used by the solver. */
+export function directorPoseChainBones(end: "leftHand" | "rightHand" | "leftFoot" | "rightFoot") {
+    const side = end.startsWith("left") ? "left" : "right";
+    return end.endsWith("Hand")
+        ? { upper: `${side}UpperArm` as DirectorHumanoidBone, middle: `${side}LowerArm` as DirectorHumanoidBone, end: end as DirectorHumanoidBone }
+        : { upper: `${side}UpperLeg` as DirectorHumanoidBone, middle: `${side}LowerLeg` as DirectorHumanoidBone, end: end as DirectorHumanoidBone };
+}
+
+/** These presets use actor-space targets instead of rig-specific Euler deltas. */
+export function hasDirectorSolvedPose(pose: DirectorPose) {
+    return ["walk", "run", "squat", "kneel_single", "kneel_double", "bow", "think", "fight", "kick", "reach", "arms_crossed", "phone"].includes(pose);
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-preview.ts
+LINES: 1-54
+========================================================================
+import type { DirectorScene, DirectorShot } from "../../../types/director";
+
+/** 预览来源的判定结果。image 之外都不渲染 <img>。 */
+export type DirectorPreviewSource = { kind: "image"; url: string } | { kind: "loading" } | { kind: "empty" };
+
+/** 读取画布节点正文；节点已删除或无正文时返回空。 */
+export type DirectorNodeContentReader = (nodeId: string | undefined) => string | undefined;
+
+function usableContent(read: DirectorNodeContentReader, nodeId: string | undefined) {
+    if (!nodeId) return null;
+    const content = read(nodeId);
+    if (!content) return null;
+    // 节点被删除、正文缺失或只有空白都必须安全落空；
+    // 有效正文返回 trim 后的值，避免首尾空白拼进 <img src> 造成畸形请求。
+    const trimmed = content.trim();
+    return trimmed ? trimmed : null;
+}
+
+/** 取当前镜头：优先 metadata 指定，其次场景第一个。 */
+export function resolveDirectorActiveShot(scene: DirectorScene | null, shotId: string | undefined): DirectorShot | undefined {
+    if (!scene) return undefined;
+    return scene.shots?.find((item) => item.id === shotId) || scene.shots?.[0];
+}
+
+/**
+ * 预览来源优先级（严格自上而下）：
+ * 1. 本节点持久化封面
+ * 2. node.metadata.directorPreviewNodeId 指向的画布节点正文
+ * 3. 当前 DirectorShot.previewNodeId 指向的画布节点正文（补 metadata 丢失）
+ * 4. scene 为 null：场景尚在准备（loading）
+ * 5. 其余：诚实空态
+ * 不改动任何 scene/node 状态，只做读取判定。
+ */
+export function resolveDirectorPreviewSource(input: { scene: DirectorScene | null; shot: DirectorShot | undefined; coverUrl?: string; failedUrl?: string | null; previewNodeId: string | undefined; readNodeContent: DirectorNodeContentReader }): DirectorPreviewSource {
+    const coverUrl = input.coverUrl?.trim();
+    if (coverUrl && coverUrl !== input.failedUrl) return { kind: "image", url: coverUrl };
+    const fromMetadata = usableContent(input.readNodeContent, input.previewNodeId);
+    if (fromMetadata && fromMetadata !== input.failedUrl) return { kind: "image", url: fromMetadata };
+    const fromShot = usableContent(input.readNodeContent, input.shot?.previewNodeId);
+    if (fromShot && fromShot !== input.failedUrl) return { kind: "image", url: fromShot };
+    if (!input.scene) return { kind: "loading" };
+    return { kind: "empty" };
+}
+
+/**
+ * 加载失败的门控：记录「失败的那个 URL」而不是布尔标记。
+ * 语义边界：新给出的坏 URL 仍会先渲染一次，浏览器随后才发出 onError —— 无法避免这一帧。
+ * 本门控保证的是：同一个已失败的 URL 不会被反复渲染，且换成另一个 URL 时自动重试，
+ * 无需外部手动清理标记。
+ */
+export function gateDirectorPreviewFailure(source: DirectorPreviewSource, failedUrl: string | null): DirectorPreviewSource {
+    if (source.kind !== "image" || !failedUrl) return source;
+    return source.url === failedUrl ? { kind: "empty" } : source;
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-procedural-pose.ts
+LINES: 1-96
+========================================================================
+import { Bone, Group, Quaternion, Vector3 } from "three";
+
+import { resolveDirectorBoneRotation } from "@/lib/canvas/director/director-animation-semantics";
+import { directorPoseBoneDeltas } from "@/lib/canvas/director/director-scene";
+import { hasDirectorSolvedPose } from "@/lib/canvas/director/director-pose-solving";
+import { applyDirectorRigPose, prepareDirectorPoseRig } from "@/lib/canvas/director/director-pose-rig";
+import type { DirectorActorShape } from "@/lib/canvas/director/director-actor-presets";
+import type { DirectorHumanoidBone, DirectorObject, DirectorPose, DirectorQuat, DirectorRig, DirectorVec3 } from "@/types/director";
+
+type JointDefinition = { bone: DirectorHumanoidBone; parent: DirectorHumanoidBone | null; offset: DirectorVec3 };
+
+const JOINTS: JointDefinition[] = [
+    { bone: "root", parent: null, offset: [0, 0, 0] },
+    { bone: "hips", parent: "root", offset: [0, 0.78, 0] },
+    { bone: "spine", parent: "hips", offset: [0, 0.22, 0] },
+    { bone: "chest", parent: "spine", offset: [0, 0.16, 0] },
+    { bone: "neck", parent: "chest", offset: [0, 0.24, 0] },
+    { bone: "head", parent: "neck", offset: [0, 0.22, 0] },
+    { bone: "leftShoulder", parent: "chest", offset: [-0.2, 0.08, 0] },
+    { bone: "leftUpperArm", parent: "leftShoulder", offset: [-0.04, -0.02, 0] },
+    { bone: "leftLowerArm", parent: "leftUpperArm", offset: [-0.07, -0.3, 0] },
+    { bone: "leftHand", parent: "leftLowerArm", offset: [-0.02, -0.3, 0] },
+    { bone: "rightShoulder", parent: "chest", offset: [0.2, 0.08, 0] },
+    { bone: "rightUpperArm", parent: "rightShoulder", offset: [0.04, -0.02, 0] },
+    { bone: "rightLowerArm", parent: "rightUpperArm", offset: [0.07, -0.3, 0] },
+    { bone: "rightHand", parent: "rightLowerArm", offset: [0.02, -0.3, 0] },
+    { bone: "leftUpperLeg", parent: "hips", offset: [-0.11, -0.02, 0] },
+    { bone: "leftLowerLeg", parent: "leftUpperLeg", offset: [-0.03, -0.35, 0] },
+    { bone: "leftFoot", parent: "leftLowerLeg", offset: [0, -0.35, 0.08] },
+    { bone: "rightUpperLeg", parent: "hips", offset: [0.11, -0.02, 0] },
+    { bone: "rightLowerLeg", parent: "rightUpperLeg", offset: [0.03, -0.35, 0] },
+    { bone: "rightFoot", parent: "rightLowerLeg", offset: [0, -0.35, 0.08] },
+];
+
+export const DIRECTOR_PROCEDURAL_ACTOR_BONES = JOINTS.map(({ bone }) => bone);
+/** Parent-child links shared by the lightweight mannequin's visible rig overlay. */
+export const DIRECTOR_PROCEDURAL_ACTOR_SKELETON_EDGES = JOINTS.flatMap(({ bone, parent }) => parent ? [[parent, bone] as const] : []);
+
+/** Evaluate the lightweight local mannequin from the same pose and bone-override data as imported rigs. */
+export function resolveDirectorProceduralActorPose(pose: DirectorPose, overrides: Partial<Record<DirectorHumanoidBone, DirectorQuat>> = {}, shape?: DirectorActorShape, timeSeconds = 0, tracks: DirectorObject["boneTracks"] = []) {
+    const poseDeltas = { ...directorPoseBoneDeltas(hasDirectorSolvedPose(pose) ? "stand" : pose) };
+    // This mannequin already rests with hanging arms; imported rigs rest in T pose.
+    const soldierStand = directorPoseBoneDeltas("stand");
+    for (const bone of ["leftUpperArm", "rightUpperArm"] as const) {
+        const poseRotation = poseDeltas[bone];
+        const standRotation = soldierStand[bone];
+        if (poseRotation && standRotation && poseRotation.every((value, index) => Math.abs(value - standRotation[index]) < 1e-6)) delete poseDeltas[bone];
+    }
+    const model = new Group();
+    const bones = {} as Record<DirectorHumanoidBone, Bone>;
+    for (const { bone, parent, offset } of JOINTS) {
+        const node = new Bone();
+        node.name = bone;
+        const adjustedOffset = [...offset] as DirectorVec3;
+        if (shape) {
+            if (bone === "hips") adjustedOffset[1] *= shape.legLength;
+            else if (bone === "spine" || bone === "chest" || bone === "neck" || bone === "head") adjustedOffset[1] *= shape.torsoLength;
+            else if (bone.includes("Shoulder") || bone.includes("Arm") || bone.includes("Hand")) {
+                adjustedOffset[0] *= shape.armSpan;
+                adjustedOffset[1] *= bone.includes("Shoulder") ? shape.torsoLength : shape.armLength;
+            } else if (bone.includes("Leg") || bone.includes("Foot")) {
+                adjustedOffset[0] *= shape.stance;
+                adjustedOffset[1] *= shape.legLength;
+                if (bone.includes("Foot")) adjustedOffset[2] *= shape.footLength;
+            }
+        }
+        node.position.fromArray(adjustedOffset);
+        bones[bone] = node;
+        (parent ? bones[parent] : model).add(node);
+    }
+    model.updateWorldMatrix(true, true);
+    const rig: DirectorRig = {
+        status: "ready", animationNames: [],
+        boneMap: Object.fromEntries(JOINTS.map(({ bone }) => [bone, bone])),
+    };
+    const height = bones.head.getWorldPosition(new Vector3()).y + 0.02 * (shape?.head || 1);
+    prepareDirectorPoseRig(model, rig, height);
+    for (const { bone } of JOINTS) {
+        if (poseDeltas[bone]) bones[bone].quaternion.fromArray(poseDeltas[bone]!);
+    }
+    applyDirectorRigPose(model, rig, pose, timeSeconds);
+    for (const { bone } of JOINTS) {
+        const rotation = resolveDirectorBoneRotation({ override: overrides[bone], keyframes: tracks?.find((track) => track.bone === bone)?.keyframes, time: timeSeconds });
+        if (rotation) bones[bone].quaternion.fromArray(rotation);
+    }
+    model.updateWorldMatrix(true, true);
+    const joints = {} as Record<DirectorHumanoidBone, DirectorVec3>;
+    const rotations = {} as Record<DirectorHumanoidBone, DirectorQuat>;
+    const worldRotations = {} as Record<DirectorHumanoidBone, DirectorQuat>;
+    for (const { bone } of JOINTS) {
+        joints[bone] = bones[bone].getWorldPosition(new Vector3()).toArray() as DirectorVec3;
+        rotations[bone] = bones[bone].quaternion.toArray() as DirectorQuat;
+        worldRotations[bone] = bones[bone].getWorldQuaternion(new Quaternion()).toArray() as DirectorQuat;
+    }
+    return { joints, rotations, worldRotations };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-prompt-compiler.ts
+LINES: 1-74
+========================================================================
+import type { DirectorCamera, DirectorObject, DirectorScene, DirectorShot } from "@/types/director";
+import { directorColorLabel, directorPoseLabel } from "@/lib/canvas/director/director-scene";
+
+const shotSizeLabels: Record<DirectorShot["shotSize"], string> = {
+    extreme_wide: "大远景",
+    wide: "远景",
+    full: "全身景",
+    medium: "中景",
+    close_up: "近景特写",
+    extreme_close_up: "大特写",
+};
+
+const cameraMoveLabels: Record<DirectorShot["cameraMove"], string> = {
+    static: "固定机位",
+    push_in: "镜头缓慢推进",
+    pull_out: "镜头缓慢拉远",
+    pan_left: "镜头向左横摇",
+    pan_right: "镜头向右横摇",
+    tilt_up: "镜头向上摇摄",
+    tilt_down: "镜头向下摇摄",
+    orbit_left: "镜头向左环绕主体",
+    orbit_right: "镜头向右环绕主体",
+    handheld: "克制的手持摄影运动",
+};
+
+export function compileDirectorPrompt(scene: DirectorScene, shot: DirectorShot) {
+    const camera = scene.cameras.find((item) => item.id === shot.cameraId) || scene.cameras[0];
+    const cameraKeys = camera?.keyframes.filter((key) => Number.isFinite(key.time) && key.transform.position.every(Number.isFinite)).sort((a, b) => a.time - b.time) || [];
+    const hasKeyframedMotion = cameraKeys.slice(1).some((key, index) => {
+        const previous = cameraKeys[index].transform;
+        return key.transform.position.some((value, axis) => Math.abs(value - previous.position[axis]) > 1e-4)
+            || key.transform.rotation.some((value, axis) => Math.abs(value - previous.rotation[axis]) > 1e-4);
+    });
+    const cameraMove = hasKeyframedMotion
+        ? `按 ${cameraKeys.length} 个关键帧执行机位轨迹，${formatNumber(cameraKeys[0].time)} 秒位于 ${formatPosition(cameraKeys[0].transform.position)}，${formatNumber(cameraKeys.at(-1)!.time)} 秒位于 ${formatPosition(cameraKeys.at(-1)!.transform.position)}`
+        : cameraMoveLabels[shot.cameraMove];
+    const visibleObjects = scene.objects.filter((item) => item.visible);
+    const actors = visibleObjects.filter((item) => item.kind === "actor" || item.primitive === "character");
+    return [
+        shot.prompt.trim(),
+        `镜头设计：${shotSizeLabels[shot.shotSize]}，${cameraMove}，时长 ${formatNumber(shot.duration)} 秒。`,
+        camera ? cameraPrompt(camera) : "",
+        actors.length ? `角色颜色映射：${actors.map((actor) => `${directorColorLabel(actor.color)}人偶（${actor.color}）代表${actor.name}`).join("；")}。生成视频时严格按颜色识别角色，不交换人物身份。` : "",
+        visibleObjects.length ? `空间调度：${visibleObjects.map(objectPrompt).join("；")}。` : "",
+        `灯光：${scene.lights.map((light) => `${light.name}${formatNumber(light.intensity)}强度${light.color}`).join("，")}。`,
+        "保持角色、道具、空间方向、光线方向和镜头轴线连续，遵循真实摄影机透视与物理遮挡。",
+    ]
+        .filter(Boolean)
+        .join("\n");
+}
+
+function cameraPrompt(camera: DirectorCamera) {
+    const [x, y, z] = camera.transform.position;
+    const [tx, ty, tz] = camera.target;
+    const height = y < ty - 0.4 ? "低机位" : y > ty + 1.2 ? "高机位" : "平视机位";
+    const side = x < tx - 0.8 ? "主体左前侧" : x > tx + 0.8 ? "主体右前侧" : "主体正面";
+    const distance = Math.hypot(x - tx, y - ty, z - tz);
+    return `摄影机：${formatNumber(camera.focalLength)}mm 焦段，f/${formatNumber(camera.aperture)} 光圈，焦点距离 ${formatNumber(camera.focusDistance)} 米，${height}，位于${side}，机位距离约 ${formatNumber(distance)} 米，焦点指向 (${formatNumber(tx)}, ${formatNumber(ty)}, ${formatNumber(tz)})，景深遵循真实镜头光学。`;
+}
+
+function objectPrompt(object: DirectorObject) {
+    const [x, y, z] = object.transform.position;
+    const pose = object.pose ? `，姿势${directorPoseLabel(object.pose)}` : "";
+    const color = object.kind === "actor" || object.primitive === "character" ? `，${directorColorLabel(object.color)}参考人偶` : "";
+    return `${object.name}${color}位于 (${formatNumber(x)}, ${formatNumber(y)}, ${formatNumber(z)})${pose}`;
+}
+
+function formatNumber(value: number) {
+    return Number(value.toFixed(2));
+}
+
+function formatPosition(position: [number, number, number]) {
+    return `(${position.map(formatNumber).join(", ")})`;
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-quaternius-body.ts
+LINES: 1-107
+========================================================================
+import { Bone, Matrix4, SkinnedMesh, Vector3, type Object3D } from "three";
+import type { DirectorActorPresetId } from "@/types/director";
+
+type BodyProfile = {
+    leg: number;
+    torso: number;
+    headHeight: number;
+    shoulders: number;
+    waist: number;
+    hips: number;
+    arms: number;
+    headWidth: number;
+    chestDepth: number;
+    bellyDepth: number;
+};
+
+// Measured against the saved LibTV preset screenshots at the same camera angle.
+// The Quaternius body is 1.81 units tall in its rest pose, with hips at .95 and neck at 1.56.
+const BODY_PROFILES: Partial<Record<DirectorActorPresetId, BodyProfile>> = {
+    athletic: { leg: 1.08, torso: 1.11, headHeight: 1.03, shoulders: 1.18, waist: 1.04, hips: 1.08, arms: 1.09, headWidth: 1.01, chestDepth: 1.16, bellyDepth: 1.03 },
+    slim: { leg: 0.95, torso: 0.94, headHeight: 0.97, shoulders: 0.84, waist: 0.76, hips: 0.84, arms: 0.9, headWidth: 0.96, chestDepth: 0.83, bellyDepth: 0.78 },
+    teen: { leg: 0.8, torso: 0.84, headHeight: 0.96, shoulders: 0.86, waist: 0.84, hips: 0.88, arms: 0.83, headWidth: 1.08, chestDepth: 0.88, bellyDepth: 0.86 },
+    child: { leg: 0.55, torso: 0.62, headHeight: 1.0, shoulders: 0.77, waist: 0.83, hips: 0.86, arms: 0.66, headWidth: 1.27, chestDepth: 0.82, bellyDepth: 0.88 },
+    broad: { leg: 0.96, torso: 1.0, headHeight: 0.96, shoulders: 1.16, waist: 1.2, hips: 1.19, arms: 1.06, headWidth: 1.04, chestDepth: 1.16, bellyDepth: 1.29 },
+    chibi: { leg: 0.25, torso: 0.43, headHeight: 1.2, shoulders: 0.76, waist: 0.92, hips: 1.0, arms: 0.6, headWidth: 1.58, chestDepth: 0.92, bellyDepth: 1.0 },
+};
+
+const HIP_Y = 0.95;
+const NECK_Y = 1.56;
+
+function blend(a: number, b: number, t: number): number {
+    return a + (b - a) * Math.min(1, Math.max(0, t));
+}
+
+function widthAt(y: number, profile: BodyProfile): number {
+    if (y < HIP_Y) return profile.hips;
+    if (y < 1.13) return blend(profile.hips, profile.waist, (y - HIP_Y) / 0.18);
+    if (y < 1.43) return blend(profile.waist, profile.shoulders, (y - 1.13) / 0.3);
+    return blend(profile.shoulders, profile.headWidth, (y - 1.43) / 0.21);
+}
+
+function depthAt(y: number, profile: BodyProfile): number {
+    if (y < 0.82) return profile.hips;
+    if (y < 1.08) return blend(profile.hips, profile.bellyDepth, (y - 0.82) / 0.26);
+    if (y < 1.3) return blend(profile.bellyDepth, profile.chestDepth, (y - 1.08) / 0.22);
+    return blend(profile.chestDepth, profile.headWidth, (y - 1.3) / 0.34);
+}
+
+function deform(point: Vector3, profile: BodyProfile): Vector3 {
+    const y = point.y;
+    const height = y < HIP_Y
+        ? y * profile.leg
+        : y < NECK_Y
+            ? HIP_Y * profile.leg + (y - HIP_Y) * profile.torso
+            : HIP_Y * profile.leg + (NECK_Y - HIP_Y) * profile.torso + (y - NECK_Y) * profile.headHeight;
+    const width = widthAt(y, profile);
+    const armBlend = Math.min(1, Math.max(0, (Math.abs(point.x) - 0.28) / 0.17));
+    const horizontal = blend(width, profile.arms, armBlend);
+    const depth = depthAt(y, profile);
+    return point.set(point.x * horizontal, height, point.z * depth);
+}
+
+/** Reshape a private clone of the CC0 body and its rest skeleton together. Never mutate the shared GLB source. */
+export function reshapeDirectorQuaterniusActor(root: Object3D, preset: DirectorActorPresetId): void {
+    const profile = BODY_PROFILES[preset];
+    if (!profile) return;
+    root.updateMatrixWorld(true);
+    const rootToWorld = root.matrixWorld.clone();
+    const worldToRoot = rootToWorld.clone().invert();
+    const bones: Bone[] = [];
+    const originalBonePositions = new Map<Bone, Vector3>();
+    const meshes: SkinnedMesh[] = [];
+    root.traverse((object) => {
+        if (object instanceof Bone) {
+            bones.push(object);
+            originalBonePositions.set(object, object.getWorldPosition(new Vector3()).applyMatrix4(worldToRoot));
+        }
+        if (object instanceof SkinnedMesh) meshes.push(object);
+    });
+
+    for (const mesh of meshes) {
+        const geometry = mesh.geometry.clone();
+        const positions = geometry.getAttribute("position");
+        const meshToWorld = mesh.matrixWorld.clone();
+        const worldToMesh = meshToWorld.clone().invert();
+        const point = new Vector3();
+        for (let index = 0; index < positions.count; index += 1) {
+            point.fromBufferAttribute(positions, index).applyMatrix4(meshToWorld).applyMatrix4(worldToRoot);
+            deform(point, profile).applyMatrix4(rootToWorld).applyMatrix4(worldToMesh);
+            positions.setXYZ(index, point.x, point.y, point.z);
+        }
+        positions.needsUpdate = true;
+        geometry.computeVertexNormals();
+        geometry.computeBoundingBox();
+        geometry.computeBoundingSphere();
+        mesh.geometry = geometry;
+    }
+
+    for (const bone of bones) {
+        const original = originalBonePositions.get(bone)!;
+        const parentInverse = bone.parent?.matrixWorld.clone().invert() ?? new Matrix4();
+        bone.position.copy(deform(original.clone(), profile).applyMatrix4(rootToWorld).applyMatrix4(parentInverse));
+        bone.updateMatrixWorld(true);
+    }
+    root.updateMatrixWorld(true);
+    for (const skeleton of new Set(meshes.map((mesh) => mesh.skeleton))) skeleton.calculateInverses();
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-recording-format.ts
+LINES: 1-18
+========================================================================
+export function selectDirectorRecordingMimeType(isTypeSupported: (type: string) => boolean): string {
+    return ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp8", "video/webm;codecs=vp9", "video/webm"].find(isTypeSupported) || "";
+}
+
+export function waitForDirectorDecodedFrame(video: HTMLVideoElement, timeoutMs = 8_000): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const cleanup = () => {
+            clearTimeout(timer);
+            video.removeEventListener("loadeddata", onReady);
+            video.removeEventListener("error", onError);
+        };
+        const onReady = () => { cleanup(); resolve(); };
+        const onError = () => { cleanup(); reject(new Error("白膜视频无法解码，请重试或检查系统视频格式支持")); };
+        const timer = setTimeout(() => { cleanup(); reject(new Error("白膜视频首帧解码超时，请重试")); }, timeoutMs);
+        video.addEventListener("loadeddata", onReady, { once: true });
+        video.addEventListener("error", onError, { once: true });
+    });
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-recovery.ts
+LINES: 1-125
+========================================================================
+export type DirectorLoadPhase = "loading" | "ready" | "error";
+
+export type DirectorLoadState = {
+    phase: DirectorLoadPhase;
+    /** 每次 retry 递增；晚到的旧 generation 回调必须被忽略。 */
+    generation: number;
+};
+
+export type DirectorLoadEvent = { type: "start" } | { type: "loaded"; generation: number } | { type: "failed"; generation: number } | { type: "retry" };
+
+export const directorLoadInitial: DirectorLoadState = { phase: "loading", generation: 0 };
+
+/** 加载状态机：只接受当前 generation 的结果，retry 递增 generation 并回到 loading。 */
+export function reduceDirectorLoad(state: DirectorLoadState, event: DirectorLoadEvent): DirectorLoadState {
+    if (event.type === "start") return { phase: "loading", generation: state.generation };
+    if (event.type === "retry") return { phase: "loading", generation: state.generation + 1 };
+    if (event.generation !== state.generation) return state;
+    return { phase: event.type === "loaded" ? "ready" : "error", generation: state.generation };
+}
+
+export type DirectorContextState = "ok" | "lost";
+
+export type DirectorCanvasTarget = {
+    addEventListener: (type: string, listener: (event: Event) => void) => void;
+    removeEventListener: (type: string, listener: (event: Event) => void) => void;
+};
+
+/**
+ * WebGL 上下文监听：lost 必须 preventDefault，否则浏览器不会补发 restored。
+ * 返回 disposer，随 renderer / 重试 / unmount 精确摘除。
+ */
+export function installDirectorContextListeners(target: DirectorCanvasTarget, handlers: { onLost: () => void; onRestored: () => void }) {
+    const onLost = (event: Event) => {
+        event.preventDefault();
+        handlers.onLost();
+    };
+    const onRestored = () => handlers.onRestored();
+    target.addEventListener("webglcontextlost", onLost);
+    target.addEventListener("webglcontextrestored", onRestored);
+    return () => {
+        target.removeEventListener("webglcontextlost", onLost);
+        target.removeEventListener("webglcontextrestored", onRestored);
+    };
+}
+
+/** 加载失败登记表：对象 id -> 该对象自己的 retry。 */
+export type DirectorFailedLoads = Record<string, () => void>;
+
+/** 登记信号：除加载态外，还包含「对象已卸载」这一必须注销的情形。 */
+export type DirectorLoadSignal = DirectorLoadPhase | "unmounted";
+
+/**
+ * 按信号登记/注销失败对象。ready/loading/unmounted 都必须移除，
+ * 否则 retry 回到 loading、或对象被删除后，通知会一直挂着陈旧条目。
+ */
+export function upsertDirectorFailedLoad(current: DirectorFailedLoads, id: string, signal: DirectorLoadSignal, retry: () => void): DirectorFailedLoads {
+    if (signal === "error") return current[id] === retry ? current : { ...current, [id]: retry };
+    return removeDirectorFailedLoad(current, id);
+}
+
+/** 对象卸载（删除、隐藏、换 URL/kind、Canvas 重建）必须注销自己，不能残留不存在对象的 Retry。 */
+export function removeDirectorFailedLoad(current: DirectorFailedLoads, id: string): DirectorFailedLoads {
+    if (!(id in current)) return current;
+    const next = { ...current };
+    delete next[id];
+    return next;
+}
+
+/**
+ * WebGL capture 可用性：上下文丢失期间不得继续使用失效 renderer，
+ * 恢复后必须重新登记 capture context 才算可用。
+ */
+export type DirectorCaptureState = { registered: boolean; contextLost: boolean };
+
+export const directorCaptureInitial: DirectorCaptureState = { registered: false, contextLost: false };
+
+export function reduceDirectorCapture(state: DirectorCaptureState, event: "register" | "lost" | "restored" | "reset"): DirectorCaptureState {
+    if (event === "register") return { registered: true, contextLost: false };
+    if (event === "lost") return { ...state, contextLost: true };
+    // restored 只清丢失标记；capture context 需由 renderer 重新登记后才可用。
+    if (event === "restored") return { registered: false, contextLost: false };
+    return directorCaptureInitial;
+}
+
+export function directorCaptureUsable(state: DirectorCaptureState) {
+    return state.registered && !state.contextLost;
+}
+
+/**
+ * 上下文恢复的完整序列，生产 handler 与测试必须共用同一个实现。
+ * reduceDirectorCapture("restored") 会把 registered 置回 false，
+ * 因此恢复后必须用当前 renderer 重新登记 capture context，否则
+ * capture/record/readCameraTransform 会永久不可用（只有手动重建 Canvas 才恢复）。
+ * 顺序：先复位可用性 -> 再登记新 context -> 最后请求重绘。
+ */
+export function restoreDirectorCapture<TContext>(input: { readContext: () => TContext; onAvailability: (event: "restored") => void; onRegister: (context: TContext) => void; invalidate?: () => void }) {
+    input.onAvailability("restored");
+    input.onRegister(input.readContext());
+    input.invalidate?.();
+}
+
+/**
+ * 释放 capture context，生产接线与测试共用。
+ * Canvas 子树因 render error 或重建而卸载时必须走这里：
+ * 先清掉指向已销毁 renderer 的引用，再把可用性打回初态，
+ * 否则 ErrorBoundary 显示恢复页后「应用到镜头」仍会拿到死 renderer。
+ * reset 后仍可由新的 renderer 重新 register，不影响重试路径。
+ */
+export function releaseDirectorCapture(input: { clearContext: () => void; onAvailability: (event: "reset") => void }) {
+    input.clearContext();
+    input.onAvailability("reset");
+}
+
+/**
+ * 加载身份：generation + 解析输入。展示状态必须携带它，
+ * 这样 prop/retry 变化的第一次 render 就能屏蔽旧资源 —— 不能依赖 effect 之后的 render 才安全。
+ */
+export function directorLoadIdentity(input: { generation: number; url?: string | null; storageKey?: string | null; kind?: string | null }) {
+    return [input.generation, input.url ?? "", input.storageKey ?? "", input.kind ?? ""].join("|");
+}
+
+/** render 阶段的守卫：identity 不匹配就当作「还没有可展示资源」。 */
+export function resolveDirectorDisplay<TValue>(state: { identity: string; value: TValue } | null, identity: string): TValue | null {
+    return state && state.identity === identity ? state.value : null;
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-reference-assets.ts
+LINES: 1-29
+========================================================================
+import { applyCanvasConnectionPromptSync } from "@/lib/canvas/canvas-resource-references";
+import { CanvasNodeType, type CanvasConnection, type CanvasNodeData } from "@/types/canvas";
+
+/** Attach uploaded image nodes to a director shot using the canvas' normal resource-edge semantics. */
+export function connectDirectorReferenceNodes(nodes: CanvasNodeData[], connections: CanvasConnection[], sourceIds: string[], targetId: string, createId: () => string, mode: "append" | "replace" = "append") {
+    const target = nodes.find((node) => node.id === targetId);
+    if (!target || target.metadata?.workflowKind !== "shot") return { nodes, connections, linkedSourceIds: [] as string[] };
+    const sourceById = new Map(nodes.map((node) => [node.id, node]));
+    const sourceIdsUnique = [...new Set(sourceIds)].filter((id) => {
+        const source = sourceById.get(id);
+        return id !== targetId && source?.type === CanvasNodeType.Image && Boolean(source.metadata?.content);
+    });
+    if (!sourceIdsUnique.length) return { nodes, connections, linkedSourceIds: [] as string[] };
+
+    const replacedSourceIds = mode === "replace"
+        ? new Set(connections.filter((edge) => edge.toNodeId === targetId && sourceById.get(edge.fromNodeId)?.type === CanvasNodeType.Image).map((edge) => edge.fromNodeId))
+        : new Set<string>();
+    const existingReferences = (target.metadata?.referenceAssetNodeIds || []).filter((id) => !replacedSourceIds.has(id));
+    const referenceAssetNodeIds = [...new Set([...existingReferences, ...sourceIdsUnique])];
+    const retainedConnections = replacedSourceIds.size ? connections.filter((edge) => !(edge.toNodeId === targetId && replacedSourceIds.has(edge.fromNodeId))) : connections;
+    const existingEdges = new Set(retainedConnections.filter((edge) => edge.toNodeId === targetId).map((edge) => edge.fromNodeId));
+    const addedEdges = sourceIdsUnique.filter((id) => !existingEdges.has(id)).map((id) => ({ id: createId(), fromNodeId: id, toNodeId: targetId }));
+    const nextConnections = addedEdges.length ? [...retainedConnections, ...addedEdges] : retainedConnections;
+    const nextNodes = referenceAssetNodeIds.length === existingReferences.length
+        ? nodes
+        : nodes.map((node) => node.id === targetId ? { ...node, metadata: { ...node.metadata, referenceAssetNodeIds } } : node);
+    if (nextNodes === nodes && nextConnections === connections) return { nodes, connections, linkedSourceIds: sourceIdsUnique };
+    return { nodes: applyCanvasConnectionPromptSync(nodes, connections, nextNodes, nextConnections), connections: nextConnections, linkedSourceIds: sourceIdsUnique };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-repro-fixture.ts
+LINES: 1-281
+========================================================================
+import { resolveDirectorPlacement } from "@/lib/canvas/director/director-placement";
+import { DIRECTOR_QUATERNIUS_FEMALE_URL, DIRECTOR_QUATERNIUS_MALE_URL } from "@/lib/canvas/director/director-actor-assets";
+import { createDirectorActorPreset, DIRECTOR_ACTOR_PRESET_OPTIONS } from "@/lib/canvas/director/director-actor-presets";
+import { createDirectorModel, touchDirectorScene } from "@/lib/canvas/director/director-scene";
+import type { DirectorObject, DirectorScene, DirectorVec3 } from "@/types/director";
+
+/**
+ * P0 复现用确定性 fixture。
+ *
+ * 硬约束：fixture 自身绝不引用网络资产。
+ * - 不使用 createDirectorScene（它默认包含演员，影响测试对象数量）；
+ * - 所有对象都是 primitive，不带 url / storageKey / assetId；
+ * - 所有 id 与时间戳都是字面量，因此每次构造完全一致（可直接断言）。
+ *
+ * 注意边界：这只保证「初始 fixture」离线。真实工作台自带的新增控件
+ * （上传模型、画布图片立牌）仍可能联网，因此模型相关的复现项
+ * 需要显式注入本地资产，不能假装当前 fixture 已经覆盖。
+ */
+
+const FIXTURE_CREATED_AT = "2026-01-01T00:00:00.000Z";
+const FIXTURE_SCENE_ID = "repro-scene-1";
+const FIXTURE_SHOT_ID = "repro-shot-1";
+const FIXTURE_CAMERA_ID = "repro-camera-1";
+
+function fixtureObject(input: { id: string; name: string; primitive: "box" | "sphere" | "cylinder" | "plane"; position: DirectorVec3; color: string }): DirectorObject {
+    return {
+        id: input.id,
+        name: input.name,
+        kind: "primitive",
+        primitive: input.primitive,
+        color: input.color,
+        visible: true,
+        castShadow: true,
+        receiveShadow: true,
+        transform: { position: input.position, rotation: [0, 0, 0], scale: [1, 1, 1] },
+        keyframes: [],
+    };
+}
+
+/**
+ * 构造 fixture 场景。同一 seed 下结构完全确定，不含任何远端资产。
+ * 返回全新对象，调用方可以自由改写而不影响后续构造。
+ */
+export function createDirectorReproScene(): DirectorScene {
+    return {
+        id: FIXTURE_SCENE_ID,
+        version: 1,
+        title: "P0 复现场景",
+        background: "#060608",
+        environmentIntensity: 0.7,
+        gridVisible: true,
+        objects: [
+            fixtureObject({ id: "repro-box-1", name: "立方体 A", primitive: "box", position: [0, 0.5, 0], color: "#8795a5" }),
+            fixtureObject({ id: "repro-sphere-1", name: "球体 B", primitive: "sphere", position: [2.2, 0.5, 0], color: "#6f8fb8" }),
+            fixtureObject({ id: "repro-cylinder-1", name: "圆柱 C", primitive: "cylinder", position: [-2.2, 0.5, 0], color: "#b8926f" }),
+        ],
+        cameras: [
+            {
+                id: FIXTURE_CAMERA_ID,
+                name: "主摄影机",
+                transform: { position: [4.8, 2.7, 6.8], rotation: [0, 0, 0], scale: [1, 1, 1] },
+                target: [0, 1, 0],
+                focalLength: 35,
+                fov: 50,
+                aperture: 2.8,
+                focusDistance: 5,
+                near: 0.05,
+                far: 500,
+                keyframes: [],
+            },
+        ],
+        lights: [
+            {
+                id: "repro-light-1",
+                name: "主光",
+                type: "directional",
+                color: "#ffffff",
+                intensity: 2.4,
+                castShadow: true,
+                transform: { position: [4, 6, 4], rotation: [0, 0, 0], scale: [1, 1, 1] },
+            },
+        ],
+        shots: [
+            {
+                id: FIXTURE_SHOT_ID,
+                name: "镜头 1",
+                cameraId: FIXTURE_CAMERA_ID,
+                shotSize: "medium",
+                cameraMove: "static",
+                duration: 4,
+                fps: 24,
+                prompt: "",
+            },
+        ],
+        activeShotId: FIXTURE_SHOT_ID,
+        createdAt: FIXTURE_CREATED_AT,
+        updatedAt: FIXTURE_CREATED_AT,
+    };
+}
+
+/**
+ * 离线人物视觉对照场景：无 URL 的历史标准演员会使用本地内置模型。
+ * 原始 P0 fixture 保持不变，避免影响已有的交互与回归用例。
+ */
+export function createDirectorReproActorScene(): DirectorScene {
+    const scene = createDirectorReproScene();
+    const actor: DirectorObject = {
+        id: "repro-actor-1",
+        name: "演员 1",
+        kind: "actor",
+        transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        color: "#4f8ef7",
+        visible: true,
+        castShadow: true,
+        receiveShadow: true,
+        pose: "stand",
+        rig: { status: "unmapped", boneMap: {}, animationNames: [] },
+        motionClips: [],
+        boneOverrides: {},
+        boneTracks: [],
+        keyframes: [],
+    };
+    return {
+        ...scene,
+        title: "人物视觉对照场景",
+        objects: [actor],
+        cameras: scene.cameras.map((camera) => ({ ...camera, name: "机位1", transform: { ...camera.transform, position: [0, 2.2, 10] }, target: [0, 1.2, 0] })),
+    };
+}
+
+/** Side-by-side preview of both free CC0 Quaternius Standard bodies. */
+export function createDirectorReproQuaterniusCompareScene(): DirectorScene {
+    const scene = createDirectorReproActorScene();
+    const original = scene.objects[0];
+    const quaternius: DirectorObject = {
+        ...original,
+        id: "repro-quaternius-male",
+        name: "Quaternius 免费男性",
+        url: DIRECTOR_QUATERNIUS_MALE_URL,
+        mimeType: "model/gltf-binary",
+        transform: { ...original.transform, position: [1.1, 0, 0] },
+    };
+    return {
+        ...scene,
+        title: "Quaternius 男女模型对照",
+        objects: [
+            { ...original, name: "Quaternius 免费女性", actorPreset: "standard_female", url: DIRECTOR_QUATERNIUS_FEMALE_URL, mimeType: "model/gltf-binary", transform: { ...original.transform, position: [-1.1, 0, 0] } },
+            quaternius,
+        ],
+        cameras: scene.cameras.map((camera) => ({ ...camera, transform: { ...camera.transform, position: [0, 2.4, 6.4] }, target: [0, 1, 0] })),
+    };
+}
+
+/** Same lighting and camera for every built-in body type; useful for visual proportion comparison. */
+export function createDirectorReproActorPresetScene(): DirectorScene {
+    const scene = createDirectorReproActorScene();
+    const actors = DIRECTOR_ACTOR_PRESET_OPTIONS.map(({ id, label }, index) => ({
+        ...createDirectorActorPreset(id, label, [((index % 3) - 1) * 1.45, 0, (Math.floor(index / 3) - 1) * 1.75]),
+        id: `repro-preset-${id}`,
+    }));
+    return {
+        ...scene,
+        title: "人物预设对照场景",
+        objects: actors,
+        cameras: scene.cameras.map((camera) => ({ ...camera, transform: { ...camera.transform, position: [0, 3.2, 10] }, target: [0, 0.9, 0] })),
+    };
+}
+
+/** fixture 是否完全不依赖网络资产：任何 url/storageKey/assetId 都算违约。 */
+export function directorReproSceneIsOffline(scene: DirectorScene): boolean {
+    return scene.objects.every((object) => !object.url && !object.storageKey && !object.assetId);
+}
+
+/** P0 手工复现矩阵。页面据此渲染清单，Stage D 可以逐条执行。 */
+export type DirectorReproCase = {
+    id: string;
+    group: string;
+    title: string;
+    steps: string;
+    expected: string;
+};
+
+export const DIRECTOR_REPRO_MATRIX: readonly DirectorReproCase[] = [
+    { id: "empty-click", group: "选择语义", title: "空白单击", steps: "在视口空白处单击。", expected: "取消选择，不产生历史记录，状态栏不变为未保存。" },
+    { id: "right-click", group: "选择语义", title: "右击", steps: "在对象上右击，再在空白处右击。", expected: "不改变选择、不开始手势、不写入历史。" },
+    { id: "switch-object", group: "选择语义", title: "切换对象", steps: "拖动对象 A 后不松手切换选中 B（或先松手再选 B）。", expected: "旧手势先被终结，B 不消费 A 的 base。" },
+    { id: "release-outside", group: "手势终结", title: "视口外释放", steps: "在视口内按下并拖动，移出视口后松开鼠标。", expected: "手势以 commit 终结一次，不留下悬挂预览。" },
+    { id: "blur", group: "手势终结", title: "窗口 blur", steps: "拖动过程中切换到其它窗口。", expected: "手势终结，草稿状态一致，不重复镜像。" },
+    { id: "escape", group: "手势终结", title: "Escape 取消", steps: "拖动过程中按 Escape。", expected: "恢复到手势前快照，且被取消的值绝不发布。" },
+    { id: "playing", group: "时间轴", title: "播放中操作", steps: "点击播放，播放中尝试选择与拖动。", expected: "播放不被打断成错误状态；改动语义与暂停时一致。" },
+    { id: "non-zero-time", group: "时间轴", title: "非 0 秒操作", steps: "把播放头拖到非 0 且非帧格整数位置后拖动对象。", expected: "增量以 raw playhead 为起点，不产生漂移。" },
+    { id: "autokey-on", group: "时间轴", title: "Auto Key 开", steps: "打开 Auto Key，在非 0 秒拖动对象。", expected: "在吸附后的目的时间写入关键帧。" },
+    { id: "autokey-off", group: "时间轴", title: "Auto Key 关", steps: "关闭 Auto Key，在非 0 秒拖动对象。", expected: "只改基础 transform，不产生关键帧。" },
+    { id: "add-move-delete-undo", group: "编辑链路", title: "连续新增/移动/删除/Undo", steps: "连续新增三个对象，各移动一次，删除中间一个，然后连续 Undo 到初始。", expected: "每步都可逆，Undo 后位置与选择状态自洽，不出现重叠或丢失。" },
+    { id: "delete-while-loading", group: "模型", title: "模型加载中删除", steps: "点击「注入本地模型」，立即打开工作台，在模型仍在加载时于左侧列表删除它。", expected: "晚到的加载结果被丢弃并释放，不留孤儿资源、不报错。" },
+    { id: "model-load-failed", group: "模型", title: "模型加载失败", steps: "点击「注入缺失模型」，打开工作台等待加载失败。", expected: "退回占位人偶，右上出现可操作「重试加载」，诊断记录 DIRECTOR_MODEL_LOAD_FAILED。" },
+    { id: "save-failed", group: "保存", title: "保存失败", steps: "让保存 flush 抛错后观察头部状态与重试。", expected: "状态为错误，草稿保留时提示可恢复，重试可再次尝试。" },
+    { id: "close-recovery", group: "保存", title: "关闭与草稿恢复", steps: "保存失败后关闭；重开同一场景。", expected: "关闭走 prepareClose 决策；重开时提示恢复或放弃，放弃后不再重复提示。" },
+];
+
+/** 注入变体：本地可达 glTF，或确定性不可达地址。 */
+export type DirectorReproModelVariant = "local" | "missing";
+
+/** 固定 id：重复注入必须替换同一对象，而不是不断堆叠新对象。 */
+export const DIRECTOR_REPRO_MODEL_IDS: Record<DirectorReproModelVariant, string> = {
+    local: "repro-model-local",
+    missing: "repro-model-missing",
+};
+
+/** 同源本地资产，不依赖外网可达性。
+ *  手写 glTF 2.0：内嵌 base64 buffer、无纹理、无压缩扩展，
+ *  因此不需要 KTX2Loader / DRACOLoader 也能被 GLTFLoader 直接解析。 */
+export const DIRECTOR_REPRO_LOCAL_MODEL_URL = "/canvas/models/director-repro-triangle.gltf";
+/** 同源但确定不存在：稳定触发加载失败路径，不依赖外网可达性。 */
+export const DIRECTOR_REPRO_MISSING_MODEL_URL = "/__director-repro-missing.glb";
+/** 轻量离线人形 GLTF，含真实手臂旋转动画，用于动作时间轴交互验收。 */
+export const DIRECTOR_REPRO_ANIMATED_PERSON_URL = "/canvas/models/director-repro-animated-person.gltf";
+
+const MODEL_URLS: Record<DirectorReproModelVariant, string> = {
+    local: DIRECTOR_REPRO_LOCAL_MODEL_URL,
+    missing: DIRECTOR_REPRO_MISSING_MODEL_URL,
+};
+
+/** local 是 JSON 形态 glTF，missing 仍按二进制声明，各自与 URL 后缀一致。 */
+const MODEL_MIME_TYPES: Record<DirectorReproModelVariant, string> = {
+    local: "model/gltf+json",
+    missing: "model/gltf-binary",
+};
+
+const MODEL_NAMES: Record<DirectorReproModelVariant, string> = {
+    local: "本地模型 repro triangle",
+    missing: "缺失模型（预期失败）",
+};
+
+/**
+ * 纯函数：把一个模型对象注入场景副本并返回新场景，绝不改写入参。
+ *
+ * 语义要点：
+ * - 固定 id，重复注入先移除同 id 再重算位置，因此不会堆叠也不会自我碰撞；
+ * - 只改 XZ，Y 严格保留 createDirectorModel 给出的 0（模型贴地）；
+ * - 位置经 resolveDirectorPlacement 避让现有对象；
+ * - 初始 fixture 本身不含模型，注入是显式动作，不污染离线基线。
+ */
+export function injectDirectorReproModel(scene: DirectorScene, variant: DirectorReproModelVariant): DirectorScene {
+    const id = DIRECTOR_REPRO_MODEL_IDS[variant];
+    const base = createDirectorModel({
+        name: MODEL_NAMES[variant],
+        assetId: id,
+        storageKey: undefined,
+        url: MODEL_URLS[variant],
+        mimeType: MODEL_MIME_TYPES[variant],
+    });
+    const model: DirectorObject = { ...base, id };
+
+    // 先剔除同 id 旧对象，避免重复点击时新位置去避让自己。
+    const others = scene.objects.filter((object) => object.id !== id);
+    const position = resolveDirectorPlacement({ object: model, existing: others });
+
+    return touchDirectorScene({
+        ...scene,
+        objects: [...others, { ...model, transform: { ...model.transform, position } }],
+    });
+}
+
+/** Add/replace a same-origin animated character fixture without touching the production actor asset path. */
+export function injectDirectorReproAnimatedPerson(scene: DirectorScene): DirectorScene {
+    const id = "repro-animated-person";
+    const model = createDirectorModel({
+        name: "离线动画人物",
+        assetId: id,
+        storageKey: undefined,
+        url: DIRECTOR_REPRO_ANIMATED_PERSON_URL,
+        mimeType: "model/gltf+json",
+    });
+    const others = scene.objects.filter((object) => object.id !== id);
+    const position = resolveDirectorPlacement({ object: model, existing: others });
+    return touchDirectorScene({
+        ...scene,
+        objects: [...others, { ...model, id, transform: { ...model.transform, position } }],
+    });
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-repro-runtime.ts
+LINES: 1-178
+========================================================================
+/**
+ * 复现场景的环境快照投影。
+ *
+ * 只在本地开发复现页面展示，绝不自动发网：本模块不引用任何 API 客户端。
+ * 所有字符串都限长并剥掉 URL 的 query/hash 与凭证形态片段；
+ * WebGL 不可用时必须稳定降级为 { available: false }，不能抛错。
+ */
+
+export type DirectorReproRuntime = {
+    appVersion: string;
+    buildCommit: string;
+    browser: string;
+    os: string;
+    timezone: string;
+    devicePixelRatio: number;
+};
+
+export type DirectorReproWebgl =
+    | { available: false; reason: "unsupported" | "context-failed" }
+    | {
+          available: true;
+          version: string;
+          vendor: string;
+          renderer: string;
+          maxTextureSize: number;
+          maxRenderbufferSize: number;
+          maxViewportWidth: number;
+          maxViewportHeight: number;
+      };
+
+export type DirectorReproSnapshot = {
+    runtime: DirectorReproRuntime;
+    webgl: DirectorReproWebgl;
+};
+
+const MAX_TEXT = 160;
+
+/**
+ * 安全文本：遮蔽凭证、整段替换 URL、压缩空白并限长。
+ * WebGL 的 UNMASKED_RENDERER 在部分驱动上会带较长标识甚至驱动地址，必须统一收敛。
+ *
+ * 顺序有意义：先吃掉 `bearer <token>`（token 与关键字之间只有空白，没有 :=），
+ * 否则后面的 key[:=]value 规则只会遮住 "bearer" 本身而把 token 留在原地。
+ * URL 一律替换为固定 [URL]：域名与路径本身就可能是凭证载体或内网拓扑信息，
+ * 只剥 query/hash 不够。
+ */
+export function safeReproText(value: unknown, maxLength = MAX_TEXT): string {
+    if (typeof value !== "string") return "";
+    let text = value.trim();
+    if (!text) return "";
+
+    text = text.replace(/\bbearer\s+[^\s,;]+/gi, "Bearer [REDACTED]");
+    text = text.replace(/(authorization|cookie|set-cookie|api[_-]?key|secret[_-]?key|password|token)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]");
+    text = text.replace(/https?:\/\/\S+/gi, "[URL]");
+    // 裸 query/hash 片段（不带协议）同样不得保留。
+    text = text.replace(/[?#]\S*/g, "");
+    text = text.replace(/\s+/g, " ").trim();
+    return text.slice(0, maxLength);
+}
+
+function boundedNumber(value: unknown, min: number, max: number): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) return min;
+    return Math.max(min, Math.min(max, value));
+}
+
+function boundedInteger(value: unknown, min: number, max: number): number {
+    return Math.round(boundedNumber(value, min, max));
+}
+
+export function readDirectorReproRuntime(): DirectorReproRuntime {
+    const nav = typeof navigator === "undefined" ? null : navigator;
+    let timezone = "";
+    try {
+        timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    } catch {
+        timezone = "";
+    }
+
+    return {
+        appVersion: safeReproText(import.meta.env.VITE_APP_VERSION || "dev", 48),
+        buildCommit: safeReproText(import.meta.env.VITE_BUILD_COMMIT || "unknown", 48),
+        browser: safeReproText(nav?.userAgent),
+        os: safeReproText(nav?.platform, 48),
+        timezone: safeReproText(timezone, 64),
+        devicePixelRatio: boundedNumber(typeof window === "undefined" ? 1 : window.devicePixelRatio, 0.1, 8),
+    };
+}
+
+type GlLike = {
+    getParameter: (name: number) => unknown;
+    getExtension: (name: string) => unknown;
+    VERSION: number;
+    VENDOR: number;
+    RENDERER: number;
+    MAX_TEXTURE_SIZE: number;
+    MAX_RENDERBUFFER_SIZE: number;
+    MAX_VIEWPORT_DIMS: number;
+};
+
+/**
+ * 从已有上下文投影安全 WebGL 信息。注入 gl 便于测试降级分支。
+ * 任何 getParameter/getExtension 抛错都收敛为 context-failed，不外泄异常。
+ */
+export function projectDirectorWebgl(gl: unknown): DirectorReproWebgl {
+    if (!gl || typeof gl !== "object") return { available: false, reason: "unsupported" };
+    const context = gl as GlLike;
+    if (typeof context.getParameter !== "function") return { available: false, reason: "unsupported" };
+
+    try {
+        // UNMASKED_* 需要扩展；拿不到就退回未遮蔽的 VENDOR/RENDERER，两者都可能为空。
+        let vendor = context.getParameter(context.VENDOR);
+        let renderer = context.getParameter(context.RENDERER);
+        try {
+            const debugInfo = typeof context.getExtension === "function" ? context.getExtension("WEBGL_debug_renderer_info") : null;
+            if (debugInfo && typeof debugInfo === "object") {
+                const info = debugInfo as { UNMASKED_VENDOR_WEBGL?: number; UNMASKED_RENDERER_WEBGL?: number };
+                if (typeof info.UNMASKED_VENDOR_WEBGL === "number") vendor = context.getParameter(info.UNMASKED_VENDOR_WEBGL) ?? vendor;
+                if (typeof info.UNMASKED_RENDERER_WEBGL === "number") renderer = context.getParameter(info.UNMASKED_RENDERER_WEBGL) ?? renderer;
+            }
+        } catch {
+            // 扩展不可用时保留未遮蔽值，不视为失败。
+        }
+
+        const viewportDims = context.getParameter(context.MAX_VIEWPORT_DIMS);
+        const dims = Array.isArray(viewportDims) || viewportDims instanceof Int32Array ? Array.from(viewportDims as ArrayLike<number>) : [];
+
+        return {
+            available: true,
+            version: safeReproText(context.getParameter(context.VERSION), 96),
+            vendor: safeReproText(vendor, 96),
+            renderer: safeReproText(renderer, 96),
+            maxTextureSize: boundedInteger(context.getParameter(context.MAX_TEXTURE_SIZE), 0, 1_048_576),
+            maxRenderbufferSize: boundedInteger(context.getParameter(context.MAX_RENDERBUFFER_SIZE), 0, 1_048_576),
+            maxViewportWidth: boundedInteger(dims[0], 0, 1_048_576),
+            maxViewportHeight: boundedInteger(dims[1], 0, 1_048_576),
+        };
+    } catch {
+        return { available: false, reason: "context-failed" };
+    }
+}
+
+/**
+ * 现场探测：创建一次性上下文读取能力，失败稳定降级。
+ * 读取完成后 best-effort 归还上下文：浏览器的 WebGL 上下文数量有限，
+ * 一次性 canvas 不释放会挤占真实视口的额度。
+ * 释放发生在快照取好之后，且异常一律吞掉，绝不影响已读到的结果。
+ */
+export function probeDirectorWebgl(): DirectorReproWebgl {
+    if (typeof document === "undefined") return { available: false, reason: "unsupported" };
+    try {
+        const canvas = document.createElement("canvas");
+        const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+        if (!gl) return { available: false, reason: "unsupported" };
+        const snapshot = projectDirectorWebgl(gl);
+        releaseProbeContext(gl);
+        return snapshot;
+    } catch {
+        return { available: false, reason: "context-failed" };
+    }
+}
+
+/** 归还探测用上下文；扩展不可用或调用抛错都视为无操作。导出以便测试释放路径。 */
+export function releaseProbeContext(gl: unknown): void {
+    try {
+        const context = gl as { getExtension?: (name: string) => unknown };
+        if (typeof context.getExtension !== "function") return;
+        const loseContext = context.getExtension("WEBGL_lose_context");
+        if (!loseContext || typeof loseContext !== "object") return;
+        const losable = loseContext as { loseContext?: () => void };
+        if (typeof losable.loseContext === "function") losable.loseContext();
+    } catch {
+        // 释放失败不影响已取到的 snapshot。
+    }
+}
+
+export function readDirectorReproSnapshot(): DirectorReproSnapshot {
+    return { runtime: readDirectorReproRuntime(), webgl: probeDirectorWebgl() };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-resources.ts
+LINES: 1-143
+========================================================================
+import type { AnimationMixer, Material, Mesh, Object3D, Texture } from "three";
+
+type DisposableMaterial = Material & Record<string, unknown>;
+
+// 材质上可能承载纹理的常见槽位；只释放本 owner 真正引用到的纹理。
+const TEXTURE_SLOTS = [
+    "map",
+    "alphaMap",
+    "aoMap",
+    "bumpMap",
+    "displacementMap",
+    "emissiveMap",
+    "envMap",
+    "lightMap",
+    "metalnessMap",
+    "normalMap",
+    "roughnessMap",
+    "specularMap",
+    "clearcoatMap",
+    "clearcoatNormalMap",
+    "clearcoatRoughnessMap",
+    "sheenColorMap",
+    "sheenRoughnessMap",
+    "transmissionMap",
+    "thicknessMap",
+    "iridescenceMap",
+    "specularColorMap",
+    "specularIntensityMap",
+] as const;
+
+function collectTextures(material: DisposableMaterial, sink: Set<Texture>) {
+    TEXTURE_SLOTS.forEach((slot) => {
+        const value = material[slot];
+        // 必须真的是 Texture：仅凭「有 dispose」会把 RenderTarget 等误判成纹理并造成错误释放。
+        if (isDirectorTexture(value)) sink.add(value);
+    });
+}
+
+function isDirectorTexture(value: unknown): value is Texture {
+    if (!value || typeof value !== "object") return false;
+    const candidate = value as Partial<Texture>;
+    return candidate.isTexture === true && typeof candidate.dispose === "function";
+}
+
+/**
+ * GLTF 加载结果的所有权判定。
+ * SkeletonUtils.clone 与 source 共享 geometry/material/texture，
+ * 因此被采纳（adopt）时绝不能释放 source —— 共享资源随 owned clone 的最终 cleanup 一并释放。
+ * 只有未被采纳的晚到/失效 generation 才需要释放 source，避免孤儿泄漏。
+ */
+export function resolveDirectorLoadOwnership(input: { active: boolean; generation: number; currentGeneration: number }) {
+    const adopt = input.active && input.generation === input.currentGeneration;
+    return { adopt, disposeSource: !adopt };
+}
+
+/** 释放一组材质及其引用纹理；用于被替换掉的原材质，避免 actor 参考材质造成泄漏。 */
+export function disposeDirectorMaterials(materials: Array<Material | null | undefined>) {
+    const owned = new Set<DisposableMaterial>();
+    materials.forEach((material) => {
+        if (material && typeof material.dispose === "function") owned.add(material as DisposableMaterial);
+    });
+    const textures = new Set<Texture>();
+    owned.forEach((material) => collectTextures(material, textures));
+    textures.forEach((texture) => texture.dispose());
+    owned.forEach((material) => material.dispose());
+}
+
+function collectObject3DResources(root: Object3D | null | undefined, geometries: Set<{ dispose: () => void }>, materials: Set<DisposableMaterial>) {
+    if (!root) return;
+    root.traverse((child) => {
+        const mesh = child as Mesh;
+        if (mesh.geometry && typeof mesh.geometry.dispose === "function") geometries.add(mesh.geometry);
+        if (!mesh.material) return;
+        const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        list.forEach((material) => {
+            if (!material || typeof material.dispose !== "function") return;
+            materials.add(material as DisposableMaterial);
+        });
+    });
+}
+
+function disposeCollected(geometries: Set<{ dispose: () => void }>, materials: Set<DisposableMaterial>) {
+    const textures = new Set<Texture>();
+    materials.forEach((material) => collectTextures(material, textures));
+    textures.forEach((texture) => texture.dispose());
+    materials.forEach((material) => material.dispose());
+    geometries.forEach((geometry) => geometry.dispose());
+}
+
+/**
+ * 释放一棵 owned Object3D 的 GPU 资源。
+ * 共享的 geometry/material/texture 用 Set 去重，保证同一资源只 dispose 一次。
+ * `<primitive object={...}>` 不会代为释放，必须由 owner 显式调用。
+ */
+export function disposeDirectorObject3D(root: Object3D | null | undefined) {
+    if (!root) return;
+    const geometries = new Set<{ dispose: () => void }>();
+    const materials = new Set<DisposableMaterial>();
+    collectObject3DResources(root, geometries, materials);
+    disposeCollected(geometries, materials);
+}
+
+/** SkeletonHelper 自带 geometry/material，必须单独释放。 */
+export function disposeDirectorHelper(helper: Object3D | null | undefined) {
+    disposeDirectorObject3D(helper);
+}
+
+/** mixer 停止全部动作并解除 root 缓存，避免 clip 绑定泄漏。 */
+export function disposeDirectorMixer(mixer: AnimationMixer | null | undefined, root?: Object3D | null) {
+    if (!mixer) return;
+    mixer.stopAllAction();
+    if (root) mixer.uncacheRoot(root as never);
+}
+
+/**
+ * 一次性释放某个模型 generation 拥有的全部资源。
+ * 只释放 owned clone 与 helper：clone 持有与 source 共享的 GPU 引用，
+ * source 的 Object3D 层级本身可被 GC，不需要（也不能）在这里再 dispose 一遍。
+ * model/helper 在同一次去重集合内收集，共享资源恰好 dispose 一次。
+ */
+export function disposeDirectorModelResources(input: { model?: Object3D | null; helper?: Object3D | null; mixer?: AnimationMixer | null }) {
+    disposeDirectorMixer(input.mixer, input.model);
+    const geometries = new Set<{ dispose: () => void }>();
+    const materials = new Set<DisposableMaterial>();
+    collectObject3DResources(input.model, geometries, materials);
+    collectObject3DResources(input.helper, geometries, materials);
+    disposeCollected(geometries, materials);
+}
+
+/**
+ * 采纳过程中途抛错时的精确清理，生产与测试共用。
+ * 二选一，绝不 double-dispose：
+ * - clone 已建成：它已持有与 source 共享的 GPU 引用，只释放 clone(+mixer)，source 交给 GC。
+ * - clone 尚未建成：本次没有任何 owned 资源，只释放这份未被采纳的 source。
+ */
+export function disposeDirectorAdoptionFailure(input: { clone?: Object3D | null; mixer?: AnimationMixer | null; source?: Object3D | null }) {
+    if (input.clone) {
+        disposeDirectorModelResources({ model: input.clone, mixer: input.mixer });
+        return;
+    }
+    disposeDirectorMixer(input.mixer, null);
+    disposeDirectorObject3D(input.source);
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-save-wiring.ts
+LINES: 1-122
+========================================================================
+import type { DirectorScene } from "@/types/director";
+import type { DirectorCloseDecision, DirectorDraftEnvelope, DirectorSaveSnapshot, StorageLike } from "@/lib/canvas/director/director-save";
+
+/**
+ * UI 只需要保存进度，不需要场景本体。
+ * 去掉 scene 后 React state 不必再为「还没有 coordinator」编造一个假场景。
+ */
+export type DirectorSaveProgress = Omit<DirectorSaveSnapshot, "scene">;
+
+export const idleDirectorSaveProgress: DirectorSaveProgress = {
+    revision: 0,
+    confirmedRevision: 0,
+    status: "saved",
+    draftStored: false,
+};
+
+/** 从完整快照投影出进度：订阅回调必须走它，避免只更新 status 而漏掉确认信息。 */
+export function directorSaveProgress(snapshot: DirectorSaveSnapshot): DirectorSaveProgress {
+    return {
+        revision: snapshot.revision,
+        confirmedRevision: snapshot.confirmedRevision,
+        status: snapshot.status,
+        draftStored: snapshot.draftStored,
+    };
+}
+
+/** 头部状态展示：文案与语气必须由状态唯一决定，组件不得自己拼措辞。 */
+export type DirectorSaveIndicator = {
+    label: string;
+    tone: "idle" | "pending" | "danger";
+    /** 未确认或错误时提供重试；已保存态没有可重试的东西。 */
+    retryable: boolean;
+    busy: boolean;
+};
+
+export function describeDirectorSaveStatus(progress: DirectorSaveProgress): DirectorSaveIndicator {
+    const unconfirmed = progress.confirmedRevision < progress.revision;
+
+    if (progress.status === "error") {
+        return {
+            label: progress.draftStored ? "保存失败 · 本地草稿已保留" : "保存失败 · 本地草稿也未写入",
+            tone: "danger",
+            retryable: true,
+            busy: false,
+        };
+    }
+    if (progress.status === "saving") {
+        return { label: "正在保存…", tone: "pending", retryable: false, busy: true };
+    }
+    if (progress.status === "dirty" || unconfirmed) {
+        return { label: "有未保存修改", tone: "pending", retryable: true, busy: false };
+    }
+    return { label: "已保存", tone: "idle", retryable: false, busy: false };
+}
+
+/**
+ * 是否提示恢复：候选必须比权威场景更新才值得打断用户。
+ * scene.updatedAt 是 canonical 保存时间，candidate.baseUpdatedAt 是草稿写入时的基线；
+ * 基线落后于权威说明远端已保存过更新的内容，这份草稿是陈旧残留。
+ */
+export function shouldOfferDirectorDraftRecovery(input: { candidate: DirectorDraftEnvelope | null; authoritativeScene: DirectorScene | null }): boolean {
+    const { candidate, authoritativeScene } = input;
+    if (!candidate || !authoritativeScene) return false;
+    if (candidate.sceneId !== authoritativeScene.id) return false;
+    if (candidate.baseUpdatedAt !== authoritativeScene.updatedAt) return false;
+    return candidate.scene.updatedAt > authoritativeScene.updatedAt;
+}
+
+/** 关闭决策的用户可见后果，组件按此分支决定退出/二次确认/留下。 */
+export type DirectorCloseOutcome = { kind: "close" } | { kind: "confirm-draft-exit"; message: string } | { kind: "blocked"; message: string };
+
+export function resolveDirectorCloseOutcome(decision: DirectorCloseDecision): DirectorCloseOutcome {
+    if (decision === "close") return { kind: "close" };
+    if (decision === "offer-draft-exit") {
+        return {
+            kind: "confirm-draft-exit",
+            message: "远端保存失败，但本地草稿已安全保存。下次打开这个镜头可以恢复，确认离开吗？",
+        };
+    }
+    return { kind: "blocked", message: "保存失败且本地草稿未写入，已留在导演台，请重试保存。" };
+}
+
+/**
+ * beforeunload 是否要触发浏览器保护：只有「改动未确认」或「错误态且没有安全草稿」才拦。
+ * 注意这里只能同步表达意图，异步 flush 无法阻塞卸载。
+ */
+export function shouldBlockDirectorUnload(progress: DirectorSaveProgress): boolean {
+    if (progress.confirmedRevision < progress.revision) return true;
+    return progress.status === "error" && !progress.draftStored;
+}
+
+/**
+ * localStorage 不可用（隐私模式、被禁用、SSR）时的显式实现：
+ * 读返回 null，写和删都抛，让 coordinator 如实得到 draftStored=false。
+ * 绝不能降级成进程内 Map —— 那会让弹窗谎称「下次可恢复」。
+ */
+export const unavailableDirectorDraftStorage: StorageLike = {
+    getItem: () => null,
+    setItem: () => {
+        throw new Error("localStorage unavailable");
+    },
+    removeItem: () => {
+        throw new Error("localStorage unavailable");
+    },
+};
+
+/** 纯 factory：注入 getter 便于测试不可用分支，不引入额外依赖。 */
+export function resolveDirectorDraftStorage(readStorage: () => Storage | null | undefined): StorageLike {
+    let local: Storage | null | undefined;
+    try {
+        local = readStorage();
+    } catch {
+        return unavailableDirectorDraftStorage;
+    }
+    if (!local) return unavailableDirectorDraftStorage;
+
+    return {
+        getItem: (key) => local.getItem(key),
+        setItem: (key, value) => local.setItem(key, value),
+        removeItem: (key) => local.removeItem(key),
+    };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-save.ts
+LINES: 1-460
+========================================================================
+import { scopedStorageKey } from "@/lib/user-scope";
+import { isDirectorAspectRatio } from "@/lib/canvas/director/director-aspect-ratio";
+import type { DirectorScene } from "@/types/director";
+import { validateDirectorSceneSequence } from "../../../../../shared/director-sequence";
+
+export type DirectorSaveStatus = "dirty" | "saving" | "saved" | "error";
+export type DirectorCloseDecision = "close" | "offer-draft-exit" | "stay";
+
+export type DirectorDraftEnvelope = {
+    schemaVersion: 1;
+    sceneId: string;
+    baseUpdatedAt: string;
+    scene: DirectorScene;
+    revision: number;
+    savedAt: number;
+};
+
+export type DirectorFlushRequest = {
+    scene: DirectorScene;
+    revision: number;
+    baseUpdatedAt: string;
+};
+
+export type StorageLike = {
+    getItem: (key: string) => string | null;
+    setItem: (key: string, value: string) => void;
+    removeItem: (key: string) => void;
+};
+
+export type FlushFunction = (request: Readonly<DirectorFlushRequest>) => Promise<void>;
+
+export type ScheduleFunction = (callback: () => void, delay: number) => unknown;
+
+export type CancelScheduleFunction = (handle: unknown) => void;
+
+export type DirectorSaveSnapshot = {
+    scene: DirectorScene;
+    revision: number;
+    confirmedRevision: number;
+    status: DirectorSaveStatus;
+    draftStored: boolean;
+};
+
+export type DirectorSaveCoordinatorOptions = {
+    initialScene: DirectorScene;
+    scope: string;
+    storage: StorageLike;
+    flush: FlushFunction;
+    now?: () => number;
+    debounceMs?: number;
+    schedule?: ScheduleFunction;
+    cancelSchedule?: CancelScheduleFunction;
+};
+
+export interface DirectorSaveCoordinator {
+    getSnapshot: () => DirectorSaveSnapshot;
+    hasActiveSave: () => boolean;
+    edit: (scene: DirectorScene) => boolean;
+    flushLatest: () => Promise<boolean>;
+    retry: () => Promise<boolean>;
+    restoreCandidate: () => DirectorDraftEnvelope | null;
+    discardDraft: () => boolean;
+    explicitRestore: (candidate: unknown) => boolean;
+    prepareClose: () => Promise<DirectorCloseDecision>;
+    handlePageHide: () => Promise<boolean>;
+    onStatusChange: (handler: (status: DirectorSaveStatus) => void) => () => void;
+    dispose: () => void;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+const cloneScene = (scene: DirectorScene): DirectorScene => structuredClone(scene);
+
+const isDirectorScene = (value: unknown, expectedSceneId: string): value is DirectorScene => {
+    if (!isRecord(value)) return false;
+    if (value.cameraSequence !== undefined) {
+        if (!Array.isArray(value.cameras)) return false;
+        try { validateDirectorSceneSequence(value as unknown as DirectorScene); } catch { return false; }
+    }
+
+    return (
+        value.id === expectedSceneId &&
+        value.version === 1 &&
+        typeof value.title === "string" &&
+        typeof value.background === "string" &&
+        typeof value.environmentIntensity === "number" &&
+        Number.isFinite(value.environmentIntensity) &&
+        typeof value.gridVisible === "boolean" &&
+        (value.gridSnap === undefined || typeof value.gridSnap === "boolean") &&
+        (value.ground === undefined || (isRecord(value.ground) && typeof value.ground.visible === "boolean" && typeof value.ground.opacity === "number" && Number.isFinite(value.ground.opacity) && value.ground.opacity >= 0 && value.ground.opacity <= 1 && typeof value.ground.height === "number" && Number.isFinite(value.ground.height) && value.ground.height >= -2 && value.ground.height <= 2)) &&
+        (value.stageTransform === undefined || (isRecord(value.stageTransform) && typeof value.stageTransform.scale === "number" && Number.isFinite(value.stageTransform.scale) && value.stageTransform.scale >= 0.1 && value.stageTransform.scale <= 10 && [value.stageTransform.position, value.stageTransform.rotation].every((axis) => Array.isArray(axis) && axis.length === 3 && axis.every((item) => typeof item === "number" && Number.isFinite(item))))) &&
+        (value.labelsVisible === undefined || typeof value.labelsVisible === "boolean") &&
+        (value.aspectRatio === undefined || isDirectorAspectRatio(value.aspectRatio)) &&
+        (value.panorama === undefined || (isRecord(value.panorama) && typeof value.panorama.url === "string" && (value.panorama.storageKey === undefined || typeof value.panorama.storageKey === "string") && (value.panorama.name === undefined || typeof value.panorama.name === "string") && typeof value.panorama.rotation === "number" && Number.isFinite(value.panorama.rotation))) &&
+        (value.panoramaRotation === undefined || (typeof value.panoramaRotation === "number" && Number.isFinite(value.panoramaRotation) && value.panoramaRotation >= 0 && value.panoramaRotation <= 360)) &&
+        (value.panoramaRadius === undefined || (typeof value.panoramaRadius === "number" && Number.isFinite(value.panoramaRadius) && value.panoramaRadius >= 10 && value.panoramaRadius <= 500)) &&
+        Array.isArray(value.objects) &&
+        Array.isArray(value.cameras) &&
+        Array.isArray(value.lights) &&
+        Array.isArray(value.shots) &&
+        typeof value.activeShotId === "string" &&
+        typeof value.createdAt === "string" &&
+        typeof value.updatedAt === "string"
+    );
+};
+
+const validateDraftEnvelope = (candidate: unknown, expectedSceneId: string): DirectorDraftEnvelope | null => {
+    if (!isRecord(candidate)) return null;
+
+    if (
+        candidate.schemaVersion !== 1 ||
+        candidate.sceneId !== expectedSceneId ||
+        typeof candidate.baseUpdatedAt !== "string" ||
+        typeof candidate.revision !== "number" ||
+        !Number.isSafeInteger(candidate.revision) ||
+        candidate.revision < 0 ||
+        typeof candidate.savedAt !== "number" ||
+        !Number.isFinite(candidate.savedAt) ||
+        candidate.savedAt < 0 ||
+        !isDirectorScene(candidate.scene, expectedSceneId)
+    ) {
+        return null;
+    }
+
+    return {
+        schemaVersion: 1,
+        sceneId: expectedSceneId,
+        baseUpdatedAt: candidate.baseUpdatedAt,
+        scene: cloneScene(candidate.scene),
+        revision: candidate.revision,
+        savedAt: candidate.savedAt,
+    };
+};
+
+const parseDraftEnvelope = (raw: string, expectedSceneId: string): DirectorDraftEnvelope | null => {
+    try {
+        const candidate: unknown = JSON.parse(raw);
+        return validateDraftEnvelope(candidate, expectedSceneId);
+    } catch {
+        return null;
+    }
+};
+
+export function createDirectorSaveCoordinator(options: DirectorSaveCoordinatorOptions): DirectorSaveCoordinator {
+    const { initialScene, scope, storage, flush, now = Date.now, debounceMs = 300 } = options;
+
+    const schedule: ScheduleFunction = options.schedule ?? ((callback, delay) => globalThis.setTimeout(callback, delay));
+    const cancelSchedule: CancelScheduleFunction = options.cancelSchedule ?? ((handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>));
+
+    const fixedSceneId = initialScene.id;
+    const storageKey = scopedStorageKey("director-scene-draft:" + fixedSceneId, scope);
+
+    let currentScene = cloneScene(initialScene);
+    let currentRevision = 0;
+    let confirmedRevision = 0;
+    let baseUpdatedAt = initialScene.updatedAt;
+    let status: DirectorSaveStatus = "saved";
+    let localDraft: DirectorDraftEnvelope | null = null;
+    let draftStored = false;
+    let debounceHandle: unknown | null = null;
+    let inFlightFlush: Promise<boolean> | null = null;
+    let closePromise: Promise<DirectorCloseDecision> | null = null;
+    let pageHidePromise: Promise<boolean> | null = null;
+    let disposed = false;
+
+    const subscribers = new Set<(status: DirectorSaveStatus) => void>();
+
+    const setStatus = (nextStatus: DirectorSaveStatus) => {
+        if (disposed || status === nextStatus) return;
+        status = nextStatus;
+        for (const subscriber of subscribers) {
+            try {
+                subscriber(nextStatus);
+            } catch {
+                // A subscriber must not break persistence.
+            }
+        }
+    };
+
+    const getSnapshot = (): DirectorSaveSnapshot => ({
+        scene: cloneScene(currentScene),
+        revision: currentRevision,
+        confirmedRevision,
+        status,
+        draftStored,
+    });
+
+    const cancelDebounce = () => {
+        if (debounceHandle === null) return;
+        cancelSchedule(debounceHandle);
+        debounceHandle = null;
+    };
+
+    const storeCurrentDraft = () => {
+        const envelope: DirectorDraftEnvelope = {
+            schemaVersion: 1,
+            sceneId: fixedSceneId,
+            baseUpdatedAt,
+            scene: cloneScene(currentScene),
+            revision: currentRevision,
+            savedAt: now(),
+        };
+
+        localDraft = envelope;
+
+        try {
+            storage.setItem(storageKey, JSON.stringify(envelope));
+            draftStored = true;
+            setStatus("dirty");
+        } catch {
+            draftStored = false;
+            setStatus("error");
+        }
+    };
+
+    const scheduleFlush = () => {
+        cancelDebounce();
+        debounceHandle = schedule(() => {
+            debounceHandle = null;
+            void flushLatest();
+        }, debounceMs);
+    };
+
+    const edit = (scene: DirectorScene): boolean => {
+        if (disposed || scene.id !== fixedSceneId) return false;
+        try { validateDirectorSceneSequence(scene); } catch { return false; }
+
+        currentScene = cloneScene(scene);
+        currentRevision += 1;
+        storeCurrentDraft();
+        scheduleFlush();
+        return true;
+    };
+
+    const clearStoredDraft = (revision: number) => {
+        if (localDraft?.revision !== revision) return;
+
+        try {
+            storage.removeItem(storageKey);
+            localDraft = null;
+            draftStored = false;
+        } catch {
+            draftStored = true;
+        }
+    };
+
+    const refreshStoredDraftBase = () => {
+        if (!localDraft || localDraft.revision <= confirmedRevision) return;
+
+        localDraft = {
+            ...localDraft,
+            baseUpdatedAt,
+        };
+
+        try {
+            storage.setItem(storageKey, JSON.stringify(localDraft));
+            draftStored = true;
+        } catch {
+            draftStored = false;
+        }
+    };
+
+    const runDrain = async (): Promise<boolean> => {
+        try {
+            while (!disposed && confirmedRevision < currentRevision) {
+                const targetRevision = currentRevision;
+                const targetScene = cloneScene(currentScene);
+                const targetBaseUpdatedAt = baseUpdatedAt;
+
+                setStatus("saving");
+
+                try {
+                    await flush({
+                        scene: targetScene,
+                        revision: targetRevision,
+                        baseUpdatedAt: targetBaseUpdatedAt,
+                    });
+                } catch {
+                    if (!disposed) setStatus("error");
+                    return false;
+                }
+
+                if (disposed) return false;
+
+                confirmedRevision = Math.max(confirmedRevision, targetRevision);
+                baseUpdatedAt = targetScene.updatedAt;
+
+                if (confirmedRevision === currentRevision) {
+                    clearStoredDraft(targetRevision);
+                    setStatus("saved");
+                    return true;
+                }
+
+                refreshStoredDraftBase();
+            }
+
+            if (disposed) return false;
+            setStatus("saved");
+            return confirmedRevision === currentRevision;
+        } catch {
+            if (!disposed) setStatus("error");
+            return false;
+        }
+    };
+
+    function flushLatest(): Promise<boolean> {
+        cancelDebounce();
+
+        if (disposed) return Promise.resolve(false);
+        if (inFlightFlush) return inFlightFlush;
+        if (confirmedRevision === currentRevision) {
+            setStatus("saved");
+            return Promise.resolve(true);
+        }
+
+        const pending = runDrain();
+        inFlightFlush = pending;
+
+        void pending.then(
+            () => {
+                if (inFlightFlush === pending) inFlightFlush = null;
+            },
+            () => {
+                if (inFlightFlush === pending) inFlightFlush = null;
+            },
+        );
+
+        return pending;
+    }
+
+    const retry = (): Promise<boolean> => flushLatest();
+
+    const restoreCandidate = (): DirectorDraftEnvelope | null => {
+        try {
+            const raw = storage.getItem(storageKey);
+            if (raw === null) return null;
+            return parseDraftEnvelope(raw, fixedSceneId);
+        } catch {
+            return null;
+        }
+    };
+
+    /**
+     * 显式放弃本地草稿：真正删除该 scoped key，避免同一旧草稿每次重开都提示。
+     * 删除失败返回 false，调用方必须告知用户草稿仍在，不能假装已放弃。
+     */
+    const discardDraft = (): boolean => {
+        try {
+            storage.removeItem(storageKey);
+        } catch {
+            return false;
+        }
+
+        localDraft = null;
+        draftStored = false;
+        return true;
+    };
+
+    const explicitRestore = (candidate: unknown): boolean => {
+        if (disposed) return false;
+
+        const envelope = validateDraftEnvelope(candidate, fixedSceneId);
+        if (!envelope || envelope.revision <= currentRevision) return false;
+
+        cancelDebounce();
+        currentScene = cloneScene(envelope.scene);
+        currentRevision = envelope.revision;
+        baseUpdatedAt = envelope.baseUpdatedAt;
+        localDraft = envelope;
+
+        try {
+            storage.setItem(storageKey, JSON.stringify(envelope));
+            draftStored = true;
+            setStatus("dirty");
+        } catch {
+            draftStored = false;
+            setStatus("error");
+        }
+
+        return true;
+    };
+
+    const prepareClose = (): Promise<DirectorCloseDecision> => {
+        if (disposed) return Promise.resolve("stay");
+        if (confirmedRevision === currentRevision) {
+            return Promise.resolve("close");
+        }
+        if (closePromise) return closePromise;
+
+        const pending = flushLatest().then<DirectorCloseDecision>((success) => {
+            if (success) return "close";
+            return draftStored ? "offer-draft-exit" : "stay";
+        });
+
+        closePromise = pending;
+        void pending.then(
+            () => {
+                if (closePromise === pending) closePromise = null;
+            },
+            () => {
+                if (closePromise === pending) closePromise = null;
+            },
+        );
+
+        return pending;
+    };
+
+    const handlePageHide = (): Promise<boolean> => {
+        if (disposed) return Promise.resolve(false);
+        if (pageHidePromise) return pageHidePromise;
+
+        const pending = flushLatest();
+        pageHidePromise = pending;
+
+        void pending.then(
+            () => {
+                if (pageHidePromise === pending) pageHidePromise = null;
+            },
+            () => {
+                if (pageHidePromise === pending) pageHidePromise = null;
+            },
+        );
+
+        return pending;
+    };
+
+    const onStatusChange = (handler: (status: DirectorSaveStatus) => void): (() => void) => {
+        if (disposed) return () => undefined;
+
+        subscribers.add(handler);
+        return () => {
+            subscribers.delete(handler);
+        };
+    };
+
+    const dispose = () => {
+        if (disposed) return;
+
+        disposed = true;
+        cancelDebounce();
+        subscribers.clear();
+        closePromise = null;
+        pageHidePromise = null;
+    };
+
+    return {
+        getSnapshot,
+        hasActiveSave: () => inFlightFlush !== null || debounceHandle !== null,
+        edit,
+        flushLatest,
+        retry,
+        restoreCandidate,
+        discardDraft,
+        explicitRestore,
+        prepareClose,
+        handlePageHide,
+        onStatusChange,
+        dispose,
+    };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-scene-search.ts
+LINES: 1-43
+========================================================================
+import type { DirectorCamera, DirectorGroup, DirectorLight, DirectorObject, DirectorScene } from "@/types/director";
+
+export type DirectorSceneSearchItem =
+    | { kind: "camera"; id: string; name: string; camera: DirectorCamera }
+    | { kind: "group"; id: string; name: string; group: DirectorGroup }
+    | { kind: "object"; id: string; name: string; object: DirectorObject }
+    | { kind: "light"; id: string; name: string; light: DirectorLight };
+
+/** Flat scene hierarchy shown by the director sidebar; filtering never changes the scene. */
+export function searchDirectorSceneItems(scene: DirectorScene, query: string): DirectorSceneSearchItem[] {
+    const normalized = query.trim().toLocaleLowerCase();
+    const matches = (name: string) => !normalized || name.toLocaleLowerCase().includes(normalized);
+    const items: DirectorSceneSearchItem[] = scene.cameras.filter((camera) => matches(camera.name)).map((camera) => ({ kind: "camera", id: camera.id, name: camera.name, camera }));
+    const emitted = new Set<string>();
+    for (const object of scene.objects) {
+        if (!object.groupId) {
+            if (matches(object.name)) items.push({ kind: "object", id: object.id, name: object.name, object });
+            continue;
+        }
+        const group = scene.groups?.find((entry) => entry.id === object.groupId);
+        if (!group) {
+            if (matches(object.name)) items.push({ kind: "object", id: object.id, name: object.name, object });
+            continue;
+        }
+        if (emitted.has(object.groupId)) continue;
+        emitted.add(object.groupId);
+        const members = scene.objects.filter((entry) => entry.groupId === group.id);
+        if (!matches(group.name) && !members.some((member) => matches(member.name))) continue;
+        items.push({ kind: "group", id: group.id, name: group.name, group });
+        if (!group.collapsed) for (const member of members) if (matches(group.name) || matches(member.name)) items.push({ kind: "object", id: member.id, name: member.name, object: member });
+    }
+    items.push(...scene.lights.filter((light) => matches(light.name)).map((light) => ({ kind: "light" as const, id: light.id, name: light.name, light })));
+    return items;
+}
+
+/** 场景行的 Shift 连续多选。筛选使锚点不在当前列表时退化为单选。 */
+export function resolveDirectorSceneSelection(order: string[], current: string[], anchor: string | null, target: string, shift: boolean): string[] {
+    const targetIndex = order.indexOf(target);
+    if (targetIndex < 0) return current.filter((id) => order.includes(id));
+    const anchorIndex = anchor ? order.indexOf(anchor) : -1;
+    if (!shift || anchorIndex < 0) return [target];
+    return order.slice(Math.min(anchorIndex, targetIndex), Math.max(anchorIndex, targetIndex) + 1);
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-scene.ts
+LINES: 1-483
+========================================================================
+import { nanoid } from "nanoid";
+import { Color, Euler, Quaternion } from "three";
+
+import type { DirectorBoneKeyframe, DirectorBoneTrack, DirectorCamera, DirectorGroup, DirectorHumanoidBone, DirectorKeyframe, DirectorKeyframeDeleteTarget, DirectorKeyframeEasing, DirectorLight, DirectorObject, DirectorPose, DirectorQuat, DirectorScene, DirectorTransform, DirectorVec3 } from "@/types/director";
+import { DIRECTOR_DEFAULT_GROUND } from "@/lib/canvas/director/director-ground";
+import { DIRECTOR_QUATERNIUS_MALE_URL } from "@/lib/canvas/director/director-actor-assets";
+import { DIRECTOR_DEFAULT_STAGE_TRANSFORM } from "@/lib/canvas/director/director-stage-transform";
+
+export { directorPoseChainBones, resolveDirectorPoseTargets, resolveDirectorTwoBoneJoint } from "@/lib/canvas/director/director-pose-solving";
+
+export const DIRECTOR_DEFAULT_ACTOR_URL = DIRECTOR_QUATERNIUS_MALE_URL;
+export const DIRECTOR_ACTOR_COLORS = ["#4f8ef7", "#202329", "#2f7de1", "#d84949", "#dfae3f", "#34a276"] as const;
+
+export const directorIdentityTransform = (position: DirectorVec3 = [0, 0, 0]): DirectorTransform => ({ position, rotation: [0, 0, 0], scale: [1, 1, 1] });
+
+export function createDirectorScene(title = "未命名场景"): DirectorScene {
+    const now = new Date().toISOString();
+    const camera = createDirectorCamera();
+    const shotId = nanoid();
+    return {
+        id: nanoid(),
+        version: 1,
+        title,
+        background: "#060608",
+        environmentIntensity: 0.7,
+        gridVisible: true,
+        gridSnap: false,
+        panoramaRotation: 0,
+        panoramaRadius: 60,
+        ground: { ...DIRECTOR_DEFAULT_GROUND },
+        stageTransform: { ...DIRECTOR_DEFAULT_STAGE_TRANSFORM, position: [...DIRECTOR_DEFAULT_STAGE_TRANSFORM.position], rotation: [...DIRECTOR_DEFAULT_STAGE_TRANSFORM.rotation] },
+        labelsVisible: true,
+        aspectRatio: "adaptive",
+        objects: [createDirectorActor("演员 1", [0, 0, 0])],
+        cameras: [camera],
+        lights: [createDirectorLight("directional", "主光", [4, 6, 4], 2.4), createDirectorLight("directional", "轮廓光", [-4, 3, -2], 1.1), createDirectorLight("ambient", "环境光", [0, 0, 0], 0.65)],
+        shots: [{ id: shotId, name: "镜头 1", cameraId: camera.id, duration: 5, fps: 24, shotSize: "medium", cameraMove: "static", prompt: "" }],
+        activeShotId: shotId,
+        createdAt: now,
+        updatedAt: now,
+    };
+}
+
+export function toggleDirectorObjectVisibility(scene: DirectorScene, id: string): DirectorScene {
+    if (!scene.objects.some((object) => object.id === id)) return scene;
+    return { ...scene, objects: scene.objects.map((object) => object.id === id ? { ...object, visible: !object.visible } : object) };
+}
+
+export function toggleDirectorObjectLock(scene: DirectorScene, id: string): DirectorScene {
+    if (!scene.objects.some((object) => object.id === id)) return scene;
+    return { ...scene, objects: scene.objects.map((object) => object.id === id ? { ...object, locked: !object.locked } : object) };
+}
+
+export function visibleDirectorCameras(scene: DirectorScene): DirectorCamera[] {
+    return scene.cameras.filter((camera) => camera.visible !== false);
+}
+
+export function toggleDirectorCameraVisibility(scene: DirectorScene, id: string): DirectorScene {
+    if (!scene.cameras.some((camera) => camera.id === id)) return scene;
+    return { ...scene, cameras: scene.cameras.map((camera) => camera.id === id ? { ...camera, visible: camera.visible === false } : camera) };
+}
+
+export function toggleDirectorCameraLock(scene: DirectorScene, id: string): DirectorScene {
+    if (!scene.cameras.some((camera) => camera.id === id)) return scene;
+    return { ...scene, cameras: scene.cameras.map((camera) => camera.id === id ? { ...camera, locked: !camera.locked } : camera) };
+}
+
+/** 副本保留媒体与动画内容，但所有可编辑记录均有独立标识与引用。 */
+export function duplicateDirectorObject(source: DirectorObject): DirectorObject {
+    const copy = structuredClone(source);
+    const ids = new Map(copy.keyframes.map((frame) => [frame.id, nanoid()]));
+    return {
+        ...copy,
+        id: nanoid(),
+        name: `${source.name}副本`,
+        keyframes: copy.keyframes.map((frame) => ({ ...frame, id: ids.get(frame.id)! })),
+        motionPath: copy.motionPath && { ...copy.motionPath, controlKeyframeIds: copy.motionPath.controlKeyframeIds?.flatMap((id) => ids.has(id) ? [ids.get(id)!] : []), originalKeyframes: copy.motionPath.originalKeyframes.map((frame) => ({ ...frame, id: nanoid() })) },
+        boneTracks: copy.boneTracks?.map((track) => ({ ...track, keyframes: track.keyframes.map((frame) => ({ ...frame, id: nanoid() })) })),
+    };
+}
+
+export function duplicateDirectorCamera(source: DirectorCamera): DirectorCamera {
+    const copy = structuredClone(source);
+    const ids = new Map(copy.keyframes.map((frame) => [frame.id, nanoid()]));
+    return { ...copy, id: nanoid(), name: `${source.name}副本`, keyframes: copy.keyframes.map((frame) => ({ ...frame, id: ids.get(frame.id)! })), drawnPath: copy.drawnPath && { ...copy.drawnPath, sampleKeyframeIds: copy.drawnPath.sampleKeyframeIds.flatMap((id) => ids.has(id) ? [ids.get(id)!] : []), originalKeyframes: copy.drawnPath.originalKeyframes?.map((frame) => ({ ...frame, id: nanoid() })) } };
+}
+
+export function groupDirectorObjects(scene: DirectorScene, ids: string[]): DirectorScene {
+    const selected = new Set(ids);
+    const members = scene.objects.filter((object) => selected.has(object.id));
+    if (members.length < 2) return scene;
+    const groups = scene.groups || [];
+    let index = 1;
+    while (groups.some((group) => group.name === `分组${index}`)) index += 1;
+    const group: DirectorGroup = { id: nanoid(), name: `分组${index}`, collapsed: false };
+    const objects = scene.objects.map((object) => selected.has(object.id) ? { ...object, groupId: group.id } : object);
+    const remainingGroups = groups.filter((entry) => objects.some((object) => object.groupId === entry.id));
+    return { ...scene, groups: [...remainingGroups, group], objects };
+}
+
+export function toggleDirectorGroupVisibility(scene: DirectorScene, id: string): DirectorScene {
+    const members = scene.objects.filter((object) => object.groupId === id);
+    if (!members.length) return scene;
+    const visible = members.some((object) => !object.visible);
+    return { ...scene, objects: scene.objects.map((object) => object.groupId === id ? { ...object, visible } : object) };
+}
+
+export function toggleDirectorGroupLock(scene: DirectorScene, id: string): DirectorScene {
+    const members = scene.objects.filter((object) => object.groupId === id);
+    if (!members.length) return scene;
+    const locked = members.some((object) => !object.locked);
+    return { ...scene, objects: scene.objects.map((object) => object.groupId === id ? { ...object, locked } : object) };
+}
+
+export function duplicateDirectorGroup(scene: DirectorScene, id: string): DirectorScene {
+    const group = scene.groups?.find((entry) => entry.id === id);
+    const members = scene.objects.filter((object) => object.groupId === id);
+    if (!group || members.length === 0) return scene;
+    const copyId = nanoid();
+    const duplicate: DirectorGroup = { id: copyId, name: `${group.name}副本`, collapsed: false };
+    const objects = members.map((object) => ({ ...duplicateDirectorObject(object), groupId: copyId }));
+    return { ...scene, groups: [...(scene.groups || []), duplicate], objects: [...scene.objects, ...objects] };
+}
+
+export function toggleDirectorGroupCollapsed(scene: DirectorScene, id: string): DirectorScene {
+    if (!scene.groups?.some((group) => group.id === id)) return scene;
+    return { ...scene, groups: scene.groups.map((group) => group.id === id ? { ...group, collapsed: !group.collapsed } : group) };
+}
+
+export function ungroupDirectorObjects(scene: DirectorScene, id: string): DirectorScene {
+    if (!scene.groups?.some((group) => group.id === id)) return scene;
+    const groups = scene.groups.filter((group) => group.id !== id);
+    return { ...scene, groups: groups.length ? groups : undefined, objects: scene.objects.map((object) => object.groupId === id ? { ...object, groupId: undefined } : object) };
+}
+
+export function createDirectorObject(primitive: DirectorObject["primitive"] = "box", name = "新对象", position: DirectorVec3 = [0, 0.5, 0], color = "#8795a5"): DirectorObject {
+    return {
+        id: nanoid(),
+        name,
+        kind: "primitive",
+        primitive,
+        transform: directorIdentityTransform(position),
+        color,
+        visible: true,
+        castShadow: true,
+        receiveShadow: true,
+        pose: primitive === "character" ? "stand" : undefined,
+        keyframes: [],
+    };
+}
+
+/** 统一倍率按比例作用于基础值和所有关键帧；轴向不等比缩放仍保留。 */
+export function applyDirectorUniformScale(object: DirectorObject, input: number): DirectorObject {
+    if (!Number.isFinite(input)) return object;
+    const next = Math.max(0.1, Math.min(10, input));
+    const previous = object.uniformScale && Number.isFinite(object.uniformScale) && object.uniformScale > 0 ? object.uniformScale : 1;
+    if (next === previous) return object;
+    const ratio = next / previous;
+    const scale = (values: DirectorVec3): DirectorVec3 => values.map((value) => value * ratio) as DirectorVec3;
+    return {
+        ...object,
+        uniformScale: next,
+        transform: { ...object.transform, scale: scale(object.transform.scale) },
+        keyframes: object.keyframes.map((frame) => ({ ...frame, transform: { ...frame.transform, scale: scale(frame.transform.scale) } })),
+    };
+}
+
+export function createDirectorActor(name = "演员", position: DirectorVec3 = [0, 0, 0], color: string = DIRECTOR_ACTOR_COLORS[0]): DirectorObject {
+    return {
+        ...createDirectorObject("box", name, position, color),
+        kind: "actor",
+        primitive: undefined,
+        actorPreset: "standard_male",
+        url: DIRECTOR_QUATERNIUS_MALE_URL,
+        mimeType: "model/gltf-binary",
+        pose: "stand",
+        rig: { status: "unmapped", boneMap: {}, animationNames: [] },
+        motionClips: [],
+        boneOverrides: {},
+        boneTracks: [],
+    };
+}
+
+export function createDirectorModel(input: Pick<DirectorObject, "name" | "storageKey" | "url" | "mimeType" | "assetId">): DirectorObject {
+    return { ...createDirectorObject("box", input.name, [0, 0, 0]), ...input, kind: "model", primitive: undefined };
+}
+
+export function createDirectorBillboard(name: string, url: string, storageKey?: string, sourceNodeId?: string): DirectorObject {
+    return { ...createDirectorObject("plane", name, [0, 1.1, 0], "#ffffff"), kind: "billboard", url, storageKey, sourceNodeId, transform: { position: [0, 1.1, 0], rotation: [0, 0, 0], scale: [1.6, 0.9, 1] } };
+}
+
+export function createDirectorCamera(name = "机位1"): DirectorCamera {
+    return { id: nanoid(), name, transform: directorIdentityTransform([0, 2.2, 10]), target: [0, 1.2, 0], focalLength: 35, fov: 50, aperture: 2.8, focusDistance: 5, near: 0.05, far: 500, keyframes: [] };
+}
+
+/** 35mm 全画幅水平视角换算。摄影机检查器与场景模板共用，避免两处各写一份光学。 */
+export function directorFocalLengthToFov(focalLength: number) {
+    return (2 * Math.atan(36 / (2 * Math.max(1, focalLength))) * 180) / Math.PI;
+}
+
+/** 与焦距编辑使用同一 35mm 全画幅模型，FOV 调整后两项保持同步。 */
+export function directorFovToFocalLength(fov: number) {
+    return 18 / Math.tan((Math.max(1, Math.min(179, fov)) * Math.PI) / 360);
+}
+
+export function createDirectorLight(type: DirectorLight["type"], name: string, position: DirectorVec3, intensity = 1): DirectorLight {
+    return { id: nanoid(), name, type, transform: directorIdentityTransform(position), color: "#ffffff", intensity, angle: Math.PI / 4, penumbra: 0.35, castShadow: type !== "ambient" };
+}
+
+export function touchDirectorScene(scene: DirectorScene): DirectorScene {
+    return { ...scene, updatedAt: new Date().toISOString() };
+}
+
+/** 关键帧命中容差：upsert 与 remove 必须同判据，否则会出现「记录能覆盖但删不掉」。 */
+export const DIRECTOR_KEYFRAME_EPSILON = 0.001;
+
+export function upsertDirectorKeyframe(keyframes: DirectorKeyframe[], time: number, transform: DirectorTransform) {
+    const current = keyframes.find((item) => Math.abs(item.time - time) < DIRECTOR_KEYFRAME_EPSILON);
+    const next = current ? keyframes.map((item) => (item.id === current.id ? { ...item, transform } : item)) : [...keyframes, { id: nanoid(), time, transform }];
+    return next.sort((a, b) => a.time - b.time);
+}
+
+export function upsertDirectorBoneKeyframe(tracks: DirectorBoneTrack[], bone: DirectorHumanoidBone, time: number, rotation: DirectorQuat) {
+    const track = tracks.find((item) => item.bone === bone);
+    const nextKeyframes = upsertBoneKeyframe(track?.keyframes || [], time, rotation);
+    return track ? tracks.map((item) => item.bone === bone ? { ...item, keyframes: nextKeyframes } : item) : [...tracks, { bone, keyframes: nextKeyframes }];
+}
+
+function upsertBoneKeyframe(keyframes: DirectorBoneKeyframe[], time: number, rotation: DirectorQuat) {
+    const current = keyframes.find((item) => Math.abs(item.time - time) < DIRECTOR_KEYFRAME_EPSILON);
+    const next = current ? keyframes.map((item) => item.id === current.id ? { ...item, rotation } : item) : [...keyframes, { id: nanoid(), time, rotation }];
+    return next.sort((a, b) => a.time - b.time);
+}
+
+/** 按 id 删除对象 transform 关键帧；id 不存在时返回原数组引用。 */
+export function removeDirectorKeyframe(keyframes: DirectorKeyframe[], keyframeId: string): DirectorKeyframe[] {
+    if (!keyframes.some((item) => item.id === keyframeId)) return keyframes;
+    return keyframes.filter((item) => item.id !== keyframeId);
+}
+
+/**
+ * 按 id 删除某骨骼轨道上的关键帧。
+ * 轨道被删空后整条移除，否则时间轴会留下永远为空的子轨道。
+ */
+export function removeDirectorBoneKeyframe(tracks: DirectorBoneTrack[], bone: DirectorHumanoidBone, keyframeId: string): DirectorBoneTrack[] {
+    const track = tracks.find((item) => item.bone === bone);
+    if (!track?.keyframes.some((item) => item.id === keyframeId)) return tracks;
+
+    const nextKeyframes = track.keyframes.filter((item) => item.id !== keyframeId);
+    if (!nextKeyframes.length) return tracks.filter((item) => item.bone !== bone);
+    return tracks.map((item) => (item.bone === bone ? { ...item, keyframes: nextKeyframes } : item));
+}
+
+/**
+ * 时间轴删除关键帧的唯一入口：按轨道类型分派到对应领域函数。
+ *
+ * 未命中（对象/摄影机/骨骼/关键帧任一不存在）时返回同一个 scene 引用，
+ * 调用方据此跳过历史与保存，避免「点了没删掉却多一次修订」。
+ */
+export function removeDirectorSceneKeyframe(scene: DirectorScene, target: DirectorKeyframeDeleteTarget): DirectorScene {
+    if (target.track === "camera") {
+        const camera = scene.cameras.find((item) => item.id === target.cameraId);
+        if (!camera) return scene;
+        const frame = camera.keyframes.find((item) => item.id === target.keyframeId);
+        if (!frame) return scene;
+        if (target.channel === "position" && (!frame || frame.positionKeyed === false)) return scene;
+        if (target.channel === "rotation" && frame.rotationKeyed === false) return scene;
+        if (target.channel === "focus" && frame?.target === undefined) return scene;
+        if (target.channel === "fov" && frame?.fov === undefined) return scene;
+        if (!target.channel) return { ...scene, cameras: scene.cameras.map((item) => item.id === camera.id ? {
+            ...item,
+            keyframes: removeDirectorKeyframe(item.keyframes, target.keyframeId),
+            ...(item.drawnPath ? { drawnPath: { ...item.drawnPath, sampleKeyframeIds: item.drawnPath.sampleKeyframeIds.filter((id) => id !== target.keyframeId) } } : {}),
+        } : item) };
+        const nextFrame = target.channel === "position" ? { ...frame, positionKeyed: false }
+            : target.channel === "rotation" ? { ...frame, rotationKeyed: false }
+                : target.channel === "focus" ? { ...frame, target: undefined }
+                    : { ...frame, fov: undefined };
+        const hasOtherTrack = nextFrame.positionKeyed !== false || nextFrame.rotationKeyed !== false || nextFrame.target !== undefined || nextFrame.fov !== undefined;
+        const keyframes = hasOtherTrack
+            ? camera.keyframes.map((item) => item.id === target.keyframeId ? nextFrame : item)
+            : removeDirectorKeyframe(camera.keyframes, target.keyframeId);
+        if (keyframes === camera.keyframes) return scene;
+        return { ...scene, cameras: scene.cameras.map((item) => (item.id === camera.id ? { ...item, keyframes } : item)) };
+    }
+
+    const object = scene.objects.find((item) => item.id === target.objectId);
+    if (!object) return scene;
+
+    if (target.track === "object-transform") {
+        const frame = object.keyframes.find((item) => item.id === target.keyframeId);
+        if (!frame || (target.channel && frame[`${target.channel}Keyed`] === false)) return scene;
+        const nextFrame = target.channel ? { ...frame, [`${target.channel}Keyed`]: false } : null;
+        const keyframes = nextFrame && (nextFrame.positionKeyed !== false || nextFrame.rotationKeyed !== false || nextFrame.scaleKeyed !== false)
+            ? object.keyframes.map((item) => item.id === frame.id ? nextFrame : item)
+            : removeDirectorKeyframe(object.keyframes, target.keyframeId);
+        if (keyframes === object.keyframes) return scene;
+        return { ...scene, objects: scene.objects.map((item) => (item.id === object.id ? {
+            ...item,
+            keyframes,
+            ...(item.motionPath?.controlKeyframeIds ? { motionPath: { ...item.motionPath, controlKeyframeIds: item.motionPath.controlKeyframeIds.filter((id) => id !== target.keyframeId) } } : {}),
+        } : item)) };
+    }
+
+    const tracks = object.boneTracks || [];
+    const boneTracks = removeDirectorBoneKeyframe(tracks, target.bone, target.keyframeId);
+    if (boneTracks === tracks) return scene;
+    return { ...scene, objects: scene.objects.map((item) => (item.id === object.id ? { ...item, boneTracks } : item)) };
+}
+
+/**
+ * 更新一枚关键帧后续区间的缓动。未命中时返回原 scene 引用，调用方据此跳过历史与保存。
+ */
+export function setDirectorSceneKeyframeEasing(scene: DirectorScene, target: DirectorKeyframeDeleteTarget, easing: DirectorKeyframeEasing): DirectorScene {
+    const update = <T extends { id: string; easing?: DirectorKeyframeEasing }>(keyframes: T[]) => {
+        if (!keyframes.some((item) => item.id === target.keyframeId)) return keyframes;
+        return keyframes.map((item) => item.id === target.keyframeId ? { ...item, easing } : item);
+    };
+
+    if (target.track === "camera") {
+        const camera = scene.cameras.find((item) => item.id === target.cameraId);
+        if (!camera) return scene;
+        const keyframes = update(camera.keyframes);
+        if (keyframes === camera.keyframes) return scene;
+        return { ...scene, cameras: scene.cameras.map((item) => item.id === camera.id ? { ...item, keyframes } : item) };
+    }
+
+    const object = scene.objects.find((item) => item.id === target.objectId);
+    if (!object) return scene;
+    if (target.track === "object-transform") {
+        const keyframes = update(object.keyframes);
+        if (keyframes === object.keyframes) return scene;
+        return { ...scene, objects: scene.objects.map((item) => item.id === object.id ? { ...item, keyframes } : item) };
+    }
+
+    const tracks = object.boneTracks || [];
+    const track = tracks.find((item) => item.bone === target.bone);
+    if (!track) return scene;
+    const keyframes = update(track.keyframes);
+    if (keyframes === track.keyframes) return scene;
+    const boneTracks = tracks.map((item) => item.bone === target.bone ? { ...item, keyframes } : item);
+    return { ...scene, objects: scene.objects.map((item) => item.id === object.id ? { ...item, boneTracks } : item) };
+}
+
+/** 缓动属于前一枚关键帧到下一枚关键帧的区间。旧数据未声明时保持线性。 */
+export function resolveDirectorKeyframeProgress(progress: number, easing: DirectorKeyframeEasing = "linear") {
+    const clamped = Math.max(0, Math.min(1, progress));
+    if (easing === "step") return 0;
+    if (easing === "smooth") return clamped * clamped * (3 - 2 * clamped);
+    return clamped;
+}
+
+/** 轨迹渲染只接受有限时间与位置；坏数据不得进入 Three 几何体。 */
+export function finiteDirectorTransformKeyframes(keyframes: DirectorKeyframe[]) {
+    return keyframes.filter((keyframe) => keyframe.positionKeyed !== false && [keyframe.time, ...keyframe.transform.position].every(Number.isFinite));
+}
+
+/** 按时间顺序累计 Transform 关键帧路径长度；非法时间或坐标段忽略，不污染界面统计。 */
+export function directorTransformPathLength(keyframes: DirectorKeyframe[]) {
+    const sorted = keyframes.filter((keyframe) => keyframe.positionKeyed !== false).sort((left, right) => left.time - right.time);
+    let length = 0;
+    for (let index = 1; index < sorted.length; index += 1) {
+        const previousTime = sorted[index - 1].time;
+        const currentTime = sorted[index].time;
+        const previous = sorted[index - 1].transform.position;
+        const current = sorted[index].transform.position;
+        if (![previousTime, currentTime, ...previous, ...current].every(Number.isFinite)) continue;
+        length += Math.hypot(current[0] - previous[0], current[1] - previous[1], current[2] - previous[2]);
+    }
+    return length;
+}
+
+export function interpolateDirectorTransform(base: DirectorTransform, keyframes: DirectorKeyframe[], time: number): DirectorTransform {
+    if (keyframes.some((frame) => frame.positionKeyed === false || frame.rotationKeyed === false || frame.scaleKeyed === false)) {
+        return {
+            position: interpolateDirectorTransformUnfiltered(base, keyframes.filter((frame) => frame.positionKeyed !== false), time).position,
+            rotation: interpolateDirectorTransformUnfiltered(base, keyframes.filter((frame) => frame.rotationKeyed !== false), time).rotation,
+            scale: interpolateDirectorTransformUnfiltered(base, keyframes.filter((frame) => frame.scaleKeyed !== false), time).scale,
+        };
+    }
+    return interpolateDirectorTransformUnfiltered(base, keyframes, time);
+}
+
+function interpolateDirectorTransformUnfiltered(base: DirectorTransform, keyframes: DirectorKeyframe[], time: number): DirectorTransform {
+    if (!keyframes.length) return base;
+    const previous = [...keyframes].reverse().find((item) => item.time <= time) || keyframes[0];
+    const next = keyframes.find((item) => item.time >= time) || keyframes[keyframes.length - 1];
+    if (previous.id === next.id) return previous.transform;
+    const progress = resolveDirectorKeyframeProgress((time - previous.time) / Math.max(next.time - previous.time, DIRECTOR_KEYFRAME_EPSILON), previous.easing);
+    const rotation = new Quaternion().setFromEuler(new Euler(...previous.transform.rotation)).slerp(new Quaternion().setFromEuler(new Euler(...next.transform.rotation)), progress);
+    return {
+        position: lerpVec3(previous.transform.position, next.transform.position, progress),
+        rotation: new Euler().setFromQuaternion(rotation).toArray().slice(0, 3) as DirectorVec3,
+        scale: lerpVec3(previous.transform.scale, next.transform.scale, progress),
+    };
+}
+
+export function interpolateDirectorBoneRotation(base: DirectorQuat, keyframes: DirectorBoneKeyframe[], time: number): DirectorQuat {
+    if (!keyframes.length) return base;
+    const previous = [...keyframes].reverse().find((item) => item.time <= time) || keyframes[0];
+    const next = keyframes.find((item) => item.time >= time) || keyframes[keyframes.length - 1];
+    if (previous.id === next.id) return previous.rotation;
+    const progress = resolveDirectorKeyframeProgress((time - previous.time) / Math.max(next.time - previous.time, DIRECTOR_KEYFRAME_EPSILON), previous.easing);
+    return new Quaternion(...previous.rotation).slerp(new Quaternion(...next.rotation), progress).toArray() as DirectorQuat;
+}
+
+export function directorBoneLabel(bone: string) {
+    return ({
+        hips: "骨盆", spine: "脊柱", chest: "胸腔", neck: "颈部", head: "头部",
+        leftShoulder: "左肩", leftUpperArm: "左上臂", leftLowerArm: "左前臂", leftHand: "左手",
+        rightShoulder: "右肩", rightUpperArm: "右上臂", rightLowerArm: "右前臂", rightHand: "右手",
+        leftUpperLeg: "左大腿", leftLowerLeg: "左小腿", leftFoot: "左脚",
+        rightUpperLeg: "右大腿", rightLowerLeg: "右小腿", rightFoot: "右脚",
+        leftThumb1: "左拇指·根", leftThumb2: "左拇指·中", leftThumb3: "左拇指·尖",
+        leftIndex1: "左食指·根", leftIndex2: "左食指·中", leftIndex3: "左食指·尖",
+        leftMiddle1: "左中指·根", leftMiddle2: "左中指·中", leftMiddle3: "左中指·尖",
+        leftRing1: "左无名指·根", leftRing2: "左无名指·中", leftRing3: "左无名指·尖",
+        leftPinky1: "左小指·根", leftPinky2: "左小指·中", leftPinky3: "左小指·尖",
+        rightThumb1: "右拇指·根", rightThumb2: "右拇指·中", rightThumb3: "右拇指·尖",
+        rightIndex1: "右食指·根", rightIndex2: "右食指·中", rightIndex3: "右食指·尖",
+        rightMiddle1: "右中指·根", rightMiddle2: "右中指·中", rightMiddle3: "右中指·尖",
+        rightRing1: "右无名指·根", rightRing2: "右无名指·中", rightRing3: "右无名指·尖",
+        rightPinky1: "右小指·根", rightPinky2: "右小指·中", rightPinky3: "右小指·尖",
+    } as Record<string, string>)[bone] || bone;
+}
+
+export function directorPoseLabel(pose: DirectorPose) {
+    return ({ neutral: "自然", stand: "站立", t_pose: "T 型", walk: "行走", run: "跑步", sit: "坐姿", squat: "蹲下", kneel_single: "单膝跪", kneel_double: "双膝跪", hands_hips: "叉腰", lean: "倚靠", bow: "鞠躬", think: "思考", fight: "格斗", kick: "踢球", throw: "投掷", push: "推进", wave: "招手", reach: "伸手", arms_crossed: "抱臂", phone: "看手机" } as Record<DirectorPose, string>)[pose];
+}
+
+export function directorPoseBoneDeltas(pose: DirectorPose): Partial<Record<DirectorHumanoidBone, DirectorQuat>> {
+    // Soldier 的左右上臂局部 Z 轴方向一致，正向旋转才会把两侧手臂从 T Pose 放下。
+    const armsDown = { leftUpperArm: poseQuaternion(0, 0, 1.28), rightUpperArm: poseQuaternion(0, 0, 1.28) };
+    const poses: Record<DirectorPose, Partial<Record<DirectorHumanoidBone, DirectorQuat>>> = {
+        neutral: armsDown,
+        stand: armsDown,
+        t_pose: {},
+        walk: { ...armsDown, leftUpperArm: poseQuaternion(0.36, 0, 1.2), rightUpperArm: poseQuaternion(-0.36, 0, 1.2), leftUpperLeg: poseQuaternion(-0.32, 0, 0), rightUpperLeg: poseQuaternion(0.32, 0, 0) },
+        run: { ...armsDown, leftUpperArm: poseQuaternion(0.75, 0, 1.05), rightUpperArm: poseQuaternion(-0.75, 0, 1.05), leftLowerArm: poseQuaternion(-0.7, 0, 0), rightLowerArm: poseQuaternion(-0.7, 0, 0), leftUpperLeg: poseQuaternion(-0.65, 0, 0), rightUpperLeg: poseQuaternion(0.55, 0, 0), rightLowerLeg: poseQuaternion(0.8, 0, 0) },
+        sit: { ...armsDown, leftUpperLeg: poseQuaternion(-1.35, 0, 0), rightUpperLeg: poseQuaternion(-1.35, 0, 0), leftLowerLeg: poseQuaternion(1.25, 0, 0), rightLowerLeg: poseQuaternion(1.25, 0, 0) },
+        squat: { ...armsDown, hips: poseQuaternion(0.25, 0, 0), leftUpperLeg: poseQuaternion(-0.75, 0, 0), rightUpperLeg: poseQuaternion(-0.75, 0, 0), leftLowerLeg: poseQuaternion(1.2, 0, 0), rightLowerLeg: poseQuaternion(1.2, 0, 0) },
+        kneel_single: { ...armsDown, leftUpperLeg: poseQuaternion(-0.95, 0, 0), leftLowerLeg: poseQuaternion(1.45, 0, 0), rightUpperLeg: poseQuaternion(-0.35, 0, 0), rightLowerLeg: poseQuaternion(0.75, 0, 0) },
+        kneel_double: { ...armsDown, leftUpperLeg: poseQuaternion(-0.55, 0, 0), rightUpperLeg: poseQuaternion(-0.55, 0, 0), leftLowerLeg: poseQuaternion(1.45, 0, 0), rightLowerLeg: poseQuaternion(1.45, 0, 0) },
+        hands_hips: { leftUpperArm: poseQuaternion(0, 0, 0.75), rightUpperArm: poseQuaternion(0, 0, 0.75), leftLowerArm: poseQuaternion(-0.1, 0.2, -1.5), rightLowerArm: poseQuaternion(-0.1, -0.2, 1.5) },
+        lean: { ...armsDown, hips: poseQuaternion(0, 0, 0.18), spine: poseQuaternion(0, 0, -0.12), head: poseQuaternion(0, 0, -0.08) },
+        bow: { ...armsDown, hips: poseQuaternion(0.5, 0, 0), spine: poseQuaternion(0.28, 0, 0), head: poseQuaternion(-0.18, 0, 0) },
+        think: { ...armsDown, rightUpperArm: poseQuaternion(-0.25, 0, 0.55), rightLowerArm: poseQuaternion(-1.35, 0, 0.3), head: poseQuaternion(0.05, -0.22, 0) },
+        fight: { leftUpperArm: poseQuaternion(-0.65, 0, 0.7), rightUpperArm: poseQuaternion(-0.55, 0, 0.65), leftLowerArm: poseQuaternion(-1.2, 0, 0), rightLowerArm: poseQuaternion(-1.25, 0, 0), chest: poseQuaternion(0, 0.2, 0), leftUpperLeg: poseQuaternion(-0.15, 0, 0), rightUpperLeg: poseQuaternion(0.2, 0, 0) },
+        kick: { ...armsDown, leftUpperArm: poseQuaternion(0.3, 0, 1.1), rightUpperArm: poseQuaternion(-0.3, 0, 1.1), rightUpperLeg: poseQuaternion(-1.1, 0, 0), rightLowerLeg: poseQuaternion(0.35, 0, 0) },
+        throw: { leftUpperArm: poseQuaternion(-0.35, 0.2, 0.35), rightUpperArm: poseQuaternion(-1.2, 0, 0.25), rightLowerArm: poseQuaternion(-1.05, 0, 0), chest: poseQuaternion(0, -0.3, 0) },
+        push: { leftUpperArm: poseQuaternion(-0.9, 0, 0.3), rightUpperArm: poseQuaternion(-0.9, 0, 0.3), leftLowerArm: poseQuaternion(-0.35, 0, 0), rightLowerArm: poseQuaternion(-0.35, 0, 0), chest: poseQuaternion(0.15, 0, 0) },
+        wave: { ...armsDown, rightUpperArm: poseQuaternion(0, 0, -0.35), rightLowerArm: poseQuaternion(0, 0, -1.45), rightHand: poseQuaternion(0, 0, -0.3) },
+        reach: { ...armsDown, rightUpperArm: poseQuaternion(-1.35, 0, -0.05), rightLowerArm: poseQuaternion(-0.1, 0, 0) },
+        arms_crossed: { leftUpperArm: poseQuaternion(-0.65, 0, 0.65), rightUpperArm: poseQuaternion(-0.65, 0, 0.65), leftLowerArm: poseQuaternion(-1.2, 0.15, -0.4), rightLowerArm: poseQuaternion(-1.2, -0.15, 0.4) },
+        phone: { ...armsDown, leftUpperArm: poseQuaternion(-0.45, 0, 0.95), rightUpperArm: poseQuaternion(-0.45, 0, 0.95), leftLowerArm: poseQuaternion(-1.1, 0, 0.15), rightLowerArm: poseQuaternion(-1.1, 0, -0.15), head: poseQuaternion(0.28, 0, 0) },
+    };
+    return poses[pose];
+}
+
+export function directorColorLabel(value: string) {
+    const hsl = { h: 0, s: 0, l: 0 };
+    new Color(value).getHSL(hsl);
+    if (hsl.l >= 0.86 && hsl.s <= 0.2) return "白色";
+    if (hsl.l <= 0.18) return "黑色";
+    if (hsl.s <= 0.16) return hsl.l >= 0.52 ? "浅灰色" : "深灰色";
+    const hue = hsl.h * 360;
+    if (hue < 18 || hue >= 345) return "红色";
+    if (hue < 48) return "橙色";
+    if (hue < 72) return "黄色";
+    if (hue < 165) return "绿色";
+    if (hue < 195) return "青色";
+    if (hue < 255) return "蓝色";
+    if (hue < 290) return "紫色";
+    return "粉色";
+}
+
+function poseQuaternion(x: number, y: number, z: number): DirectorQuat {
+    return new Quaternion().setFromEuler(new Euler(x, y, z)).toArray() as DirectorQuat;
+}
+
+function lerpVec3(from: DirectorVec3, to: DirectorVec3, progress: number): DirectorVec3 {
+    return from.map((value, index) => value + (to[index] - value) * progress) as DirectorVec3;
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-session.ts
+LINES: 1-79
+========================================================================
+import type { DirectorScene, DirectorScreenshot } from "../../../types/director";
+
+/**
+ * 打开期间本地 draft 是唯一权威：只有 scene id 变化（或首次挂载）才重建会话。
+ * 同 id 的父级镜像回流绝不能重新 clone / 清历史 / 重置播放头。
+ */
+export function shouldReinitializeDirectorSession(input: { initializedSceneId: string | null; nextSceneId: string | null }) {
+    const { initializedSceneId, nextSceneId } = input;
+    if (!nextSceneId) return false;
+    return initializedSceneId !== nextSceneId;
+}
+
+/** 以 id upsert，调用方必须传入「当前最新」数组，避免旧闭包覆盖并发保存。 */
+export function upsertDirectorSceneById(scenes: DirectorScene[], scene: DirectorScene): DirectorScene[] {
+    return scenes.some((item) => item.id === scene.id) ? scenes.map((item) => (item.id === scene.id ? scene : item)) : [...scenes, scene];
+}
+
+/** Commit a canvas director-node description to its shot prompt; stale shot ids fall back safely. */
+export function updateDirectorShotPrompt(scene: DirectorScene, requestedShotId: string | undefined, input: string): DirectorScene {
+    const prompt = input.trim();
+    if (!prompt || scene.shots.length === 0) return scene;
+    const shotId = requestedShotId && scene.shots.some((shot) => shot.id === requestedShotId)
+        ? requestedShotId
+        : scene.shots.some((shot) => shot.id === scene.activeShotId) ? scene.activeShotId : scene.shots[0].id;
+    const current = scene.shots.find((shot) => shot.id === shotId)!;
+    if (current.prompt === prompt) return scene;
+    return { ...scene, shots: scene.shots.map((shot) => shot.id === shotId ? { ...shot, prompt } : shot) };
+}
+
+/**
+ * 输出上传可能跨越数秒。只把生成出的预览引用合并到最新场景，绝不拿输出开始时的
+ * scene 快照覆盖期间发生的标题、对象、关键帧或镜头编辑。
+ */
+export function mergeDirectorOutputPreview(scene: DirectorScene, input: { sceneId: string; shotId: string; previewNodeId: string }) {
+    if (scene.id !== input.sceneId || !scene.shots.some((shot) => shot.id === input.shotId)) return null;
+    return {
+        ...scene,
+        shots: scene.shots.map((shot) => (shot.id === input.shotId ? { ...shot, previewNodeId: input.previewNodeId, depthNodeId: undefined, normalNodeId: undefined } : shot)),
+    };
+}
+
+/** Asynchronous uploads and asset registration must not publish into a switched canvas or deleted shot. */
+export function isDirectorOutputTargetCurrent(input: {
+    currentProjectId: string | null;
+    outputProjectId: string;
+    projectExists: boolean;
+    sourceNode: { id: string; metadata?: { directorSceneId?: string } } | undefined;
+    sourceNodeId: string;
+    latestScene: Pick<DirectorScene, "id" | "shots"> | undefined;
+    sceneId: string;
+    shotId: string;
+}): boolean {
+    return input.currentProjectId === input.outputProjectId
+        && input.projectExists
+        && input.sourceNode?.id === input.sourceNodeId
+        && input.sourceNode.metadata?.directorSceneId === input.sceneId
+        && input.latestScene?.id === input.sceneId
+        && input.latestScene.shots.some((shot) => shot.id === input.shotId);
+}
+
+/** 截图上传完成后合入最新场景，避免旧快照覆盖期间的其他编辑。 */
+export function appendDirectorScreenshot(scene: DirectorScene, input: { sceneId: string; shotId: string; screenshot: DirectorScreenshot }): DirectorScene {
+    if (scene.id !== input.sceneId || !scene.shots.some((shot) => shot.id === input.shotId)) return scene;
+    return {
+        ...scene,
+        shots: scene.shots.map((shot) => shot.id === input.shotId ? { ...shot, screenshots: [...(shot.screenshots || []), input.screenshot] } : shot),
+    };
+}
+
+export function nextDirectorScreenshotName(cameraName: string, existingCount: number): string {
+    return `${cameraName}-shot-${String(existingCount + 1).padStart(2, "0")}`;
+}
+
+/** 长截图/录制结束前，场景引用与活动镜头必须仍是操作开始时的快照。 */
+export function isDirectorOutputSnapshotCurrent(scene: DirectorScene | null, expected: { scene: DirectorScene; shotId: string }) {
+    if (scene !== expected.scene) return false;
+    const activeShot = scene.shots.find((shot) => shot.id === scene.activeShotId) || scene.shots[0];
+    return activeShot?.id === expected.shotId;
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-shortcuts.ts
+LINES: 1-169
+========================================================================
+/**
+ * 导演台键盘快捷键解析。
+ *
+ * 纯函数：只把「按键事件形状」映射为语义动作，不碰 DOM、不改场景。
+ * 组件层负责注册监听与执行动作，因此这里可以完整单测。
+ *
+ * 安全边界：焦点落在任何交互控件（输入框、按钮、链接、role 型控件、
+ * 可编辑区域）或其内部时，绝不把按键解析为全局快捷键。
+ * 否则用户改名时会误删对象、按 Space 激活按钮时会误切换播放。
+ */
+
+/**
+ * 语义动作。只保留导演台里已经存在真实执行路径的动作：
+ * 变换模式（DirectorViewportDock 的 V/R/F，兼容 W/E）、删除选中对象或灯光、
+ * 撤销/重做（顶栏按钮）、切换选中对象显隐（检查器「可见」开关）、
+ * 取消选择、播放/暂停（时间轴 transport）。
+ *
+ * 聚焦、复制、重命名没有对应实现，不在这里造无处可去的动作。
+ */
+export type DirectorShortcutAction = { kind: "transform-mode"; mode: "translate" | "rotate" | "scale" } | { kind: "nudge-selected"; direction: "up" | "down" | "left" | "right"; fine?: boolean } | { kind: "delete-selected" } | { kind: "undo" } | { kind: "redo" } | { kind: "toggle-visibility" } | { kind: "deselect" } | { kind: "toggle-play" } | { kind: "open-add-menu" };
+
+/** 只取事件的必要形状，便于测试构造，也避免耦合真实 KeyboardEvent。 */
+export type DirectorKeyEvent = {
+    key: string;
+    ctrlKey?: boolean;
+    metaKey?: boolean;
+    shiftKey?: boolean;
+    altKey?: boolean;
+    /** 事件目标是否落在交互控件内，由调用方判定后传入。 */
+    isInteractiveTarget?: boolean;
+};
+
+const TRANSFORM_KEYS: Record<string, "translate" | "rotate" | "scale"> = {
+    v: "translate",
+    r: "rotate",
+    f: "scale",
+    w: "translate",
+    e: "rotate",
+};
+
+/**
+ * 解析按键为动作；不匹配返回 null。
+ *
+ * 约定：
+ * - 交互控件语境一律不解析，交还给控件本身；
+ * - 带修饰键的组合优先（Undo/Redo），避免 Ctrl+R 被当作 rotate；
+ * - 单字母快捷键不区分大小写，Shift+W 仍是 translate；
+ * - Redo 同时接受 Ctrl/Cmd+Shift+Z 与 Ctrl/Cmd+Y。
+ */
+export function resolveDirectorShortcut(event: DirectorKeyEvent): DirectorShortcutAction | null {
+    if (event.isInteractiveTarget) return null;
+
+    const key = String(event.key || "");
+    const lower = key.toLowerCase();
+    const accel = Boolean(event.ctrlKey || event.metaKey);
+
+    if (accel) {
+        // Alt 组合留给浏览器/系统，不抢。
+        if (event.altKey) return null;
+        if (lower === "z") return event.shiftKey ? { kind: "redo" } : { kind: "undo" };
+        if (lower === "y") return { kind: "redo" };
+        return null;
+    }
+
+    if (event.altKey) return null;
+
+    const arrowDirections: Record<string, "up" | "down" | "left" | "right"> = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
+    if (arrowDirections[key]) return { kind: "nudge-selected", direction: arrowDirections[key], ...(event.shiftKey ? { fine: true } : {}) };
+
+    if (lower === "a" && event.shiftKey) return { kind: "open-add-menu" };
+    if (lower in TRANSFORM_KEYS) return { kind: "transform-mode", mode: TRANSFORM_KEYS[lower] };
+    if (key === "Delete" || key === "Backspace") return { kind: "delete-selected" };
+    if (lower === "h") return { kind: "toggle-visibility" };
+    if (key === "Escape") return { kind: "deselect" };
+    if (key === " " || key === "Spacebar") return { kind: "toggle-play" };
+
+    return null;
+}
+
+/**
+ * 交互控件的唯一真源。
+ * DIRECTOR_INTERACTIVE_SELECTOR（真实 DOM 的 closest 用）与
+ * isDirectorInteractiveNode（单节点判定）都从这里派生，避免两处清单漂移。
+ */
+const INTERACTIVE_TAGS = ["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A", "OPTION", "LABEL", "SUMMARY"] as const;
+
+/**
+ * role 型控件：AntD 大量用 role 而非原生标签表达按钮、开关、菜单项。
+ * Space/Delete/Backspace 对这些控件都有自己的含义，必须让它们优先。
+ */
+const INTERACTIVE_ROLES = [
+    "textbox",
+    "combobox",
+    "spinbutton",
+    "searchbox",
+    "button",
+    "switch",
+    "tab",
+    "menuitem",
+    "menuitemcheckbox",
+    "menuitemradio",
+    "option",
+    "slider",
+    "checkbox",
+    "radio",
+    "link",
+    "listbox",
+    "menu",
+    "radiogroup",
+    "treeitem",
+] as const;
+
+/** 供真实 DOM 的 Element.closest 使用：命中控件自身或任何交互祖先。 */
+export const DIRECTOR_INTERACTIVE_SELECTOR = [...INTERACTIVE_TAGS.map((tag) => tag.toLowerCase()), ...INTERACTIVE_ROLES.map((role) => `[role="${role}"]`), '[contenteditable="true"]', '[contenteditable=""]'].join(",");
+
+/**
+ * 判断单个节点自身是否是交互控件。不看祖先。
+ * 祖先由 blocksDirectorShortcut 通过 closest 处理。
+ */
+export function isDirectorInteractiveNode(target: unknown): boolean {
+    if (!target || typeof target !== "object") return false;
+    const node = target as { tagName?: unknown; isContentEditable?: unknown; getAttribute?: (name: string) => string | null };
+    if (node.isContentEditable === true) return true;
+
+    const tagName = typeof node.tagName === "string" ? node.tagName.toUpperCase() : "";
+    if ((INTERACTIVE_TAGS as readonly string[]).includes(tagName)) return true;
+
+    if (typeof node.getAttribute === "function") {
+        const role = node.getAttribute("role");
+        if (role && (INTERACTIVE_ROLES as readonly string[]).includes(role)) return true;
+        const editable = node.getAttribute("contenteditable");
+        if (editable === "" || editable === "true") return true;
+    }
+    return false;
+}
+
+/**
+ * 事件目标是否应当阻止全局快捷键。
+ *
+ * 用 closest 而不是只看 target 自身：点击按钮里的 <svg>/<span> 时
+ * event.target 是子元素，只判自身会漏掉整个控件。
+ * closest 同时覆盖 SVG 元素（SVGElement 也实现 Element.closest）。
+ *
+ * 没有 closest 的目标（window、document、测试替身）退化为单节点判定。
+ */
+export function blocksDirectorShortcut(target: unknown): boolean {
+    if (!target || typeof target !== "object") return false;
+    const node = target as { closest?: (selector: string) => unknown };
+    if (typeof node.closest === "function") return Boolean(node.closest(DIRECTOR_INTERACTIVE_SELECTOR));
+    return isDirectorInteractiveNode(target);
+}
+
+/**
+ * 指针激活后释放焦点，使全局快捷键立刻可用。
+ *
+ * 为什么需要：blocksDirectorShortcut 会吃掉聚焦控件上的所有全局快捷键（这是刻意的，
+ * Space/Delete/Backspace 属于控件自己）。但鼠标点完一个工具按钮或场景行之后，
+ * 焦点仍留在按钮上，于是「点选对象 -> 按 Delete」这类主流程会静默失效。
+ *
+ * detail === 0 表示键盘激活（Enter/Space 合成的 click），此时必须保留焦点，
+ * 否则 Tab 序列会断、键盘用户会丢失位置。判据与 plugins 页一致。
+ *
+ * 导演台的按钮分散在 workbench、dock、sequencer 三处，各自没有公共基组件，
+ * 因此这条规则集中在这里，避免每个 onClick 各写一遍而慢慢走偏。
+ */
+export function releaseDirectorFocusAfterPointer(event: { detail: number; currentTarget: { blur?: () => void } }): void {
+    if (event.detail === 0) return;
+    event.currentTarget.blur?.();
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-stage-palette.ts
+LINES: 1-10
+========================================================================
+import { Color } from "three";
+
+/** Only new dark scenes use the charcoal stage. Existing light scenes retain their previous floor/grid. */
+export function directorStagePalette(background: string): { ground: string; cell: string; section: string } {
+    const color = new Color(background);
+    const lightness = color.getHSL({ h: 0, s: 0, l: 0 }).l;
+    return lightness < 0.22
+        ? { ground: "#151820", cell: "#4a7094", section: "#5f8bb0" }
+        : { ground: "#aeb7bf", cell: "#8f99a3", section: "#626d77" };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-stage-transform.ts
+LINES: 1-49
+========================================================================
+import { Euler, Matrix4, Quaternion, Vector3 } from "three";
+
+import type { DirectorScene, DirectorTransform, DirectorVec3 } from "@/types/director";
+
+export type DirectorStageTransform = NonNullable<DirectorScene["stageTransform"]>;
+
+export const DIRECTOR_DEFAULT_STAGE_TRANSFORM: DirectorStageTransform = {
+    scale: 1,
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+};
+
+export function directorStageTransform(scene: Pick<DirectorScene, "stageTransform">): DirectorStageTransform {
+    const value = scene.stageTransform;
+    if (!value || !Number.isFinite(value.scale) || value.scale < 0.1 || value.scale > 10) return DIRECTOR_DEFAULT_STAGE_TRANSFORM;
+    if (![value.position, value.rotation].every((axis) => Array.isArray(axis) && axis.length === 3 && axis.every(Number.isFinite))) return DIRECTOR_DEFAULT_STAGE_TRANSFORM;
+    return value;
+}
+
+export function directorStageMatrix(stage: DirectorStageTransform): Matrix4 {
+    const rotation = new Euler(...stage.rotation.map((degrees) => degrees * Math.PI / 180) as DirectorVec3);
+    return new Matrix4().compose(new Vector3(...stage.position), new Quaternion().setFromEuler(rotation), new Vector3(stage.scale, stage.scale, stage.scale));
+}
+
+export function directorStagePoint(stage: DirectorStageTransform, point: DirectorVec3): DirectorVec3 {
+    return new Vector3(...point).applyMatrix4(directorStageMatrix(stage)).toArray() as DirectorVec3;
+}
+
+export function directorStageLocalPoint(stage: DirectorStageTransform, point: DirectorVec3): DirectorVec3 {
+    return new Vector3(...point).applyMatrix4(directorStageMatrix(stage).invert()).toArray() as DirectorVec3;
+}
+
+export function directorStageDirection(stage: DirectorStageTransform, direction: DirectorVec3): DirectorVec3 {
+    const result = new Vector3(...direction).transformDirection(directorStageMatrix(stage));
+    return result.toArray() as DirectorVec3;
+}
+
+/** Convert a world-space viewport camera back into local scene coordinates before saving it. */
+export function directorStageLocalCamera(stage: DirectorStageTransform, world: DirectorTransform): DirectorTransform {
+    if (stage.scale === 1 && stage.position.every((value) => value === 0) && stage.rotation.every((value) => value === 0)) return world;
+    const worldRotation = new Quaternion().setFromEuler(new Euler(...world.rotation));
+    const stageRotation = new Quaternion().setFromEuler(new Euler(...stage.rotation.map((degrees) => degrees * Math.PI / 180) as DirectorVec3));
+    const localRotation = new Euler().setFromQuaternion(stageRotation.invert().multiply(worldRotation));
+    return {
+        ...world,
+        position: directorStageLocalPoint(stage, world.position),
+        rotation: [localRotation.x, localRotation.y, localRotation.z],
+    };
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/director/director-templates.ts
+LINES: 1-153
+========================================================================
+import { nanoid } from "nanoid";
+
+import { createDirectorActor, createDirectorCamera, createDirectorLight, createDirectorObject, directorFocalLengthToFov, DIRECTOR_ACTOR_COLORS } from "@/lib/canvas/director/director-scene";
+import { DIRECTOR_DEFAULT_GROUND } from "@/lib/canvas/director/director-ground";
+import { DIRECTOR_DEFAULT_STAGE_TRANSFORM } from "@/lib/canvas/director/director-stage-transform";
+import type { DirectorCamera, DirectorLight, DirectorObject, DirectorScene, DirectorShot } from "@/types/director";
+
+/**
+ * 新建场景模板。
+ *
+ * 为什么存在：createDirectorScene 无条件塞一个默认演员，产品/空场景根本不需要它，
+ * 而双人、走位这类常见开局每次都要手工摆一遍。模板把「开局布局」变成显式选择。
+ *
+ * 硬约束：
+ * - 纯函数 + 确定性布局。同一模板每次生成的结构完全一致，只有 id 与时间戳不同。
+ * - 每次调用都产生独立 id（工厂内部 nanoid），两个实例不会共享对象身份。
+ * - 不改变 DirectorScene 版本：模板只预填已有场景字段。
+ * - 对象之间 XZ 占位不重叠，判据与 resolveDirectorPlacement 完全一致。
+ */
+
+export type DirectorTemplateId = "empty" | "monologue" | "dialogue" | "blocking" | "product";
+
+export type DirectorTemplate = {
+    id: DirectorTemplateId;
+    name: string;
+    description: string;
+    /** 列表里给用户的预期提示，不参与生成。 */
+    summary: string;
+};
+
+/** 展示顺序即用户看到的顺序：空场景在最前，其余按上手复杂度递增。 */
+export const DIRECTOR_TEMPLATES: DirectorTemplate[] = [
+    { id: "empty", name: "空场景", description: "只有摄影机和三点布光，没有任何演员或道具。", summary: "摄影机 + 布光" },
+    { id: "monologue", name: "单人对白", description: "一名演员居中，中近景机位，适合独白与特写。", summary: "1 演员 · 中近景" },
+    { id: "dialogue", name: "双人对话", description: "两名演员面对面分立左右，过肩机位起手。", summary: "2 演员 · 对话机位" },
+    { id: "blocking", name: "人物走位", description: "三名演员分散站位，广角机位便于安排走动路线。", summary: "3 演员 · 广角" },
+    { id: "product", name: "产品/道具镜头", description: "产品置于中心，背景板与侧面道具就位，长焦特写。", summary: "产品 + 背景板 · 长焦" },
+];
+
+type TemplateBlueprint = {
+    objects: DirectorObject[];
+    camera: DirectorCamera;
+    shot: Omit<DirectorShot, "id" | "cameraId">;
+};
+
+/**
+ * 三点布光：主光、轮廓光、环境光。
+ * 五个模板共用同一套光位，避免模板之间打光风格漂移。
+ */
+function threePointRig(): DirectorLight[] {
+    return [createDirectorLight("directional", "主光", [4, 6, 4], 2.4), createDirectorLight("directional", "轮廓光", [-4, 3, -2], 1.1), createDirectorLight("ambient", "环境光", [0, 0, 0], 0.65)];
+}
+
+/** 按模板意图摆机位。focalLength 与 fov 一起写，保证两者自洽。 */
+function templateCamera(input: { name: string; position: DirectorCamera["transform"]["position"]; target: DirectorCamera["target"]; focalLength: number; focusDistance: number; aperture: number }): DirectorCamera {
+    const base = createDirectorCamera(input.name);
+    return {
+        ...base,
+        transform: { ...base.transform, position: input.position },
+        target: input.target,
+        focalLength: input.focalLength,
+        fov: directorFocalLengthToFov(input.focalLength),
+        aperture: input.aperture,
+        focusDistance: input.focusDistance,
+    };
+}
+
+/** 演员朝向：绕 Y 轴。左侧演员朝右为 +PI/2，右侧演员朝左为 -PI/2。 */
+function facing(actor: DirectorObject, yaw: number): DirectorObject {
+    return { ...actor, transform: { ...actor.transform, rotation: [0, yaw, 0] } };
+}
+
+function buildBlueprint(id: DirectorTemplateId): TemplateBlueprint {
+    if (id === "monologue") {
+        return {
+            objects: [createDirectorActor("演员 1", [0, 0, 0], DIRECTOR_ACTOR_COLORS[0])],
+            camera: templateCamera({ name: "主摄影机", position: [1.5, 1.65, 3.1], target: [0, 1.15, 0], focalLength: 50, focusDistance: 3.4, aperture: 2.2 }),
+            shot: { name: "镜头 1", duration: 5, fps: 24, shotSize: "medium", cameraMove: "static", prompt: "" },
+        };
+    }
+
+    if (id === "dialogue") {
+        // dx = 1.6 >= (0.8 + 0.8) / 2 + 0.25 = 1.05，两名演员必然不重叠。
+        return {
+            objects: [facing(createDirectorActor("演员 1", [-0.8, 0, 0.3], DIRECTOR_ACTOR_COLORS[0]), Math.PI / 2), facing(createDirectorActor("演员 2", [0.8, 0, -0.3], DIRECTOR_ACTOR_COLORS[2]), -Math.PI / 2)],
+            camera: templateCamera({ name: "主摄影机", position: [2.9, 1.7, 3.4], target: [0, 1.1, 0], focalLength: 40, focusDistance: 4.2, aperture: 2.8 }),
+            shot: { name: "镜头 1", duration: 6, fps: 24, shotSize: "medium", cameraMove: "static", prompt: "" },
+        };
+    }
+
+    if (id === "blocking") {
+        // 三名演员两两 dx >= 1.8，全部大于 1.05 阈值。
+        return {
+            objects: [createDirectorActor("演员 1", [-1.8, 0, 0.6], DIRECTOR_ACTOR_COLORS[0]), createDirectorActor("演员 2", [0, 0, -0.4], DIRECTOR_ACTOR_COLORS[2]), createDirectorActor("演员 3", [1.8, 0, 0.8], DIRECTOR_ACTOR_COLORS[3])],
+            camera: templateCamera({ name: "主摄影机", position: [0.6, 3.1, 7.4], target: [0, 1, 0], focalLength: 28, focusDistance: 7.6, aperture: 4 }),
+            shot: { name: "镜头 1", duration: 8, fps: 24, shotSize: "wide", cameraMove: "static", prompt: "" },
+        };
+    }
+
+    if (id === "product") {
+        // 产品镜头没有演员。背景板靠 dz=1.35 拉开，侧面道具靠 dx=1.15 拉开。
+        const product = createDirectorObject("box", "产品主体", [0, 0.5, 0], "#b8c0ca");
+        const backdrop = createDirectorObject("plane", "背景板", [0, 1.4, -1.35], "#e8ebef");
+        const prop = createDirectorObject("cylinder", "侧面道具", [1.15, 0.4, 0.5], "#8795a5");
+        return {
+            objects: [
+                { ...product, transform: { ...product.transform, scale: [0.9, 0.9, 0.9] } },
+                { ...backdrop, transform: { ...backdrop.transform, scale: [3.2, 2, 1] } },
+                { ...prop, transform: { ...prop.transform, scale: [0.5, 0.8, 0.5] } },
+            ],
+            camera: templateCamera({ name: "主摄影机", position: [1.1, 1.05, 2.35], target: [0, 0.55, 0], focalLength: 85, focusDistance: 2.6, aperture: 2.8 }),
+            shot: { name: "镜头 1", duration: 4, fps: 24, shotSize: "close_up", cameraMove: "push_in", prompt: "" },
+        };
+    }
+
+    return {
+        objects: [],
+        camera: templateCamera({ name: "主摄影机", position: [4.8, 2.7, 6.8], target: [0, 1, 0], focalLength: 35, focusDistance: 5, aperture: 2.8 }),
+        shot: { name: "镜头 1", duration: 5, fps: 24, shotSize: "medium", cameraMove: "static", prompt: "" },
+    };
+}
+
+/**
+ * 按模板生成全新场景。
+ * 未知 id 回落到空场景 —— 宁可少给内容，也不要偷偷塞回默认演员。
+ */
+export function createDirectorSceneFromTemplate(templateId: DirectorTemplateId, title = "未命名场景"): DirectorScene {
+    const blueprint = buildBlueprint(templateId);
+    const now = new Date().toISOString();
+    const shotId = nanoid();
+    return {
+        id: nanoid(),
+        version: 1,
+        title,
+        background: "#060608",
+        environmentIntensity: 0.7,
+        gridVisible: true,
+        gridSnap: false,
+        panoramaRotation: 0,
+        panoramaRadius: 60,
+        ground: { ...DIRECTOR_DEFAULT_GROUND },
+        stageTransform: { ...DIRECTOR_DEFAULT_STAGE_TRANSFORM, position: [...DIRECTOR_DEFAULT_STAGE_TRANSFORM.position], rotation: [...DIRECTOR_DEFAULT_STAGE_TRANSFORM.rotation] },
+        labelsVisible: true,
+        aspectRatio: "adaptive",
+        objects: blueprint.objects,
+        cameras: [blueprint.camera],
+        lights: threePointRig(),
+        shots: [{ ...blueprint.shot, id: shotId, cameraId: blueprint.camera.id }],
+        activeShotId: shotId,
+        createdAt: now,
+        updatedAt: now,
+    };
+}
+

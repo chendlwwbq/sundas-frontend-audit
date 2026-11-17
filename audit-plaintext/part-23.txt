@@ -1,0 +1,3815 @@
+SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
+This is uncompressed source text, not a directory index or archive.
+Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
+Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+
+========================================================================
+FILE: web/src/services/api/canvas-storyboard.ts
+LINES: 1-41
+========================================================================
+import { apiRequest } from "./client";
+
+export type StoryboardShot = {
+    index: number;
+    duration: number;
+    shotSize: string;
+    cameraMove: string;
+    subject: string;
+    action: string;
+    lighting: string;
+    prompt: string;
+    videoPrompt: string;
+    dialogue: string;
+};
+
+export type StoryboardResult = {
+    title: string;
+    style: string;
+    logline: string;
+    durationSeconds: number;
+    shots: StoryboardShot[];
+    scriptText: string;
+    model: string;
+    creditsCharged: number;
+};
+
+export type StoryboardRequest = {
+    brief: string;
+    duration: number;
+    shotCount: number;
+    style?: string;
+    aspectRatio?: string;
+    model: string;
+};
+
+export function generateStoryboard(input: StoryboardRequest) {
+    return apiRequest<StoryboardResult>("/api/canvas/storyboard", {
+        method: "POST",
+        json: input,
+    });
+}
+
+
+========================================================================
+FILE: web/src/services/api/canvas-upscale.ts
+LINES: 1-42
+========================================================================
+import { apiRequest } from './client';
+
+export type UpscaleTarget = { id: string; label: string; scale?: number; width?: number; height?: number };
+export type UpscaleModel = {
+    id: string; name: string; mediaKind: 'image' | 'video'; inputMimeTypes: string[];
+    targets: UpscaleTarget[]; available: boolean; reason: string | null;
+};
+export type UpscaleCapabilities = { models: UpscaleModel[]; available: boolean; reason: string };
+export type UpscaleRun = {
+    id: string; sourceNodeId: string; purpose: 'image_upscale' | 'video_upscale';
+    source: { objectKey: string; mime: string; bytes: string; durationMs: number | null; info?: { width: number; height: number; duration?: number; fps?: number; hasAudio?: boolean } };
+    modelId: string | null; modelName: string | null; parameters: { target?: UpscaleTarget };
+    taskId: string | null; status: 'draft' | 'queued' | 'running' | 'succeeded' | 'failed' | 'review' | 'result_unavailable';
+    creditsHeld: number | null; creditsCharged: number | null; resultUrl: string | null; error: string | null;
+    result: { width: number; height: number; bytes: number; duration?: number; fps?: number; hasAudio?: boolean; mime: string } | null; createdAt: string;
+};
+export type UpscaleDraft = {
+    id: string; sourceNodeId: string; sourceObjectKey: string; mediaKind: 'image' | 'video'; modelId?: string; targetId?: string;
+};
+type Session = { userId: string; signal: AbortSignal };
+const options = ({ userId, signal }: Session) => ({ signal, headers: { 'X-Sundas-User': userId } });
+const runsPath = (projectId: string) => `/api/canvas/projects/${encodeURIComponent(projectId)}/upscale-runs`;
+
+export function getUpscaleCapabilities(kind: 'image' | 'video', session: Session) {
+    return apiRequest<UpscaleCapabilities>(`/api/canvas/upscale/capabilities?kind=${kind}`, options(session));
+}
+export function getUpscaleRuns(projectId: string, sourceNodeId: string, session: Session) {
+    return apiRequest<{ runs: UpscaleRun[] }>(`${runsPath(projectId)}?${new URLSearchParams({ sourceNodeId })}`, options(session));
+}
+export function saveUpscaleDraft(projectId: string, draft: UpscaleDraft, session: Session) {
+    return apiRequest<{ run: UpscaleRun }>(runsPath(projectId), { ...options(session), method: 'POST', json: draft });
+}
+export type UpscaleQuote = { credits: number; routeId: string; target: { width: number; height: number }; unit: string; quantity: number };
+export function quoteUpscaleRun(projectId: string, runId: string, session: Session) {
+    return apiRequest<UpscaleQuote>(`${runsPath(projectId)}/${encodeURIComponent(runId)}/quote`, { ...options(session), method: 'POST' });
+}
+export function submitUpscaleRun(projectId: string, runId: string, quote: UpscaleQuote, session: Session) {
+    return apiRequest<{ run: UpscaleRun }>(`${runsPath(projectId)}/${encodeURIComponent(runId)}/submit`, { ...options(session), method: 'POST', json: { expectedCredits: quote.credits, routeId: quote.routeId } });
+}
+export function resumeUpscaleRun(projectId: string, runId: string, session: Session) {
+    return apiRequest<{ run: UpscaleRun }>(`${runsPath(projectId)}/${encodeURIComponent(runId)}/resume`, { ...options(session), method: 'POST' });
+}
+
+
+========================================================================
+FILE: web/src/services/api/character-workflow.ts
+LINES: 1-26
+========================================================================
+import { apiRequest, type ApiRequestInit } from "./client";
+import { useAuthStore } from "@/stores/use-auth-store";
+
+export type CharacterInput = {
+    sourceKey: string; characterKey: string; target: string; instructions: string;
+    imageModel: string; videoModel: string; imageSize?: string; resolution: string; ratio: string;
+    start: number; end: number | null; keepAudio: boolean;
+};
+export type CharacterMedia = { key: string; kind: "image" | "video"; url?: string; mime?: string; bytes?: number; width?: number; height?: number; duration?: number };
+export type CharacterStepName = "prepare" | "image" | "video" | "assemble";
+export type CharacterStep = {
+    id: string; name: CharacterStepName; attempt: number; status: "queued" | "running" | "succeeded" | "failed" | "review";
+    taskIds: string[]; error?: string; output: { media?: CharacterMedia[]; range?: { start: number; end: number; duration: number }; frame?: CharacterMedia; clip?: CharacterMedia };
+};
+export type CharacterRun = { id: string; projectId: string; input: CharacterInput; selectedKey?: string; paused: boolean; createdAt: string; steps?: CharacterStep[] };
+
+export function characterRequest<T>(path: string, init: ApiRequestInit = {}) {
+    const auth = useAuthStore.getState();
+    if (!auth.user) return Promise.reject(new Error("请先登录"));
+    const owner = auth.user.id, epoch = auth.sessionEpoch;
+    return apiRequest<T>(`/api/canvas/character-runs${path}`, { ...init, headers: { ...init.headers, "X-Sundas-User": owner } }).then(result => {
+        const current = useAuthStore.getState();
+        if (current.user?.id !== owner || current.sessionEpoch !== epoch) throw new DOMException("登录账户已变化", "AbortError");
+        return result;
+    });
+}
+
+
+========================================================================
+FILE: web/src/services/api/client.ts
+LINES: 1-6
+========================================================================
+import { demoRequest } from '@/audit/demo';
+export type ApiRequestInit = RequestInit & { json?: unknown };
+export class ApiError extends Error {
+ constructor(message:string,public status:number,public errorCode?:string){super(message);}
+}
+export async function apiRequest<T=unknown>(path:string,init:ApiRequestInit={}):Promise<T>{return demoRequest(path,init) as Promise<T>;}
+
+
+========================================================================
+FILE: web/src/services/api/creative-agent.ts
+LINES: 1-69
+========================================================================
+import { apiRequest } from './client';
+import { AGENT_CAPABILITIES_HEADER, DIRECTOR_AGENT_CAPABILITY } from '../../../../shared/agent-capabilities';
+import { useAuthStore } from '@/stores/use-auth-store';
+import type { CanvasConnection, CanvasNodeData } from '@/types/canvas';
+
+export type AgentProject = { id: string; title: string; content: { nodes: CanvasNodeData[]; connections: CanvasConnection[]; [key: string]: unknown }; version: number; updatedAt: string };
+export type CreativeSkill = { id: string; source: 'builtin' | 'personal'; enabled: boolean; version: number; name: string; description: string; content: string; requirements: string[] };
+export type SkillDraft = Pick<CreativeSkill, 'name' | 'description' | 'content' | 'requirements'>;
+export type SkillVersion = SkillDraft & { version: number; createdAt: string };
+export type CreativeAgentOperation =
+    | { type: 'media_inspect'; modelId: string; renderRequestId?: string; captureItemId?: string; frames: number[]; instructions: string }
+    | { type: 'production_capture'; runId: string; frames: number[] }
+    | { type: 'production_edit'; commands: Array<{ type: string; [key: string]: unknown }> }
+    | { type: 'director_capture'; sceneId: string; parameters: import('./canvas-director').DirectorRenderParameters }
+    | { type: 'director_command'; sceneId: string; commands: import('../../../../shared/director-commands').DirectorCommand[] }
+    | { type: 'add_node'; id: string; nodeType: 'text' | 'image' | 'video' | 'audio' | 'group'; title: string; position: { x: number; y: number }; text?: string; prompt?: string }
+    | { type: 'move_node'; nodeId: string; position: { x: number; y: number } }
+    | { type: 'update_prompt'; nodeId: string; prompt: string }
+    | { type: 'connect_nodes'; fromNodeId: string; toNodeId: string }
+    | { type: 'generate'; nodeId: string; mode: 'text' | 'image' | 'video' | 'audio'; modelId: string; prompt: string; referenceNodeIds: string[]; seconds?: number; size?: string; resolution?: string; voice?: string }
+    | { type: 'creative_tool'; tool: 'upscale' | 'character_replacement'; nodeId: string; referenceNodeIds: string[]; instructions: string }
+    | { type: 'production_tool'; action: 'script' | 'images' | 'narration' | 'check' | 'preview'; modelId?: string; shotIds?: string[]; narrationIds?: string[]; prompt?: string; voice?: string };
+export type AgentQuote = { minCredits: number | null; maxCredits: number | null; message: string };
+export type CreativeToolHandoff = { tool: 'upscale' | 'character_replacement'; projectId: string; projectVersion: number; operationId: string; nodeId: string; referenceNodeIds: string[]; instructions: string; sourceKey: string; referenceKeys: string[] };
+export type AgentTurn = { id: string; threadId: string; status: 'planning' | 'ready' | 'executing' | 'paused' | 'completed' | 'failed' | 'review'; currentVersion: number; baseVersion: number; prompt: string; planningTaskId: string; planningCredits: number; error?: string; plan?: { reply: string; operations: CreativeAgentOperation[]; quotes: AgentQuote[] }; skillSnapshots: Array<{ id: string; version: number; name: string }>; createdAt: string };
+export type AgentItem = { itemId: string; threadId: string; turnId: string; position: number; role: 'user' | 'assistant' | 'tool'; status: 'pending' | 'executing' | 'submitted' | 'succeeded' | 'failed' | 'review'; content: { text?: string; operation?: CreativeAgentOperation; quote?: AgentQuote }; receipt?: { renderReceipt?: { outputs?: Array<{ objectKey: string; frame?: number }> }; inspectedFrames?: Array<{ frame: number; url: string }>; message?: string; toolHandoff?: CreativeToolHandoff; taskIds?: string[]; creditsCharged?: number; outputs?: Array<{ id: string; kind: string; url?: string; text?: string; frame?: number; timeSeconds?: number }>; [key: string]: unknown }; taskIds: string[] };
+export type AgentThread = { id: string; title: string; createdAt: string; updatedAt: string };
+export type AgentState = { protocolVersion: number; storageVersion: number; thread: AgentThread & { projectId: string }; turns: AgentTurn[]; items: AgentItem[]; project: AgentProject };
+export type AgentCatalog = { models: Array<{ id: string; name: string; credits: number }>; generationModels: Array<{ id: string; name: string; capability: string }>; contextMode: 'text'; tools: Array<{ name: string; description: string }> };
+export type AgentTurnInput = { clientRequestId: string; modelId: string; expectedVersion: number; prompt: string; selectedNodeIds: string[]; skills: Array<{ id: string; version: number }>; acceptedPlanningCredits: number };
+
+/** Captures account and epoch once; both request and response must belong to this session. */
+export function creativeAgentApi(signal?: AbortSignal) {
+    const session = useAuthStore.getState();
+    const owner = session.user?.id;
+    const epoch = session.sessionEpoch;
+    const current = () => owner && useAuthStore.getState().user?.id === owner && useAuthStore.getState().sessionEpoch === epoch;
+    async function request<T>(path: string, method = 'GET', json?: unknown): Promise<T> {
+        if (!current()) throw new Error('登录账户已变化，请重新打开创作助手');
+        const result = await apiRequest<T>(path, { method, json, signal, headers: { 'X-Sundas-User': owner!, [AGENT_CAPABILITIES_HEADER]: DIRECTOR_AGENT_CAPABILITY } });
+        if (!current() || signal?.aborted) throw new Error('画布会话已变化，本次结果未回填');
+        return result;
+    }
+    async function state(path: string, method = 'GET', json?: unknown) {
+        const value = await request<AgentState>(path, method, json);
+        if (value.protocolVersion !== 1 || value.storageVersion !== 1) throw new Error('助手数据版本不受支持，请更新应用；原记录已保留');
+        if (value.items.some(item => item.threadId !== value.thread.id || !value.turns.some(turn => turn.id === item.turnId && turn.threadId === item.threadId))) throw new Error('助手消息归属不一致，请重新加载');
+        return value;
+    }
+    return {
+        undoDirector: (projectId: string, commandId: string, expectedVersion: number) => request<{ project: AgentProject }>(`/api/canvas/projects/${encodeURIComponent(projectId)}/director/commands/${encodeURIComponent(commandId)}/undo`, 'POST', { expectedVersion }),
+        catalog: () => request<AgentCatalog>('/api/canvas-agent/models'),
+        threads: (projectId: string) => request<{ threads: AgentThread[] }>(`/api/canvas-agent/threads?projectId=${encodeURIComponent(projectId)}`),
+        createThread: (projectId: string, title: string) => state('/api/canvas-agent/threads', 'POST', { projectId, title }),
+        thread: (id: string) => state(`/api/canvas-agent/threads/${encodeURIComponent(id)}`),
+        plan: (id: string, input: AgentTurnInput) => state(`/api/canvas-agent/threads/${encodeURIComponent(id)}/turns`, 'POST', input),
+        confirm: (id: string, expectedVersion: number) => state(`/api/canvas-agent/turns/${encodeURIComponent(id)}/confirm`, 'POST', { confirmed: true, expectedVersion }),
+        step: (id: string, itemId: string, expectedVersion: number) => state(`/api/canvas-agent/turns/${encodeURIComponent(id)}/steps/${encodeURIComponent(itemId)}`, 'POST', { expectedVersion }),
+        pause: (id: string) => state(`/api/canvas-agent/turns/${encodeURIComponent(id)}/pause`, 'POST', {}),
+        refresh: (id: string) => state(`/api/canvas-agent/turns/${encodeURIComponent(id)}/refresh`, 'POST', {}),
+        skills: () => request<{ skills: CreativeSkill[] }>('/api/creative-skills'),
+        versions: (id: string) => request<{ versions: SkillVersion[] }>(`/api/creative-skills/${id}/versions`),
+        createSkill: (value: SkillDraft) => request<{ id: string; version: number }>('/api/creative-skills', 'POST', value),
+        editSkill: (id: string, value: SkillDraft, expectedVersion: number) => request(`/api/creative-skills/${id}`, 'PUT', { ...value, expectedVersion }),
+        enableSkill: (id: string, enabled: boolean) => request(`/api/creative-skills/${id}`, 'PATCH', { enabled }),
+        copySkill: (id: string, version: number) => request<{ id: string; version: number }>(`/api/creative-skills/${id}/copy`, 'POST', { version }),
+        restoreSkill: (id: string, version: number, expectedVersion: number) => request(`/api/creative-skills/${id}/restore`, 'POST', { version, expectedVersion }),
+    };
+}
+
+
+========================================================================
+FILE: web/src/services/api/generation-history.ts
+LINES: 1-131
+========================================================================
+import { apiRequest } from './client';
+
+type HistoryMedia = { id:string;kind:string;url:string;mime:string;bytes:number };
+type HistoryTask = { id:string;type:string;modelId:string|null;modelName:string;routeId?:string|null;params:Record<string,unknown>;status:string;error:string|null;createdAt:string;finishedAt:string|null;creditsCharged?:number;reconciliationRequired?:boolean;media:HistoryMedia[] };
+export type RestoredLog = {
+    id:string;serverTaskIds:string[];createdAt:number;title:string;prompt:string;time:string;model:string;
+    config:Record<string,string>;references:[];durationMs:number;size:string;resolution:string;seconds:string;
+    status:'success'|'failed'|'pending'|'unavailable';error?:string;
+    task?:{id:string;provider:'openai';model:string};
+    images:{id:string;dataUrl:string;storageKey?:string;width:number;height:number;bytes:number;mimeType:string;durationMs:number}[];
+    video?:{id:string;url:string;storageKey:string;width:number;height:number;bytes:number;mimeType:string;durationMs:number};
+    successCount:number;failCount:number;imageCount:number;
+    creditsCharged?:number;reconciliationRequired?:boolean;referenceCount?:number;referenceHistoryUnknown?:boolean;
+};
+export async function fetchRecentGenerationHistory(owner:string,type:'image'|'video') {
+    const data=await apiRequest<{items:HistoryTask[]}>(`/api/generations/history?type=${type}&page=1`,{headers:{'X-Sundas-User':owner}});
+    return data.items.map(row=>({id:row.id,title:String(row.params.prompt??'').replace(/^参考图片编号：[^\n]*\n+/, '').replace(/^Reference image labels:[^\n]*\n+/i, '').trim().slice(0,80)||row.modelName,createdAt:new Date(row.createdAt).getTime(),mode:type}));
+}
+export async function fetchGenerationHistory(owner:string,type:'image'|'video',page=1, filter: { id?: string; active?: boolean } = {}) {
+    const params = new URLSearchParams({ type, page: String(page), ...(filter.id ? { id: filter.id } : {}), ...(filter.active ? { active: 'true' } : {}) });
+    const data=await apiRequest<{items:HistoryTask[];hasMore:boolean;hiddenTaskIds:string[]}>(`/api/generations/history?${params}`,{headers:{'X-Sundas-User':owner}});
+    const logs:RestoredLog[]=data.items.map(row=>{
+        const modelId=row.modelId??'';
+        const createdAt=new Date(row.createdAt).getTime();
+        const durationMs=row.finishedAt?Math.max(0,new Date(row.finishedAt).getTime()-createdAt):0;
+        const prompt=String(row.params.prompt??'').replace(/^参考图片编号：[^\n]*\n+/, '').replace(/^Reference image labels:[^\n]*\n+/i, '').trim();
+        const images=row.media.filter(m=>m.kind==='image').map(m=>({id:m.id,dataUrl:m.url,width:0,height:0,bytes:Number(m.bytes),mimeType:m.mime,durationMs}));
+        const media=row.media.find(m=>m.kind==='video');
+        const status=row.status==='succeeded'?(row.media.length?'success':'unavailable'):row.status==='failed'?'failed':'pending';
+        return {id:row.id,serverTaskIds:[row.id],createdAt,title:prompt.slice(0,80)||row.modelName,prompt,time:new Date(createdAt).toLocaleString(),model:row.modelName,
+            config:{model:modelId,imageModel:modelId,videoModel:modelId,videoRouteId:row.routeId??'',size:String(row.params.size??''),vquality:String(row.params.resolution??''),videoSeconds:String(row.params.seconds??''),videoMode:String(row.params.mode??''),videoGenerateAudio:String(row.params.generateAudio??row.params.generate_audio??''),videoWatermark:String(row.params.watermark??''),count:String(images.length||1),quality:String(row.params.quality??''),background:String(row.params.background??'')},
+            references:[],durationMs,size:String(row.params.size??''),resolution:String(row.params.resolution??''),seconds:String(row.params.seconds??''),status,
+            error:row.error??(status==='unavailable'?'生成结果文件暂不可用':undefined),task:type==='video'?{id:row.id,provider:'openai',model:modelId}:undefined,
+            images,video:media?{id:media.id,url:media.url,storageKey:'',width:0,height:0,bytes:Number(media.bytes),mimeType:media.mime,durationMs}:undefined,
+            successCount:images.length,failCount:status==='failed'?1:0,imageCount:images.length,
+            creditsCharged:!row.reconciliationRequired && ['succeeded','failed'].includes(row.status) && row.creditsCharged != null ? Number(row.creditsCharged) : undefined,
+            reconciliationRequired:row.reconciliationRequired,referenceCount:Array.isArray(row.params.referenceInputs)?row.params.referenceInputs.length:undefined,
+            referenceHistoryUnknown:type==='image' && (!Array.isArray(row.params.referenceInputs) || row.params.referenceInputs.length>0)};
+    });
+    return {logs,hiddenTaskIds:data.hiddenTaskIds,hasMore:data.hasMore};
+}
+
+// Keep previously opened pages while refreshing the newest page after a task
+// update. Requests are serialized so a refresh and an older-page load cannot
+// overwrite one another.
+export class GenerationHistoryPager {
+    private records = new Map<string, RestoredLog>();
+    private activeIds = new Set<string>();
+    private hidden: string[] = [];
+    private nextPage = 1;
+    private more = true;
+    private queue: Promise<unknown> = Promise.resolve();
+
+    constructor(private owner: string, private type: 'image' | 'video') {}
+
+    private enqueue<T>(run: () => Promise<T>): Promise<T> {
+        const result = this.queue.then(run, run);
+        this.queue = result.catch(() => undefined);
+        return result;
+    }
+
+    private async fetch(page: number) {
+        const data = await fetchGenerationHistory(this.owner, this.type, page);
+        this.hidden = data.hiddenTaskIds;
+        for (const id of this.hidden) this.records.delete(id);
+        for (const log of data.logs) this.records.set(log.id, log);
+        if (page >= this.nextPage) {
+            this.nextPage = page + 1;
+            this.more = data.hasMore;
+        }
+        return this.snapshot();
+    }
+
+    refresh() { return this.enqueue(async () => {
+        await this.fetch(1);
+        const active = new Set<string>();
+        for (let page = 1; ; page++) {
+            const result = await fetchGenerationHistory(this.owner, this.type, page, { active: true });
+            for (const log of result.logs) { active.add(log.id); this.records.set(log.id, log); }
+            if (!result.hasMore) break;
+        }
+        for (const id of this.activeIds) {
+            if (!active.has(id)) await this.readRecord(id);
+        }
+        this.activeIds = active;
+        return this.snapshot();
+    }); }
+    private async readRecord(id: string) {
+        const result = await fetchGenerationHistory(this.owner, this.type, 1, { id });
+        this.hidden = result.hiddenTaskIds;
+        for (const hidden of this.hidden) this.records.delete(hidden);
+        if (!result.logs.length) this.records.delete(id);
+        for (const log of result.logs) this.records.set(log.id, log);
+        return this.snapshot();
+    }
+    loadRecord(id: string) { return this.enqueue(() => this.readRecord(id)); }
+    loadMore() { return this.enqueue(() => this.more ? this.fetch(this.nextPage) : Promise.resolve(this.snapshot())); }
+    snapshot() { return { logs: [...this.records.values()], hiddenTaskIds: this.hidden, hasMore: this.more }; }
+}
+type MergeLog = {id:string;createdAt:number;serverTaskIds?:string[];task?:{id:string};images?:{dataUrl:string}[];video?:unknown;references?:unknown[];config?:unknown;prompt?:string;model?:string;status?:string;creditsCharged?:number;reconciliationRequired?:boolean;referenceHistoryUnknown?:boolean};
+function plainPrompt(log: MergeLog) {
+    return (log.prompt ?? '').replace(/^参考图片编号：[^\n]*\n+/, '').replace(/^Reference image labels:[^\n]*\n+/i, '').trim();
+}
+function mergeVideoConfig(local: unknown, remote: unknown) {
+    if (!local || typeof local !== 'object') return remote;
+    if (!remote || typeof remote !== 'object') return local;
+    const remoteConfig = remote as Record<string, unknown>;
+    const localValues = Object.fromEntries(Object.entries(local).filter(([, value]) => value !== '' && value != null));
+    return { ...remoteConfig, ...localValues, ...(remoteConfig.videoRouteId ? { videoRouteId: remoteConfig.videoRouteId } : {}) };
+}
+export function generationTaskIds(log:MergeLog) { return log.serverTaskIds??(log.task?[log.task.id]:[]); }
+export function mergeGenerationHistory<T extends MergeLog>(local:T[],remote:T[],hidden:string[]) {
+    const remaining=new Map(remote.map(log=>[log.id,log]));
+    const merged:T[]=[];
+    for(const log of local) {
+        const ids=generationTaskIds(log);
+        if(ids.some(id=>hidden.includes(id)))continue;
+        const matches=remote.filter(item=>ids.includes(item.id)||log.images?.some(image=>item.images?.some(remoteImage=>image.dataUrl===remoteImage.dataUrl))||(!ids.length&&!log.images?.length&&item.status==='failed'&&log.status==='failed'&&log.model===item.model&&plainPrompt(log)&&plainPrompt(log)===plainPrompt(item)&&Math.abs(item.createdAt-log.createdAt)<=15_000));
+        const match=matches[0];
+        if(match) {
+            matches.forEach(item=>remaining.delete(item.id));
+            const value=log.task?{...log,...match,id:log.id,references:log.references??match.references,config:mergeVideoConfig(log.config,match.config),video:match.video??log.video,status:match.status==='pending' && log.status && log.status!=='pending'?log.status:match.status}:{...match,...log};
+            const completeMatch=ids.length ? ids.every(id=>matches.some(item=>item.id===id)) : (log.images?.length??0)<=1 && matches.length===1;
+            merged.push({...value,...(!log.task && Array.isArray(log.references)?{referenceHistoryUnknown:false}:{}),serverTaskIds:[...new Set([...ids,...matches.map(item=>item.id)])],reconciliationRequired:matches.some(item=>item.reconciliationRequired),creditsCharged:completeMatch && matches.every(item=>item.creditsCharged != null)?matches.reduce((sum,item)=>sum+(item.creditsCharged??0),0):undefined});
+        } else merged.push(log);
+    }
+    return [...merged,...remaining.values()].sort((a,b)=>b.createdAt-a.createdAt);
+}
+export async function hideGenerationHistory(owner:string,ids:string[]) {
+    await Promise.all([...new Set(ids)].map(id=>apiRequest(`/api/generations/history/${encodeURIComponent(id)}`,{method:'DELETE',headers:{'X-Sundas-User':owner}})));
+}
+
+
+========================================================================
+FILE: web/src/services/api/generation-wallet.ts
+LINES: 1-9
+========================================================================
+import { useAuthStore } from "@/stores/use-auth-store";
+
+export function refreshGenerationWallet(owner?: string) {
+    const auth = useAuthStore.getState();
+    if (owner && auth.ready && auth.user?.id === owner) {
+        void auth.refreshWallet().catch(() => undefined);
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('sundas:generation-updated', { detail: { owner } }));
+    }
+}
+
+
+========================================================================
+FILE: web/src/services/api/image.ts
+LINES: 1-954
+========================================================================
+import axios from "axios";
+
+import i18n from "@/i18n";
+import { friendlyErrorMessage } from "@/lib/error-messages";
+import { buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, useConfigStore, withLocalProxy, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
+import { normalizePluginImages, runModelPlugin } from "./model-plugin";
+import { expectedAccountHeaders } from "./account-headers";
+import { refreshGenerationWallet } from "./generation-wallet";
+import { nanoid } from "nanoid";
+import { dataUrlToFile } from "@/lib/image-utils";
+import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
+import { imageToDataUrl } from "@/services/image-storage";
+import { imageSizePresets, inferMediaRatio, inferMediaScale } from "@/lib/media-size";
+import type { ReferenceImage } from "@/types/image";
+
+const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
+
+export type AiTextMessage = {
+    role: "system" | "user" | "assistant";
+    content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+};
+
+type ResponseToolCall = {
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+    thoughtSignature?: string;
+};
+
+type ResponseInputMessage =
+    | AiTextMessage
+    | { type: "function_call"; call_id: string; name: string; arguments: string; thoughtSignature?: string }
+    | { role: "tool"; tool_call_id: string; content: string };
+
+type ResponseFunctionTool = {
+    type: "function";
+    function: {
+        name: string;
+        description?: string;
+        parameters: Record<string, unknown>;
+        strict?: boolean;
+    };
+};
+
+type ToolResponseResult = {
+    content: string;
+    toolCalls: ResponseToolCall[];
+};
+
+type ToolChoice = "auto" | "required" | { type: "function"; name: string };
+type ResponseMessageContent = AiTextMessage["content"] | string;
+type ResponseInputContent = { type: "input_text"; text: string } | { type: "input_image"; image_url: string };
+type ResponseInputItem =
+    | { role: "system" | "user" | "assistant"; content: string | ResponseInputContent[] }
+    | { type: "function_call"; call_id: string; name: string; arguments: string }
+    | { type: "function_call_output"; call_id: string; output: string };
+type ResponseApiToolDefinition = {
+    type: "function";
+    name: string;
+    description?: string;
+    parameters: Record<string, unknown>;
+    strict?: boolean;
+};
+type ResponseApiOutputItem =
+    | { type?: "message"; content?: Array<{ type?: string; text?: string }> }
+    | { type?: "function_call"; id?: string; call_id?: string; name?: string; arguments?: string };
+type ResponseApiPayload = {
+    id?: string;
+    output?: ResponseApiOutputItem[];
+    output_text?: string;
+    error?: { message?: string };
+    code?: number;
+    msg?: string;
+};
+type ResponseStreamState = { buffer: string; text: string; completed: boolean; payload?: ResponseApiPayload; error?: string };
+
+type ImageApiResponse = {
+    data?: Array<Record<string, unknown>>;
+    status?: string;
+    taskId?: string;
+    error?: { message?: string };
+    code?: number;
+    msg?: string;
+};
+type GeminiPart = {
+    text?: string;
+    inlineData?: { mimeType?: string; data?: string };
+    inline_data?: { mime_type?: string; mimeType?: string; data?: string };
+    fileData?: { mimeType?: string; fileUri?: string };
+    functionCall?: { id?: string; name?: string; args?: Record<string, unknown> };
+    functionResponse?: { id?: string; name?: string; response?: Record<string, unknown> };
+    thoughtSignature?: string;
+    thought_signature?: string;
+};
+type GeminiContent = { role?: "user" | "model"; parts: GeminiPart[] };
+type GeminiPayload = {
+    candidates?: Array<{ content?: { parts?: GeminiPart[] }; finishReason?: string }>;
+    models?: Array<{ name?: string }>;
+    error?: { message?: string };
+    promptFeedback?: { blockReason?: string };
+};
+type GeminiStreamState = { buffer: string; text: string; toolCalls: ResponseToolCall[]; error?: string };
+type RequestOptions = { creationChat?: boolean; signal?: AbortSignal; expectedUserId?: string; surface?: "canvas" | "workbench" };
+
+const IMAGE_QUALITY_VALUES = ["low", "medium", "high", "xhigh", "max"];
+const DEFAULT_IMAGE_SHORT_SIDE = 1024;
+const IMAGE_SIZE_STEP = 16;
+const IMAGE_MIN_PIXELS = 655360;
+const IMAGE_MAX_PIXELS = 8294400;
+const IMAGE_MAX_EDGE = 3840;
+const IMAGE_MAX_RATIO = 3;
+const IMAGE_OUTPUT_FORMAT = "png";
+// 与 image-storage 的下载超时保持一致，避免接口挂起时节点一直停在生成中。
+const IMAGE_REQUEST_TIMEOUT_MS = 10 * 60_000;
+
+function imageCapabilityParams(config: AiConfig) {
+    const modelId = modelOptionName(config.model || config.imageModel);
+    const model = useConfigStore.getState().serverModels.find(item => item.id === modelId);
+    const limits = model?.metadata?.imageCapabilities as { resolutions?: string[]; aspectRatios?: string[]; maxImages?: number; maxImagesByResolution?: Record<string, number> } | undefined;
+    if (!limits) return undefined;
+    const scales = limits.resolutions ?? [];
+    const ratios = limits.aspectRatios ?? [];
+    const currentScale = inferMediaScale(config.size);
+    const currentRatio = inferMediaRatio(config.size);
+    const scale = currentScale === 'auto' ? scales[0] : currentScale.toUpperCase();
+    const ratio = currentRatio === 'auto' ? (ratios.includes('1:1') ? '1:1' : ratios[0]) : currentRatio;
+    if (!scale || !scales.includes(scale)) throw new Error(`该模型支持的清晰度为 ${scales.join('、')}，请调整图片设置`);
+    if (ratios.length && (!ratio || !ratios.includes(ratio))) throw new Error(`该模型支持的比例为 ${ratios.join('、')}，请调整图片设置`);
+    return { resolution: scale, aspect_ratio: ratio, maxImages: limits.maxImagesByResolution?.[scale.toLowerCase()] ?? limits.maxImages };
+}
+
+export function imageTaskIdFromError(error: unknown) {
+    const taskId = error && typeof error === 'object' && 'taskId' in error ? (error as { taskId?: unknown }).taskId : undefined;
+    return typeof taskId === 'string' ? taskId : undefined;
+}
+
+async function resolvePendingImage(payload: ImageApiResponse, config: AiConfig, options?: RequestOptions): Promise<ImageApiResponse> {
+    if (payload.status !== 'pending' || !payload.taskId) return payload;
+    const url = aiApiUrl(config, `/images/${encodeURIComponent(payload.taskId)}`);
+    for (;;) {
+        if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        let state: ImageApiResponse | undefined;
+        try {
+            state = (await axios.get<ImageApiResponse>(url, { headers: { ...aiHeaders(config), ...expectedAccountHeaders(url, options?.expectedUserId) }, signal: options?.signal })).data;
+        } catch (error) {
+            if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+            if (axios.isAxiosError(error) && [401, 403, 404].includes(error.response?.status ?? 0)) throw error;
+        }
+        if (state?.status === 'completed') return state;
+        if (state?.status === 'failed') throw Object.assign(new Error(readApiErrorMessage(state.error) || '图片生成失败'), { taskId: payload.taskId });
+        await new Promise<void>((resolve, reject) => {
+            if (options?.signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'));
+            const abort = () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
+            const timer = setTimeout(() => { options?.signal?.removeEventListener('abort', abort); resolve(); }, 5000);
+            options?.signal?.addEventListener('abort', abort, { once: true });
+        });
+    }
+}
+
+const GEMINI_SUPPORTED_RATIOS = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"];
+
+function normalizeQuality(quality: string) {
+    const value = quality.trim().toLowerCase();
+    return IMAGE_QUALITY_VALUES.includes(value) ? value : undefined;
+}
+
+/** Only "transparent" is forwarded; any other value (incl. empty) means keep the default opaque background. */
+function normalizeBackground(background: string | undefined) {
+    return background?.trim().toLowerCase() === "transparent" ? "transparent" : undefined;
+}
+
+/** Map a bare ratio such as "1:1" to an explicit pixel dimension like "1024x1024". */
+function resolveSize(ratio: string): string {
+    const parsedRatio = parseImageRatio(ratio);
+    const preset = imageSizePresets["1k"][ratio];
+    if (preset) return preset;
+    const isLandscape = parsedRatio.width >= parsedRatio.height;
+    const longRatio = isLandscape ? parsedRatio.width / parsedRatio.height : parsedRatio.height / parsedRatio.width;
+    const shortSide = DEFAULT_IMAGE_SHORT_SIDE;
+    const longSide = Math.round((shortSide * longRatio) / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
+    const width = isLandscape ? longSide : shortSide;
+    const height = isLandscape ? shortSide : longSide;
+    validateImageSize(width, height);
+    return `${width}x${height}`;
+}
+
+function parseRatioValue(value: string) {
+    const parts = value.split(":");
+    if (parts.length !== 2) throw new Error(apiText("invalidImageSizeFormat"));
+    const w = Number(parts[0]);
+    const h = Number(parts[1]);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) throw new Error(apiText("positiveImageRatio"));
+    return { width: w, height: h };
+}
+
+function parseImageRatio(value: string) {
+    const ratio = parseRatioValue(value);
+    if (Math.max(ratio.width, ratio.height) / Math.min(ratio.width, ratio.height) > IMAGE_MAX_RATIO) throw new Error(apiText("imageRatioLimit"));
+    return ratio;
+}
+
+function parseImageDimensions(value: string) {
+    const match = value.match(/^(\d+)x(\d+)$/i);
+    if (!match) return null;
+    return { width: Number(match[1]), height: Number(match[2]) };
+}
+
+function validateImageSize(width: number, height: number) {
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) throw new Error(apiText("positiveImageDimensions"));
+    if (width % IMAGE_SIZE_STEP !== 0 || height % IMAGE_SIZE_STEP !== 0) throw new Error(apiText("imageDimensionStep"));
+    if (Math.max(width, height) > IMAGE_MAX_EDGE) throw new Error(apiText("imageEdgeLimit"));
+    if (Math.max(width, height) / Math.min(width, height) > IMAGE_MAX_RATIO) throw new Error(apiText("imageRatioLimit"));
+    const pixels = width * height;
+    if (pixels < IMAGE_MIN_PIXELS || pixels > IMAGE_MAX_PIXELS) throw new Error(apiText("imagePixelLimit"));
+}
+
+function resolveRequestSize(size: string) {
+    const value = size.trim();
+    if (!value || value.toLowerCase() === "auto") return undefined;
+    const dimensions = parseImageDimensions(value);
+    if (dimensions) {
+        validateImageSize(dimensions.width, dimensions.height);
+        return `${dimensions.width}x${dimensions.height}`;
+    }
+    if (value.includes(":")) return resolveSize(value);
+    throw new Error(apiText("invalidImageSizeFormat"));
+}
+
+function resolveGeminiImageConfig(config: AiConfig) {
+    const value = config.size.trim();
+    const dimensions = parseImageDimensions(value);
+    const ratio = dimensions ? `${dimensions.width}:${dimensions.height}` : value;
+    const aspectRatio = value && value.toLowerCase() !== "auto" ? closestGeminiAspectRatio(ratio) : undefined;
+    const imageSize = resolveGeminiImageSize(dimensions);
+    const image = { ...(aspectRatio ? { aspectRatio } : {}), ...(imageSize ? { imageSize } : {}) };
+    return Object.keys(image).length ? { imageConfig: image } : {};
+}
+
+function closestGeminiAspectRatio(value: string) {
+    const ratio = parseImageRatio(value);
+    const target = ratio.width / ratio.height;
+    return GEMINI_SUPPORTED_RATIOS.reduce((best, item) => {
+        const current = parseRatioValue(item);
+        const bestRatio = parseRatioValue(best);
+        return Math.abs(current.width / current.height - target) < Math.abs(bestRatio.width / bestRatio.height - target) ? item : best;
+    });
+}
+
+/** Gemini takes the resolution tier and the ratio separately; the tier comes from the size presets. */
+function resolveGeminiImageSize(dimensions: { width: number; height: number } | null) {
+    if (!dimensions) return undefined;
+    const size = `${dimensions.width}x${dimensions.height}`;
+    const scale = Object.keys(imageSizePresets).find((key) => Object.values(imageSizePresets[key]).includes(size));
+    if (scale) return scale.toUpperCase();
+    const edge = Math.max(dimensions.width, dimensions.height);
+    if (edge <= 768) return "512";
+    if (edge <= 1536) return "1K";
+    if (edge <= 3072) return "2K";
+    return "4K";
+}
+
+function resolveImageSource(item: Record<string, unknown>) {
+    if (typeof item.b64_json === "string" && item.b64_json) {
+        return `data:image/png;base64,${item.b64_json}`;
+    }
+    if (typeof item.url === "string" && item.url) {
+        return item.url;
+    }
+    return null;
+}
+
+function parseImagePayload(payload: ImageApiResponse) {
+    if (typeof payload.code === "number" && payload.code !== 0) {
+        throw new Error(payload.msg || apiText("requestFailed"));
+    }
+    // Support data, images, and results response fields used by different APIs.
+    const imageList = payload.data
+        || (payload as Record<string, unknown>).images as Array<Record<string, unknown>> | undefined
+        || (payload as Record<string, unknown>).results as Array<Record<string, unknown>> | undefined
+        || [];
+    const images = imageList
+        .map(resolveImageSource)
+        .filter((value): value is string => Boolean(value))
+        .map((dataUrl) => ({ id: nanoid(), dataUrl, taskId: typeof (payload as Record<string, unknown>).taskId === 'string' ? (payload as Record<string, unknown>).taskId as string : undefined }));
+
+    if (images.length === 0) {
+        // Check whether the response contains data in an unrecognized format.
+        const rawKeys = Object.keys(payload).filter((k) => k !== "code" && k !== "msg" && k !== "error");
+        throw new Error(rawKeys.length > 0
+            ? apiText("unknownImageResponse", { fields: rawKeys.join(", ") })
+            : apiText("noImageReturned"));
+    }
+
+    return images;
+}
+
+function readApiErrorMessage(value: unknown): string {
+    if (!value) return "";
+    if (typeof value === "string") {
+        // The value may be serialized JSON, such as error.message, or a plain-text error.
+        try {
+            const parsed = JSON.parse(value);
+            const inner = readApiErrorMessage(parsed) || value;
+            // Treat an empty parsed object such as "{}" as having no useful message.
+            if (inner === value && typeof parsed === "object" && Object.keys(parsed).length === 0) return "";
+            return friendlyErrorMessage(inner);
+        } catch {
+            // Detect HTML error pages.
+            if (/<[a-z][\s\S]*>/i.test(value)) return apiText("htmlError", { preview: `${value.slice(0, 80)}...` });
+            return friendlyErrorMessage(value);
+        }
+    }
+    if (typeof value !== "object") return "";
+    const payload = value as { msg?: unknown; message?: unknown; error?: unknown; detail?: unknown };
+    // error may be a string or an object containing a message.
+    const errorMsg =
+        typeof payload.error === "string"
+            ? payload.error
+            : (payload.error as { message?: unknown })?.message;
+    return friendlyErrorMessage(
+        readApiErrorMessage(payload.msg) ||
+        readApiErrorMessage(payload.message) ||
+        readApiErrorMessage(errorMsg) ||
+        readApiErrorMessage(payload.detail) ||
+        ""
+    );
+}
+
+function readAxiosError(error: unknown, fallback: string) {
+    if (axios.isCancel(error)) return apiText("requestCanceled");
+    if (axios.isAxiosError(error)) {
+        if (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT") return apiText("imageTimeout");
+        if (!error.response && error.code === "ERR_NETWORK") return apiText("requestFailed");
+        const responseData = error.response?.data;
+        // Prefer the API error from the response body.
+        const apiMsg = readApiErrorMessage(responseData);
+        if (apiMsg) return apiMsg;
+        // Infer the error from the HTTP status when the response body has no usable message.
+        const statusMsg = readStatusError(error.response?.status, fallback);
+        if (statusMsg) return statusMsg;
+        // Fall back to Axios's own error message.
+        return error.message || fallback;
+    }
+    if (error instanceof DOMException && error.name === "AbortError") return apiText("requestCanceled");
+    return error instanceof Error ? readApiErrorMessage(error.message) || error.message : fallback;
+}
+
+function readStatusError(status: number | undefined, fallback: string) {
+    if (status === 401 || status === 403) return apiText("authenticationFailed");
+    if (status === 429) return apiText("rateLimited");
+    if (status === 404) return apiText("notFound");
+    if (status === 502) return apiText("badGateway");
+    if (status === 503) return apiText("serviceBusy");
+    return status ? apiText("httpFailed", { status }) : fallback;
+}
+
+function withSystemPrompt(config: AiConfig, prompt: string) {
+    const systemPrompt = config.systemPrompt.trim();
+    return systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+}
+
+function aiApiUrl(config: AiConfig, path: string) {
+    return buildApiUrl(config.baseUrl, path);
+}
+
+function aiHeaders(config: AiConfig, contentType?: string) {
+    return {
+        Authorization: `Bearer ${config.apiKey}`,
+        ...(contentType ? { "Content-Type": contentType } : {}),
+    };
+}
+
+function geminiBaseUrl(config: Pick<AiConfig, "baseUrl">) {
+    const normalizedBaseUrl = config.baseUrl.trim().replace(/\/+$/, "");
+    const lowerBaseUrl = normalizedBaseUrl.toLowerCase();
+    return lowerBaseUrl.endsWith("/v1") || lowerBaseUrl.endsWith("/v1beta") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1beta`;
+}
+
+function geminiModelName(model: string) {
+    return model.trim().replace(/^models\//, "");
+}
+
+function geminiApiUrl(config: Pick<AiConfig, "baseUrl" | "model">, action?: "generateContent" | "streamGenerateContent") {
+    const baseUrl = geminiBaseUrl(config);
+    if (!action) return withLocalProxy(`${baseUrl}/models`);
+    return withLocalProxy(`${baseUrl}/models/${encodeURIComponent(geminiModelName(config.model))}:${action}`);
+}
+
+function geminiHeaders(config: Pick<AiConfig, "apiKey">) {
+    return {
+        "x-goog-api-key": config.apiKey,
+        "Content-Type": "application/json",
+    };
+}
+
+function withSystemMessage<T extends ResponseInputMessage>(config: AiConfig, messages: T[]): ResponseInputMessage[] {
+    const systemPrompt = config.systemPrompt.trim();
+    return systemPrompt ? [{ role: "system" as const, content: systemPrompt }, ...messages] : messages;
+}
+
+function toResponseInput(messages: ResponseInputMessage[]): ResponseInputItem[] {
+    return messages.flatMap((message): ResponseInputItem[] => {
+        if ("type" in message) return [message];
+        if (message.role === "tool") return [{ type: "function_call_output", call_id: message.tool_call_id, output: message.content }];
+        return [{ role: message.role, content: toResponseContent(message.content || "") }];
+    });
+}
+
+function toResponseContent(content: ResponseMessageContent): string | ResponseInputContent[] {
+    if (!Array.isArray(content)) return String(content || "");
+    return content.map((item) => (item.type === "text" ? { type: "input_text" as const, text: item.text } : { type: "input_image" as const, image_url: item.image_url.url }));
+}
+
+function toResponseTool(tool: ResponseFunctionTool): ResponseApiToolDefinition {
+    return {
+        type: "function",
+        name: tool.function.name,
+        description: tool.function.description,
+        parameters: tool.function.parameters,
+        strict: tool.function.strict,
+    };
+}
+
+function parseToolResponse(payload: ResponseApiPayload): ToolResponseResult {
+    const output = payload.output || [];
+    const content =
+        payload.output_text ||
+        output
+            .flatMap((item) => (item.type === "message" ? item.content || [] : []))
+            .map((item) => item.text || "")
+            .join("");
+    const toolCalls = output
+        .filter((item): item is Extract<ResponseApiOutputItem, { type?: "function_call" }> => item.type === "function_call")
+        .map((item) => ({
+            id: item.call_id || item.id || "",
+            type: "function" as const,
+            function: { name: item.name || "", arguments: item.arguments || "{}" },
+        }))
+        .filter((item) => item.id && item.function.name);
+    return { content, toolCalls };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function responseErrorMessage(value: unknown) {
+    if (!isRecord(value)) return "";
+    const error = isRecord(value.error) ? value.error : undefined;
+    const response = isRecord(value.response) ? value.response : undefined;
+    const responseError = response && isRecord(response.error) ? response.error : undefined;
+    return stringValue(value.msg) || stringValue(error?.message) || stringValue(responseError?.message);
+}
+
+function stringValue(value: unknown) {
+    return typeof value === "string" ? value : "";
+}
+
+function validateResponsePayload(payload: ResponseApiPayload) {
+    if (typeof payload.code === "number" && payload.code !== 0) throw new Error(payload.msg || apiText("requestFailed"));
+    if (payload.error?.message) throw new Error(payload.error.message);
+}
+
+function validateGeminiPayload(payload: GeminiPayload) {
+    if (payload.error?.message) throw new Error(payload.error.message);
+    if (payload.promptFeedback?.blockReason) throw new Error(apiText("geminiRejected", { reason: payload.promptFeedback.blockReason }));
+}
+
+async function readFetchError(response: Response, fallback: string) {
+    const text = await response.text();
+    if (!text) return readStatusError(response.status, fallback);
+    try {
+        return responseErrorMessage(JSON.parse(text)) || readStatusError(response.status, fallback);
+    } catch {
+        return text.slice(0, 300) || readStatusError(response.status, fallback);
+    }
+}
+
+function consumeResponseStreamBlock(block: string, state: ResponseStreamState, onDelta?: (text: string) => void) {
+    const data = block
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).replace(/^ /, ""))
+        .join("\n")
+        .trim();
+    if (!data) return;
+    if (data === "[DONE]") { state.completed = true; return; }
+    const event = JSON.parse(data) as Record<string, unknown>;
+    const type = stringValue(event.type);
+    if (type === "response.completed") state.completed = true;
+    const errorMessage = responseErrorMessage(event);
+    if (errorMessage) state.error = errorMessage;
+    if (type === "response.output_text.delta" && typeof event.delta === "string") {
+        state.text += event.delta;
+        onDelta?.(state.text);
+    }
+    if (type === "response.output_text.done" && !state.text && typeof event.text === "string") {
+        state.text = event.text;
+        onDelta?.(state.text);
+    }
+    if (type === "response.completed" && isRecord(event.response)) {
+        state.payload = event.response as ResponseApiPayload;
+    } else if (Array.isArray(event.output)) {
+        state.payload = event as ResponseApiPayload;
+    }
+}
+
+function consumeResponseStreamText(state: ResponseStreamState, text: string, onDelta?: (text: string) => void, flush = false) {
+    state.buffer += text;
+    for (;;) {
+        const match = state.buffer.match(/\r?\n\r?\n/);
+        if (!match) break;
+        const index = match.index ?? 0;
+        consumeResponseStreamBlock(state.buffer.slice(0, index), state, onDelta);
+        state.buffer = state.buffer.slice(index + match[0].length);
+    }
+    if (flush && state.buffer.trim()) {
+        consumeResponseStreamBlock(state.buffer, state, onDelta);
+        state.buffer = "";
+    }
+}
+
+async function requestStreamingResponse(config: AiConfig, body: Record<string, unknown>, onDelta?: (text: string) => void, options?: RequestOptions): Promise<ToolResponseResult> {
+    const response = await fetch(aiApiUrl(config, "/responses"), {
+        method: "POST",
+        headers: { ...aiHeaders(config, "application/json"), Accept: "text/event-stream", ...expectedAccountHeaders(aiApiUrl(config, "/responses"), options?.expectedUserId), ...(options?.surface ? { "X-Sundas-Surface": options.surface } : {}) },
+        body: JSON.stringify({ ...body, stream: true }),
+        signal: options?.signal,
+    });
+    if (!response.ok) throw new Error(await readFetchError(response, apiText("requestFailed")));
+    if (!response.body) {
+        const payload = (await response.json()) as ResponseApiPayload;
+        validateResponsePayload(payload);
+        return parseToolResponse(payload);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const state: ResponseStreamState = { buffer: "", text: "", completed: false };
+    try {
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            consumeResponseStreamText(state, decoder.decode(value, { stream: true }), onDelta);
+            if (state.error) throw new Error(state.error);
+        }
+        consumeResponseStreamText(state, decoder.decode(), onDelta, true);
+        if (state.error) throw new Error(state.error);
+        if (!state.completed) throw new Error(apiText("streamIncomplete"));
+        if (!state.payload) return { content: state.text, toolCalls: [] };
+        validateResponsePayload(state.payload);
+        const result = parseToolResponse(state.payload);
+        return { ...result, content: state.text || result.content };
+    } catch (error) {
+        void reader.cancel().catch(() => undefined);
+        throw error;
+    } finally {
+        reader.releaseLock();
+    }
+}
+
+function toGeminiBody(config: AiConfig, messages: ResponseInputMessage[], extra?: Record<string, unknown>) {
+    const systemText = [
+        config.systemPrompt.trim(),
+        ...messages.flatMap((message) => (!("type" in message) && message.role === "system" ? [geminiTextContent(message.content)] : [])),
+    ]
+        .filter(Boolean)
+        .join("\n\n");
+    const contents = toGeminiContents(messages.filter((message) => ("type" in message ? true : message.role !== "system")));
+    return {
+        contents,
+        ...(systemText ? { systemInstruction: { parts: [{ text: systemText }] } } : {}),
+        ...extra,
+    };
+}
+
+function toGeminiContents(messages: ResponseInputMessage[]): GeminiContent[] {
+    const callNameById = new Map<string, string>();
+    return messages.flatMap((message): GeminiContent[] => {
+        if ("type" in message) {
+            callNameById.set(message.call_id, message.name);
+            return [{ role: "model", parts: [{ functionCall: { id: message.call_id, name: message.name, args: jsonObject(message.arguments) }, ...(message.thoughtSignature ? { thoughtSignature: message.thoughtSignature } : {}) }] }];
+        }
+        if (message.role === "tool") {
+            const name = callNameById.get(message.tool_call_id) || "tool_result";
+            return [{ role: "user", parts: [{ functionResponse: { id: message.tool_call_id, name, response: { result: jsonValue(message.content) } } }] }];
+        }
+        return [{ role: message.role === "assistant" ? "model" : "user", parts: toGeminiParts(message.content) }];
+    });
+}
+
+function toGeminiParts(content: ResponseMessageContent): GeminiPart[] {
+    if (!Array.isArray(content)) return [{ text: String(content || "") }];
+    return content.map((item) => (item.type === "text" ? { text: item.text } : toGeminiImagePart(item.image_url.url)));
+}
+
+function toGeminiImagePart(url: string): GeminiPart {
+    const match = url.match(/^data:([^;,]+);base64,(.+)$/);
+    if (match) return { inlineData: { mimeType: match[1], data: match[2] } };
+    return { fileData: { fileUri: url, mimeType: "image/png" } };
+}
+
+function geminiTextContent(content: ResponseMessageContent) {
+    if (!Array.isArray(content)) return String(content || "");
+    return content.map((item) => (item.type === "text" ? item.text : item.image_url.url)).join("\n");
+}
+
+function jsonObject(value: string): Record<string, unknown> {
+    const parsed = jsonValue(value);
+    return isRecord(parsed) ? parsed : {};
+}
+
+function jsonValue(value: string): unknown {
+    try {
+        return JSON.parse(value);
+    } catch {
+        return value;
+    }
+}
+
+function toGeminiToolOptions(tools: ResponseFunctionTool[], toolChoice: ToolChoice) {
+    if (!tools.length) return {};
+    const functionDeclarations = tools.map((tool) => ({
+        name: tool.function.name,
+        description: tool.function.description,
+        parameters: tool.function.parameters,
+    }));
+    const functionCallingConfig =
+        typeof toolChoice === "object"
+            ? { mode: "ANY", allowedFunctionNames: [toolChoice.name] }
+            : { mode: toolChoice === "required" ? "ANY" : "AUTO" };
+    return {
+        tools: [{ functionDeclarations }],
+        toolConfig: { functionCallingConfig },
+    };
+}
+
+async function requestGeminiStreamingResponse(config: AiConfig, body: Record<string, unknown>, onDelta?: (text: string) => void, options?: RequestOptions): Promise<ToolResponseResult> {
+    const response = await fetch(`${geminiApiUrl(config, "streamGenerateContent")}?alt=sse`, {
+        method: "POST",
+        headers: geminiHeaders(config),
+        body: JSON.stringify(body),
+        signal: options?.signal,
+    });
+    if (!response.ok) throw new Error(await readFetchError(response, apiText("requestFailed")));
+    if (!response.body) {
+        const payload = (await response.json()) as GeminiPayload;
+        return parseGeminiToolResponse(payload);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const state: GeminiStreamState = { buffer: "", text: "", toolCalls: [] };
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        consumeGeminiStreamText(state, decoder.decode(value, { stream: true }), onDelta);
+        if (state.error) throw new Error(state.error);
+    }
+    consumeGeminiStreamText(state, decoder.decode(), onDelta, true);
+    if (state.error) throw new Error(state.error);
+    return { content: state.text, toolCalls: state.toolCalls };
+}
+
+function consumeGeminiStreamText(state: GeminiStreamState, text: string, onDelta?: (text: string) => void, flush = false) {
+    state.buffer += text;
+    for (;;) {
+        const match = state.buffer.match(/\r?\n\r?\n/);
+        if (!match) break;
+        const index = match.index ?? 0;
+        consumeGeminiStreamBlock(state.buffer.slice(0, index), state, onDelta);
+        state.buffer = state.buffer.slice(index + match[0].length);
+    }
+    if (flush && state.buffer.trim()) {
+        consumeGeminiStreamBlock(state.buffer, state, onDelta);
+        state.buffer = "";
+    }
+}
+
+function consumeGeminiStreamBlock(block: string, state: GeminiStreamState, onDelta?: (text: string) => void) {
+    const data = block
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).replace(/^ /, ""))
+        .join("\n")
+        .trim();
+    if (!data || data === "[DONE]") return;
+    const result = parseGeminiToolResponse(JSON.parse(data) as GeminiPayload);
+    if (result.content) {
+        state.text += result.content;
+        onDelta?.(state.text);
+    }
+    state.toolCalls.push(...result.toolCalls);
+}
+
+function parseGeminiToolResponse(payload: GeminiPayload): ToolResponseResult {
+    validateGeminiPayload(payload);
+    const parts = payload.candidates?.flatMap((candidate) => candidate.content?.parts || []) || [];
+    const content = parts.map((part) => part.text || "").join("");
+    const toolCalls = parts
+        .map((part) => part.functionCall)
+        .filter((call): call is NonNullable<GeminiPart["functionCall"]> => Boolean(call?.name))
+        .map((call) => {
+            const part = parts.find((item) => item.functionCall === call);
+            const thoughtSignature = part?.thoughtSignature || part?.thought_signature;
+            return {
+                id: call.id || nanoid(),
+                type: "function" as const,
+                function: { name: call.name || "", arguments: JSON.stringify(call.args || {}) },
+                ...(thoughtSignature ? { thoughtSignature } : {}),
+            };
+        });
+    return { content, toolCalls };
+}
+
+async function requestGeminiImages(config: AiConfig, prompt: string, references: ReferenceImage[], count: number, options?: RequestOptions) {
+    const requests = Array.from({ length: count }, () => requestGeminiImagesOnce(config, prompt, references, options));
+    return (await Promise.all(requests)).flat();
+}
+
+async function requestGeminiImagesOnce(config: AiConfig, prompt: string, references: ReferenceImage[], options?: RequestOptions) {
+    const parts: GeminiPart[] = [{ text: prompt }];
+    for (const image of references) {
+        parts.push(toGeminiImagePart(await imageToDataUrl(image)));
+    }
+    const response = await axios.post<GeminiPayload>(
+        geminiApiUrl(config, "generateContent"),
+        {
+            ...toGeminiBody(config, [{ role: "user", content: prompt }], { generationConfig: { responseModalities: ["TEXT", "IMAGE"], ...resolveGeminiImageConfig(config) } }),
+            contents: [{ role: "user", parts }],
+        },
+        { headers: geminiHeaders(config), signal: options?.signal, timeout: IMAGE_REQUEST_TIMEOUT_MS },
+    );
+    return parseGeminiImagePayload(response.data);
+}
+
+function parseGeminiImagePayload(payload: GeminiPayload) {
+    validateGeminiPayload(payload);
+    const images =
+        payload.candidates
+            ?.flatMap((candidate) => candidate.content?.parts || [])
+            .map((part) => {
+                const inlineData = part.inlineData || (part.inline_data ? { mimeType: part.inline_data.mimeType || part.inline_data.mime_type, data: part.inline_data.data } : undefined);
+                if (inlineData?.data) return `data:${inlineData.mimeType || "image/png"};base64,${inlineData.data}`;
+                return part.fileData?.fileUri || null;
+            })
+            .filter((value): value is string => Boolean(value))
+            .map((dataUrl) => ({ id: nanoid(), dataUrl })) || [];
+    if (!images.length) throw new Error(apiText("geminiNoImage"));
+    return images;
+}
+
+export async function requestGeneration(config: AiConfig, prompt: string, options?: RequestOptions) {
+    try { return await requestGenerationInner(config, prompt, options); }
+    finally { refreshGenerationWallet(options?.expectedUserId); }
+}
+
+async function requestGenerationInner(config: AiConfig, prompt: string, options?: RequestOptions) {
+    const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
+    const script = resolveModelScript(config, config.model || config.imageModel);
+    if (script) {
+        const quality = normalizeQuality(config.quality);
+        const requestSize = resolveRequestSize(config.size);
+        const background = normalizeBackground(config.background);
+        try {
+            const result = await runModelPlugin({
+                capability: "image",
+                script,
+                config: requestConfig,
+                prompt: withSystemPrompt(requestConfig, prompt),
+                images: [],
+                params: { size: requestSize, resolution: inferMediaScale(config.size), quality, count: n, ...(background ? { background } : {}) },
+                signal: options?.signal,
+            });
+            return normalizePluginImages(result).map((dataUrl) => ({ id: nanoid(), dataUrl }));
+        } catch (error) {
+            throw new Error(readAxiosError(error, apiText("requestFailed")));
+        }
+    }
+    const quality = normalizeQuality(config.quality);
+    const requestSize = resolveRequestSize(config.size);
+    const background = normalizeBackground(config.background);
+    const capabilities = imageCapabilityParams(config);
+    try {
+        const response = await axios.post<ImageApiResponse>(
+            aiApiUrl(requestConfig, "/images/generations"),
+            {
+                model: requestConfig.model,
+                prompt: withSystemPrompt(requestConfig, prompt),
+                n,
+                ...(quality ? { quality } : {}),
+                ...(requestSize ? { size: requestSize } : {}),
+                ...(capabilities ? { resolution: capabilities.resolution, aspect_ratio: capabilities.aspect_ratio } : {}),
+                ...(background ? { background } : {}),
+                // gpt-image models reject response_format; they always return b64.
+                ...(/gpt-image/.test(requestConfig.model) ? {} : { response_format: "b64_json" }),
+                output_format: IMAGE_OUTPUT_FORMAT,
+            },
+            {
+                headers: { ...aiHeaders(requestConfig, "application/json"), ...expectedAccountHeaders(aiApiUrl(requestConfig, "/images/generations"), options?.expectedUserId), ...(options?.surface ? { "X-Sundas-Surface": options.surface } : {}) },
+                signal: options?.signal,
+                timeout: IMAGE_REQUEST_TIMEOUT_MS,
+            },
+        );
+        const images = parseImagePayload(await resolvePendingImage(response.data, requestConfig, options));
+        return images;
+    } catch (error) {
+        throw new Error(readAxiosError(error, apiText("requestFailed")));
+    }
+}
+
+export async function requestEdit(config: AiConfig, prompt: string, references: ReferenceImage[], options?: RequestOptions) {
+    try { return await requestEditInner(config, prompt, references, options); }
+    finally { refreshGenerationWallet(options?.expectedUserId); }
+}
+
+async function requestEditInner(config: AiConfig, prompt: string, references: ReferenceImage[], options?: RequestOptions) {
+    const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
+    const requestPrompt = buildImageReferencePromptText(prompt, references);
+    const script = resolveModelScript(config, config.model || config.imageModel);
+    if (script) {
+        const quality = normalizeQuality(config.quality);
+        const requestSize = resolveRequestSize(config.size);
+        const background = normalizeBackground(config.background);
+        const refs = await Promise.all(references.map((image) => imageToDataUrl(image)));
+        try {
+            const result = await runModelPlugin({
+                capability: "image",
+                script,
+                config: requestConfig,
+                prompt: withSystemPrompt(requestConfig, requestPrompt),
+                images: refs,
+                params: { size: requestSize, resolution: inferMediaScale(config.size), quality, count: n, ...(background ? { background } : {}) },
+                signal: options?.signal,
+            });
+            return normalizePluginImages(result).map((dataUrl) => ({ id: nanoid(), dataUrl }));
+        } catch (error) {
+            throw new Error(readAxiosError(error, apiText("requestFailed")));
+        }
+    }
+
+    const quality = normalizeQuality(config.quality);
+    const requestSize = resolveRequestSize(config.size);
+    const background = normalizeBackground(config.background);
+    const capabilities = imageCapabilityParams(config);
+    if (capabilities?.maxImages !== undefined && references.length > capabilities.maxImages) throw new Error(`该模型最多支持 ${capabilities.maxImages} 张参考图`);
+    const formData = new FormData();
+    formData.set("model", requestConfig.model);
+    formData.set("prompt", withSystemPrompt(requestConfig, requestPrompt));
+    formData.set("n", String(n));
+    if (capabilities) { formData.set('resolution', capabilities.resolution); if (capabilities.aspect_ratio) formData.set('aspect_ratio', capabilities.aspect_ratio); }
+    // gpt-image models reject response_format; they always return b64.
+    if (!/gpt-image/.test(requestConfig.model)) {
+        formData.set("response_format", "b64_json");
+    }
+    formData.set("output_format", IMAGE_OUTPUT_FORMAT);
+    if (quality) {
+        formData.set("quality", quality);
+    }
+    if (requestSize) {
+        formData.set("size", requestSize);
+    }
+    if (background) {
+        formData.set("background", background);
+    }
+    const files = await Promise.all(references.map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
+    const imageField = files.length > 1 ? "image[]" : "image";
+    files.forEach((file) => formData.append(imageField, file));
+
+    try {
+        const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/edits"), formData, { headers: { ...aiHeaders(requestConfig), ...expectedAccountHeaders(aiApiUrl(requestConfig, "/images/edits"), options?.expectedUserId), ...(options?.surface ? { "X-Sundas-Surface": options.surface } : {}) }, signal: options?.signal, timeout: IMAGE_REQUEST_TIMEOUT_MS });
+        const images = parseImagePayload(await resolvePendingImage(response.data, requestConfig, options));
+        return images;
+    } catch (error) {
+        throw new Error(readAxiosError(error, apiText("requestFailed")));
+    }
+}
+
+export async function requestImageQuestion(config: AiConfig, messages: AiTextMessage[], onDelta: (text: string) => void, options?: RequestOptions) {
+    try { return await requestImageQuestionInner(config, messages, onDelta, options); }
+    finally { refreshGenerationWallet(options?.expectedUserId); }
+}
+
+async function requestImageQuestionInner(config: AiConfig, messages: AiTextMessage[], onDelta: (text: string) => void, options?: RequestOptions) {
+    const requestConfig = resolveModelRequestConfig(config, config.model || config.textModel);
+    const script = resolveModelScript(config, config.model || config.textModel);
+    if (script) {
+        try {
+            const answer = await runModelPlugin<string>({
+                capability: "text",
+                script,
+                config: requestConfig,
+                messages: withSystemMessage(requestConfig, messages),
+                signal: options?.signal,
+                onDelta,
+            });
+            const text = String(answer ?? "").trim() || apiText("noContent");
+            if (text === apiText("noContent")) onDelta(text);
+            return text;
+        } catch (error) {
+            throw new Error(readAxiosError(error, apiText("requestFailed")));
+        }
+    }
+    try {
+        const answer = (await requestStreamingResponse(requestConfig, {
+            ...(options?.creationChat ? { creationChat: true } : {}),
+            model: requestConfig.model,
+            input: toResponseInput(withSystemMessage(requestConfig, messages)),
+            ...(requestConfig.reasoningEffort === "auto" ? {} : { reasoning: { effort: requestConfig.reasoningEffort } }),
+        }, onDelta, options)).content || apiText("noContent");
+        if (answer === apiText("noContent")) onDelta(answer);
+        return answer;
+    } catch (error) {
+        throw new Error(readAxiosError(error, apiText("requestFailed")));
+    }
+}
+
+export async function fetchImageModels(config: Pick<AiConfig, "baseUrl" | "apiKey" | "apiFormat">) {
+    try {
+        if (config.apiFormat === "gemini") {
+            const response = await axios.get<GeminiPayload>(geminiApiUrl({ ...defaultGeminiConfig, ...config }), { headers: geminiHeaders({ ...defaultGeminiConfig, ...config }) });
+            validateGeminiPayload(response.data);
+            return (response.data.models || [])
+                .map((model) => model.name?.replace(/^models\//, ""))
+                .filter((id): id is string => Boolean(id))
+                .sort((a, b) => a.localeCompare(b));
+        }
+        const response = await axios.get<{ data?: Array<{ id?: string }>; error?: { message?: string } }>(buildApiUrl(config.baseUrl, "/models"), {
+            headers: {
+                Authorization: `Bearer ${config.apiKey}`,
+            },
+        });
+        return (response.data.data || [])
+            .map((model) => model.id)
+            .filter((id): id is string => Boolean(id))
+            .sort((a, b) => a.localeCompare(b));
+    } catch (error) {
+        throw new Error(readAxiosError(error, apiText("modelReadFailed")));
+    }
+}
+
+export async function fetchChannelModels(channel: ModelChannel) {
+    return fetchImageModels({ baseUrl: channel.baseUrl, apiKey: channel.apiKey, apiFormat: channel.apiFormat });
+}
+
+const defaultGeminiConfig: Pick<AiConfig, "baseUrl" | "apiKey" | "apiFormat" | "model" | "systemPrompt"> = {
+    baseUrl: "https://generativelanguage.googleapis.com",
+    apiKey: "",
+    apiFormat: "gemini",
+    model: "",
+    systemPrompt: "",
+};
+
+
+========================================================================
+FILE: web/src/services/api/media-archive.ts
+LINES: 1-18
+========================================================================
+import { apiRequest } from "./client";
+
+export type MediaArchiveState = { state: "external" | "waiting" | "saving" | "failed" | "completed" | "cancelled"; error?: string; enabled: boolean };
+export function archiveObjectKey(value?: string) {
+    if (!value) return undefined;
+    try {
+        const url = new URL(value, window.location.origin);
+        if (url.origin !== window.location.origin) return undefined;
+        const key = decodeURIComponent(url.pathname.replace(/^\/media\//, ""));
+        return url.pathname.startsWith("/media/private/") && /^private\/[A-Za-z0-9/_.-]+$/.test(key) ? key : undefined;
+    } catch { return undefined; }
+}
+export function mediaArchive(key: string, owner: string, signal: AbortSignal, submit = false) {
+    return apiRequest<MediaArchiveState>(submit ? "/api/media/archive" : `/api/media/archive?objectKey=${encodeURIComponent(key)}`, {
+        method: submit ? "POST" : "GET", json: submit ? { objectKey: key } : undefined,
+        headers: { "X-Sundas-User": owner }, signal,
+    });
+}
+
+
+========================================================================
+FILE: web/src/services/api/media-preview.ts
+LINES: 1-35
+========================================================================
+import { ApiError,apiRequest } from './client';
+
+export const MEDIA_PREVIEW_POLL_MS=3000;
+function waitForPreview(signal:AbortSignal) {
+    return new Promise<void>((resolve,reject)=>{
+        if (signal.aborted) {reject(new DOMException('Aborted','AbortError'));return;}
+        const abort=()=>{clearTimeout(timer);reject(new DOMException('Aborted','AbortError'));};
+        const timer=setTimeout(()=>{signal.removeEventListener('abort',abort);resolve();},MEDIA_PREVIEW_POLL_MS);
+        signal.addEventListener('abort',abort,{once:true});
+    });
+}
+export async function fetchMediaPreview(key:string,userId:string,signal:AbortSignal,manual=false) {
+    const path=`/api/media/preview?${new URLSearchParams({key})}`;
+    const headers={'X-Sundas-User':userId};
+    let requested=false;
+    while (!signal.aborted) {
+        const response=await fetch(path,{credentials:'include',signal,headers});
+        if (response.status===202) {
+            const status=await response.json();
+            if (!requested && (status.state==='missing' || manual && status.state==='failed')) {
+                await apiRequest('/api/media/preview',{method:'POST',json:{key},headers,signal});
+                requested=true;
+            } else if (status.state==='failed') {
+                throw new ApiError(status.error||'预览生成未完成，请重试',409);
+            }
+            await waitForPreview(signal);continue;
+        }
+        if (!response.ok) {
+            const payload=await response.json().catch(()=>null);
+            throw new ApiError(payload?.message||'预览加载失败',response.status);
+        }
+        return response.blob();
+    }
+    throw new DOMException('Aborted','AbortError');
+}
+
+
+========================================================================
+FILE: web/src/services/api/media-upload.ts
+LINES: 1-33
+========================================================================
+type UploadOptions = { owner: string; signal: AbortSignal; onProgress?: (progress: number) => void };
+
+export async function tryDirectMediaUpload(blob: Blob, options: UploadOptions): Promise<Response | null> {
+    const headers = { 'Content-Type': 'application/json', 'X-Sundas-User': options.owner };
+    const config = await fetch('/api/uploads/config', { credentials: 'include', signal: options.signal, headers: { 'X-Sundas-User': options.owner } });
+    if (!config.ok) return config;
+    if (!(await config.json()).direct) return null;
+    // 图片已由上传入口尝试标准化；未支持的特殊格式仍走现有服务器转换。
+    if (/image\/(heic|heif|avif|tiff|bmp)/i.test(blob.type)) return null;
+    const prepared = await fetch('/api/uploads/prepare', { method: 'POST', credentials: 'include', headers,
+        body: JSON.stringify({ bytes: blob.size }), signal: options.signal });
+    if (!prepared.ok) return prepared;
+    const upload = await prepared.json() as { id: string; url: string; headers: Record<string, string> };
+    const sent = await new Promise<number>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const abort = () => xhr.abort();
+        xhr.open('PUT', upload.url);
+        // OSS 不接收本站 Cookie 或用户会话头。
+        xhr.withCredentials = false;
+        Object.entries(upload.headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
+        xhr.upload.onprogress = event => { if (event.lengthComputable) options.onProgress?.(Math.min(95, Math.round(event.loaded / event.total * 95))); };
+        xhr.onload = () => resolve(xhr.status);
+        xhr.onerror = () => reject(new TypeError('文件上传失败，请检查网络后重试'));
+        xhr.onabort = () => reject(new DOMException('Upload aborted', 'AbortError'));
+        xhr.onloadend = () => options.signal.removeEventListener('abort', abort);
+        if (options.signal.aborted) { reject(new DOMException('Upload aborted', 'AbortError')); return; }
+        options.signal.addEventListener('abort', abort, { once: true });
+        options.onProgress?.(0);
+        xhr.send(blob);
+    });
+    if (sent < 200 || sent >= 300) return new Response(JSON.stringify({ message: '文件上传失败，请重新上传' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    return fetch(`/api/uploads/${encodeURIComponent(upload.id)}/complete`, { method: 'POST', credentials: 'include', headers, body: '{}', signal: options.signal });
+}
+
+
+========================================================================
+FILE: web/src/services/api/model-plugin.ts
+LINES: 1-991
+========================================================================
+import axios, { type AxiosRequestConfig } from "axios";
+
+import i18n from "@/i18n";
+import { buildApiUrl, withLocalProxy, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
+
+type RequestOptions = { signal?: AbortSignal };
+
+export type PluginHttpOptions = {
+    headers?: Record<string, string>;
+    params?: Record<string, unknown>;
+    responseType?: "json" | "blob" | "text" | "arraybuffer";
+};
+
+export type PluginHttp = {
+    url: (path: string) => string;
+    post: (path: string, body?: unknown, options?: PluginHttpOptions) => Promise<unknown>;
+    get: (path: string, options?: PluginHttpOptions) => Promise<unknown>;
+};
+
+export type PluginPollOptions = { intervalMs?: number; timeoutMs?: number };
+
+export type RunPluginArgs = {
+    capability: ModelCapability;
+    script: string;
+    config: AiConfig;
+    prompt?: string;
+    images?: string[];
+    videos?: File[];
+    audios?: File[];
+    messages?: unknown[];
+    params?: Record<string, unknown>;
+    signal?: AbortSignal;
+    onDelta?: (text: string) => void;
+};
+
+function pluginHeaders(extra?: Record<string, string>, hasJsonBody = false): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (hasJsonBody) headers["Content-Type"] = "application/json";
+    return { ...headers, ...extra };
+}
+
+function pluginUrl(config: AiConfig, path: string) {
+    if (/^https?:/i.test(path)) return withLocalProxy(path);
+    return buildApiUrl(config.baseUrl, path.startsWith("/") ? path : `/${path}`);
+}
+
+function createPluginHttp(config: AiConfig, options?: RequestOptions): PluginHttp {
+    const run = async (method: "get" | "post", path: string, body: unknown, opts?: PluginHttpOptions) => {
+        const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+        const response = await axios.request({
+            method,
+            url: pluginUrl(config, path),
+            data: method === "post" ? body : undefined,
+            params: opts?.params,
+            headers: pluginHeaders({ Authorization: `Bearer ${config.apiKey}`, ...opts?.headers }, method === "post" && !isForm && body !== undefined),
+            responseType: opts?.responseType || "json",
+            signal: options?.signal,
+        });
+        return response.data;
+    };
+    return {
+        url: (path) => pluginUrl(config, path),
+        post: (path, body, opts) => run("post", path, body, opts),
+        get: (path, opts) => run("get", path, undefined, opts),
+    };
+}
+
+/** Raw request with no automatic auth header — the script controls method, url, headers, body entirely. */
+function createPluginRequest(config: AiConfig, options?: RequestOptions) {
+    return async (requestConfig: AxiosRequestConfig & { url: string }) => {
+        const response = await axios.request({ ...requestConfig, url: pluginUrl(config, requestConfig.url), signal: options?.signal });
+        return response.data;
+    };
+}
+
+function sleep(ms: number, signal?: AbortSignal) {
+    return new Promise<void>((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(new DOMException("Aborted", "AbortError"));
+            return;
+        }
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener(
+            "abort",
+            () => {
+                clearTimeout(timer);
+                reject(new DOMException("Aborted", "AbortError"));
+            },
+            { once: true },
+        );
+    });
+}
+
+function createPoll(signal?: AbortSignal) {
+    return async function poll<T, R>(request: () => Promise<T>, extract: (value: T) => R | null | undefined | false, options?: PluginPollOptions): Promise<R> {
+        const intervalMs = options?.intervalMs ?? 2500;
+        const timeoutMs = options?.timeoutMs ?? 300000;
+        const deadline = performance.now() + timeoutMs;
+        for (;;) {
+            if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+            const result = extract(await request());
+            if (result !== null && result !== undefined && result !== false) return result;
+            if (performance.now() >= deadline) throw new Error(i18n.t("modelPlugin.pollTimeout"));
+            await sleep(intervalMs, signal);
+        }
+    };
+}
+
+/**
+ * Run a user-authored model call script. Locals are injected (see PLUGIN_VARIABLES); templates wrap them in an async function.
+ * The script still runs as an async function body and must `return` the result.
+ */
+export async function runModelPlugin<T = unknown>(args: RunPluginArgs): Promise<T> {
+    const { config } = args;
+    const http = createPluginHttp(config, { signal: args.signal });
+    const request = createPluginRequest(config, { signal: args.signal });
+    const poll = createPoll(args.signal);
+    const runner = new Function(
+        "prompt",
+        "images",
+        "videos",
+        "audios",
+        "messages",
+        "params",
+        "model",
+        "baseUrl",
+        "apiKey",
+        "systemPrompt",
+        "reasoningEffort",
+        "http",
+        "request",
+        "poll",
+        "sleep",
+        "signal",
+        "onDelta",
+        `"use strict"; return (async () => {\n${args.script}\n})();`,
+    ) as (...fnArgs: unknown[]) => Promise<T>;
+    try {
+        return await runner(
+            args.prompt || "",
+            args.images || [],
+            args.videos || [],
+            args.audios || [],
+            args.messages || [],
+            args.params || {},
+            config.model,
+            config.baseUrl,
+            config.apiKey,
+            config.systemPrompt || "",
+            config.reasoningEffort,
+            http,
+            request,
+            poll,
+            (ms: number) => sleep(ms, args.signal),
+            args.signal,
+            args.onDelta,
+        );
+    } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") throw error;
+        if (axios.isCancel(error)) throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(i18n.t("modelPlugin.executionFailed", { message }));
+    }
+}
+
+export type PluginVariable = { name: string; type: string; desc: string; capabilities?: ModelCapability[] };
+
+/** Documentation surface shown in the script editor. */
+export function getPluginVariables(): PluginVariable[] {
+    return [
+        { name: "prompt", type: "string", desc: i18n.t("modelPlugin.variables.prompt"), capabilities: ["image", "video", "audio"] },
+        { name: "images", type: "string[]", desc: i18n.t("modelPlugin.variables.images"), capabilities: ["image", "video"] },
+        { name: "videos", type: "File[]", desc: i18n.t("modelPlugin.variables.videos"), capabilities: ["video"] },
+        { name: "audios", type: "File[]", desc: i18n.t("modelPlugin.variables.audios"), capabilities: ["video"] },
+        { name: "messages", type: "{ role, content }[]", desc: i18n.t("modelPlugin.variables.messages"), capabilities: ["text"] },
+        { name: "params", type: "object", desc: i18n.t("modelPlugin.variables.params") },
+        { name: "model", type: "string", desc: i18n.t("modelPlugin.variables.model") },
+        { name: "baseUrl", type: "string", desc: i18n.t("modelPlugin.variables.baseUrl") },
+        { name: "apiKey", type: "string", desc: i18n.t("modelPlugin.variables.apiKey") },
+        { name: "systemPrompt", type: "string", desc: i18n.t("modelPlugin.variables.systemPrompt") },
+        { name: "reasoningEffort", type: '"auto" | "low" | "medium" | "high" | "xhigh"', desc: i18n.t("modelPlugin.variables.reasoningEffort"), capabilities: ["text"] },
+        { name: "http", type: "object", desc: i18n.t("modelPlugin.variables.http") },
+        { name: "request", type: "function", desc: i18n.t("modelPlugin.variables.request") },
+        { name: "poll", type: "function", desc: i18n.t("modelPlugin.variables.poll") },
+        { name: "sleep", type: "function", desc: i18n.t("modelPlugin.variables.sleep") },
+        { name: "signal", type: "AbortSignal", desc: i18n.t("modelPlugin.variables.signal") },
+        { name: "onDelta", type: "function", desc: i18n.t("modelPlugin.variables.onDelta"), capabilities: ["text"] },
+    ];
+}
+
+export function getPluginReturn(capability: ModelCapability) {
+    return i18n.t(`modelPlugin.returns.${capability}`);
+}
+
+export function getPluginAuthoringPrompt(capability: ModelCapability, modelName: string, draft = "") {
+    const variables = getPluginVariables().filter((variable) => !variable.capabilities || variable.capabilities.includes(capability));
+    const lines = [
+        i18n.t("modelPlugin.authoring.intro", { capability: i18n.t(`config.channelEditor.capabilities.${capability}`), model: modelName || i18n.t("modelPlugin.authoring.anyModel") }),
+        "",
+        i18n.t("modelPlugin.authoring.shape"),
+        "",
+        i18n.t("modelPlugin.authoring.returnTitle"),
+        getPluginReturn(capability),
+        "",
+        i18n.t("modelPlugin.authoring.variablesTitle"),
+        ...variables.map((variable) => `- ${variable.name} (${variable.type}): ${variable.desc}`),
+        "",
+        i18n.t("modelPlugin.authoring.rulesTitle"),
+        i18n.t("modelPlugin.authoring.rules"),
+    ];
+    const templates = getPluginTemplates()[capability];
+    if (templates.length) {
+        lines.push("", i18n.t("modelPlugin.authoring.examplesTitle"));
+        for (const template of templates) {
+            lines.push("", `${template.label}`, template.script);
+        }
+    }
+    if (draft.trim()) {
+        lines.push("", i18n.t("modelPlugin.authoring.draftTitle"), draft.trim());
+    }
+    return lines.join("\n");
+}
+
+export type PluginTemplate = { label: string; script: string };
+
+export function getPluginTemplates(): Record<ModelCapability, PluginTemplate[]> {
+    return {
+    image: [
+        {
+            label: i18n.t("modelPlugin.templates.openai"),
+            script: `/**
+ * OpenAI image generation and editing.
+ * Text-to-image uses POST /v1/images/generations (JSON) when images is empty.
+ * Image editing uses POST /v1/images/edits (multipart) when images has data URLs.
+ * @param {string} prompt
+ * @param {string[]} images - reference images as data URLs; empty for text-to-image
+ * @param {object} params
+ * @param {string} params.size - output size, e.g. "1024x1024" or "auto"
+ * @param {string} params.quality - "low" | "medium" | "high" | "xhigh" | "max"
+ * @param {number} params.count - number of images
+ * @param {string} [params.background] - "transparent" when requested
+ * @param {string} model
+ * @param {string} baseUrl
+ * @param {string} apiKey
+ * @param {function} request - raw HTTP helper; relative urls join baseUrl without /v1
+ * @returns {Promise<string[]>} image URLs or data URLs
+ */
+async function generateImage({
+  prompt,
+  images,
+  params: {
+    size,
+    quality,
+    count,
+    background,
+  },
+  model,
+  baseUrl,
+  apiKey,
+  request,
+}) {
+  if (images.length === 0) {
+    const data = await request({
+      method: "post",
+      url: \`\${baseUrl}/v1/images/generations\`,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: \`Bearer \${apiKey}\`,
+      },
+      data: {
+        model: model,
+        prompt: prompt,
+        n: count,
+        size: size,
+        quality: quality,
+        background: background,
+        response_format: "b64_json",
+      },
+    });
+    const urls = [];
+    for (const item of data.data || []) {
+      urls.push(item.b64_json ? \`data:image/png;base64,\${item.b64_json}\` : item.url);
+    }
+    return urls;
+  }
+
+  const form = new FormData();
+  form.set("model", model);
+  form.set("prompt", prompt);
+  form.set("n", String(count));
+  form.set("size", size);
+  form.set("quality", quality);
+  form.set("background", background);
+  form.set("response_format", "b64_json");
+  const imageField = images.length > 1 ? "image[]" : "image";
+  for (const dataUrl of images) {
+    form.append(imageField, await (await fetch(dataUrl)).blob(), "ref.png");
+  }
+  const edited = await request({
+    method: "post",
+    url: \`\${baseUrl}/v1/images/edits\`,
+    headers: {
+      Authorization: \`Bearer \${apiKey}\`,
+    },
+    data: form,
+  });
+  const urls = [];
+  for (const item of edited.data || []) {
+    urls.push(item.b64_json ? \`data:image/png;base64,\${item.b64_json}\` : item.url);
+  }
+  return urls;
+}
+
+return await generateImage({
+  prompt,
+  images,
+  params,
+  model,
+  baseUrl,
+  apiKey,
+  request,
+});`,
+        },
+        {
+            label: i18n.t("modelPlugin.templates.gemini"),
+            script: `/**
+ * Gemini image generation via models/{model}:generateContent.
+ * Reference images go into parts.inline_data. size maps to aspectRatio, resolution maps to imageSize; Gemini has no quality parameter.
+ * @param {string} prompt
+ * @param {string[]} images - reference images as data URLs
+ * @param {object} params
+ * @param {string} params.size - "2048x2048", "16:9", "auto", etc.; sent as aspectRatio
+ * @param {string} params.resolution - "1k" | "2k" | "4k" | "auto"; sent as imageSize
+ * @param {string} params.quality - "low" | "medium" | "high" | "xhigh" | "max"; unused here
+ * @param {number} params.count - number of generateContent calls
+ * @param {string} model
+ * @param {string} baseUrl
+ * @param {string} apiKey
+ * @param {function} request
+ * @returns {Promise<string[]>} image data URLs
+ */
+function gcd(a, b) {
+  return b ? gcd(b, a % b) : a;
+}
+
+async function generateImage({
+  prompt,
+  images,
+  params: {
+    size,
+    resolution,
+    count,
+  },
+  model,
+  baseUrl,
+  apiKey,
+  request,
+}) {
+  const parts = [{ text: prompt }];
+  for (const dataUrl of images) {
+    const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+    if (match) {
+      parts.push({
+        inline_data: {
+          mime_type: match[1],
+          data: match[2],
+        },
+      });
+    }
+  }
+
+  let aspectRatio = "1:1";
+  if (size && size !== "auto") {
+    const pixels = size.match(/^(\\d+)x(\\d+)$/);
+    if (pixels) {
+      const width = Number(pixels[1]);
+      const height = Number(pixels[2]);
+      const divisor = gcd(width, height);
+      aspectRatio = \`\${width / divisor}:\${height / divisor}\`;
+    } else if (size.includes(":")) {
+      aspectRatio = size;
+    }
+  }
+  const imageSize = resolution && resolution !== "auto" ? resolution.toUpperCase() : undefined;
+  const n = Number(count) || 1;
+  const urls = [];
+
+  for (let i = 0; i < n; i++) {
+    const data = await request({
+      method: "post",
+      url: \`\${baseUrl}/v1beta/models/\${model}:generateContent\`,
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      data: {
+        contents: [
+          {
+            role: "user",
+            parts: parts,
+          },
+        ],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"],
+          imageConfig: {
+            aspectRatio: aspectRatio,
+            imageSize: imageSize,
+          },
+        },
+      },
+    });
+    for (const candidate of data.candidates || []) {
+      for (const part of candidate.content?.parts || []) {
+        const img = part.inlineData || part.inline_data;
+        if (img && img.data) {
+          urls.push(\`data:\${img.mimeType || img.mime_type || "image/png"};base64,\${img.data}\`);
+        }
+      }
+    }
+  }
+  return urls;
+}
+
+return await generateImage({
+  prompt,
+  images,
+  params,
+  model,
+  baseUrl,
+  apiKey,
+  request,
+});`,
+        },
+    ],
+    video: [
+        {
+            label: i18n.t("modelPlugin.templates.openai"),
+            script: `/**
+ * OpenAI-compatible video: POST /v1/videos (multipart), then poll GET /v1/videos/{id}.
+ * Do not set Content-Type on FormData; the browser adds the boundary.
+ * @param {string} prompt
+ * @param {string[]} images - reference images as data URLs
+ * @param {File[]} videos - reference videos; empty when none
+ * @param {File[]} audios - reference audio; empty when none
+ * @param {object} params
+ * @param {string} params.mode - "frames" uses first/last frame fields; "reference" sends all images as references. More than 2 images become "reference".
+ * @param {string|number} params.seconds - duration
+ * @param {string} params.size - output size, e.g. "1280x720"
+ * @param {string} params.resolution - e.g. "720p"
+ * @param {boolean} params.generateAudio
+ * @param {boolean} params.watermark
+ * @param {string} model
+ * @param {string} baseUrl
+ * @param {string} apiKey
+ * @param {function} request
+ * @param {function} poll
+ * @returns {Promise<{url: string}|Blob>}
+ */
+async function generateVideo({
+  prompt,
+  images,
+  videos,
+  audios,
+  params: {
+    mode,
+    seconds,
+    size,
+    resolution,
+    generateAudio,
+    watermark,
+  },
+  model,
+  baseUrl,
+  apiKey,
+  request,
+  poll,
+}) {
+  const form = new FormData();
+  form.set("model", model);
+  form.set("prompt", prompt);
+  form.set("seconds", String(seconds || 8));
+  form.set("size", String(size || "1280x720"));
+  form.set("resolution_name", String(resolution || "720p"));
+  form.set("generate_audio", String(generateAudio !== false));
+  form.set("watermark", String(watermark === true));
+  form.set("mode", mode);
+  if (mode === "frames") {
+    if (images[0]) {
+      form.append("first_frame", await (await fetch(images[0])).blob(), "first.png");
+    }
+    if (images[1]) {
+      form.append("last_frame", await (await fetch(images[1])).blob(), "last.png");
+    }
+  } else {
+    for (const dataUrl of images) {
+      form.append("image[]", await (await fetch(dataUrl)).blob(), "ref.png");
+    }
+  }
+  for (const file of videos) {
+    form.append("video[]", file);
+  }
+  for (const file of audios) {
+    form.append("audio[]", file);
+  }
+
+  const headers = {
+    Authorization: \`Bearer \${apiKey}\`,
+  };
+  const task = await request({
+    method: "post",
+    url: \`\${baseUrl}/v1/videos\`,
+    headers,
+    data: form,
+  });
+
+  return await poll(
+    async () => {
+      const state = await request({
+        method: "get",
+        url: \`\${baseUrl}/v1/videos/\${task.id}\`,
+        headers,
+      });
+      if (state.status === "failed" || state.status === "cancelled") {
+        throw new Error(state.error && state.error.message ? state.error.message : "video generation failed");
+      }
+      if (state.video_url || state.url) {
+        return { url: state.video_url || state.url };
+      }
+      if (state.status === "completed") {
+        return await request({
+          method: "get",
+          url: \`\${baseUrl}/v1/videos/\${task.id}/content\`,
+          headers,
+          responseType: "blob",
+        });
+      }
+      return null;
+    },
+    (result) => result,
+    { intervalMs: 2500, timeoutMs: 300000 },
+  );
+}
+
+return await generateVideo({
+  prompt,
+  images,
+  videos,
+  audios,
+  params,
+  model,
+  baseUrl,
+  apiKey,
+  request,
+  poll,
+});`,
+        },
+        {
+            label: i18n.t("modelPlugin.templates.gemini"),
+            script: `/**
+ * Gemini Veo video: POST models/{model}:predictLongRunning, then poll the operation.
+ * First/last-frame mode: images[0] -> image, images[1] -> lastFrame.
+ * Reference mode: all images -> referenceImages.
+ * @param {string} prompt
+ * @param {string[]} images - reference images as data URLs
+ * @param {File[]} videos - reference videos; empty when none
+ * @param {File[]} audios - reference audio; empty when none
+ * @param {object} params
+ * @param {string} params.mode - "frames" or "reference"
+ * @param {string|number} params.seconds - sent as durationSeconds
+ * @param {string} params.size - pixel size; mapped to aspectRatio when needed
+ * @param {string} params.ratio - aspect ratio, e.g. "16:9"
+ * @param {string} params.resolution - e.g. "720p"
+ * @param {boolean} params.generateAudio
+ * @param {boolean} params.watermark - sent as addWatermark
+ * @param {string} model
+ * @param {string} baseUrl
+ * @param {string} apiKey
+ * @param {function} request
+ * @param {function} poll
+ * @returns {Promise<{url: string}>}
+ */
+async function generateVideo({
+  prompt,
+  images,
+  videos,
+  audios,
+  params: {
+    mode,
+    seconds,
+    size,
+    resolution,
+    ratio,
+    generateAudio,
+    watermark,
+  },
+  model,
+  baseUrl,
+  apiKey,
+  request,
+  poll,
+}) {
+  async function toInline(source) {
+    if (typeof source === "string") {
+      const match = source.match(/^data:([^;]+);base64,(.*)$/);
+      return {
+        bytesBase64Encoded: match ? match[2] : "",
+        mimeType: match ? match[1] : "image/png",
+      };
+    }
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(source);
+    });
+    const match = String(dataUrl).match(/^data:([^;]+);base64,(.*)$/);
+    return {
+      bytesBase64Encoded: match ? match[2] : "",
+      mimeType: match ? match[1] : (source.type || "application/octet-stream"),
+    };
+  }
+
+  const aspectRatioMap = {
+    "1280x720": "16:9",
+    "1920x1080": "16:9",
+    "720x1280": "9:16",
+    "1080x1920": "9:16",
+  };
+  let aspectRatio = ratio || size || "16:9";
+  if (aspectRatio === "auto") {
+    aspectRatio = "16:9";
+  }
+  if (aspectRatioMap[aspectRatio]) {
+    aspectRatio = aspectRatioMap[aspectRatio];
+  }
+
+  const instance = {
+    prompt: prompt,
+  };
+  if (mode === "frames") {
+    if (images[0]) {
+      instance.image = await toInline(images[0]);
+    }
+    if (images[1]) {
+      instance.lastFrame = await toInline(images[1]);
+    }
+  } else {
+    instance.referenceImages = [];
+    for (const dataUrl of images) {
+      instance.referenceImages.push({
+        image: await toInline(dataUrl),
+        referenceType: "asset",
+      });
+    }
+  }
+  if (videos[0]) {
+    instance.video = await toInline(videos[0]);
+  }
+  if (audios[0]) {
+    instance.audio = await toInline(audios[0]);
+  }
+
+  const headers = {
+    "Content-Type": "application/json",
+    "x-goog-api-key": apiKey,
+  };
+  const op = await request({
+    method: "post",
+    url: \`\${baseUrl}/v1beta/models/\${model}:predictLongRunning\`,
+    headers,
+    data: {
+      instances: [instance],
+      parameters: {
+        aspectRatio: aspectRatio,
+        durationSeconds: Number(seconds) || 8,
+        resolution: resolution || "720p",
+        generateAudio: generateAudio !== false,
+        addWatermark: watermark === true,
+      },
+    },
+  });
+
+  return await poll(
+    () => request({
+      method: "get",
+      url: \`\${baseUrl}/v1beta/\${op.name}\`,
+      headers,
+    }),
+    (state) => {
+      if (state.error) {
+        throw new Error(state.error.message || "video generation failed");
+      }
+      if (!state.done) return null;
+      const uri = state.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
+      if (!uri) throw new Error("Gemini did not return a video URI");
+      if (uri.includes("key=")) return { url: uri };
+      const separator = uri.includes("?") ? "&" : "?";
+      return { url: uri + separator + "key=" + apiKey };
+    },
+    { intervalMs: 5000, timeoutMs: 300000 },
+  );
+}
+
+return await generateVideo({
+  prompt,
+  images,
+  videos,
+  audios,
+  params,
+  model,
+  baseUrl,
+  apiKey,
+  request,
+  poll,
+});`,
+        },
+    ],
+    audio: [
+        {
+            label: i18n.t("modelPlugin.templates.openai"),
+            script: `/**
+ * OpenAI speech: POST /v1/audio/speech.
+ * @param {string} prompt - text to speak
+ * @param {object} params
+ * @param {string} params.voice
+ * @param {string} params.format - response_format, e.g. "mp3"
+ * @param {string|number} params.speed
+ * @param {string} [params.instructions] - voice style instructions
+ * @param {string} model
+ * @param {string} baseUrl
+ * @param {string} apiKey
+ * @param {function} request
+ * @returns {Promise<Blob>}
+ */
+async function generateAudio({
+  prompt,
+  params: {
+    voice,
+    format,
+    speed,
+    instructions,
+  },
+  model,
+  baseUrl,
+  apiKey,
+  request,
+}) {
+  return await request({
+    method: "post",
+    url: \`\${baseUrl}/v1/audio/speech\`,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: \`Bearer \${apiKey}\`,
+    },
+    responseType: "blob",
+    data: {
+      model: model,
+      input: prompt,
+      voice: voice,
+      response_format: format,
+      speed: Number(speed),
+      instructions: instructions,
+    },
+  });
+}
+
+return await generateAudio({
+  prompt,
+  params,
+  model,
+  baseUrl,
+  apiKey,
+  request,
+});`,
+        },
+        {
+            label: i18n.t("modelPlugin.templates.gemini"),
+            script: `/**
+ * Gemini TTS: POST models/{model}:generateContent with AUDIO modality.
+ * Audio bytes are returned in inlineData.data (base64 PCM).
+ * @param {string} prompt - text to speak
+ * @param {object} params
+ * @param {string} params.voice - prebuilt voice name
+ * @param {string} model
+ * @param {string} baseUrl
+ * @param {string} apiKey
+ * @param {function} request
+ * @returns {Promise<{data: string}>}
+ */
+async function generateAudio({
+  prompt,
+  params: {
+    voice,
+  },
+  model,
+  baseUrl,
+  apiKey,
+  request,
+}) {
+  const data = await request({
+    method: "post",
+    url: \`\${baseUrl}/v1beta/models/\${model}:generateContent\`,
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
+    data: {
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: voice,
+            },
+          },
+        },
+      },
+    },
+  });
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  let audio = null;
+  for (const part of parts) {
+    audio = part.inlineData || part.inline_data;
+    if (audio && audio.data) break;
+  }
+  if (!audio || !audio.data) throw new Error("Gemini did not return audio");
+  return { data: audio.data };
+}
+
+return await generateAudio({
+  prompt,
+  params,
+  model,
+  baseUrl,
+  apiKey,
+  request,
+});`,
+        },
+    ],
+    text: [
+        {
+            label: i18n.t("modelPlugin.templates.openai"),
+            script: `/**
+ * OpenAI text: POST /v1/responses.
+ * @param {{role: string, content: string}[]} messages - includes the system message when present
+ * @param {string} model
+ * @param {string} baseUrl
+ * @param {string} apiKey
+ * @param {string} reasoningEffort - "auto" | "low" | "medium" | "high" | "xhigh"; omit reasoning when "auto"
+ * @param {function} request
+ * @param {function} onDelta - push streaming text
+ * @returns {Promise<string>}
+ */
+async function generateText({
+  messages,
+  model,
+  baseUrl,
+  apiKey,
+  reasoningEffort,
+  request,
+  onDelta,
+}) {
+  const body = {
+    model: model,
+    input: messages,
+  };
+  if (reasoningEffort && reasoningEffort !== "auto") {
+    body.reasoning = {
+      effort: reasoningEffort,
+    };
+  }
+  const data = await request({
+    method: "post",
+    url: \`\${baseUrl}/v1/responses\`,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: \`Bearer \${apiKey}\`,
+    },
+    data: body,
+  });
+  const text = data.output_text
+    || (data.output || []).flatMap((o) => o.content || []).map((c) => c.text || "").join("")
+    || "";
+  onDelta(text);
+  return text;
+}
+
+return await generateText({
+  messages,
+  model,
+  baseUrl,
+  apiKey,
+  reasoningEffort,
+  request,
+  onDelta,
+});`,
+        },
+        {
+            label: i18n.t("modelPlugin.templates.gemini"),
+            script: `/**
+ * Gemini text: POST models/{model}:generateContent.
+ * System messages are skipped in contents; systemPrompt goes to systemInstruction.
+ * @param {{role: string, content: string}[]} messages
+ * @param {string} systemPrompt
+ * @param {string} model
+ * @param {string} baseUrl
+ * @param {string} apiKey
+ * @param {function} request
+ * @param {function} onDelta - push streaming text
+ * @returns {Promise<string>}
+ */
+async function generateText({
+  messages,
+  systemPrompt,
+  model,
+  baseUrl,
+  apiKey,
+  request,
+  onDelta,
+}) {
+  const contents = [];
+  for (const message of messages) {
+    if (message.role === "system") continue;
+    contents.push({
+      role: message.role === "assistant" ? "model" : "user",
+      parts: [{ text: message.content }],
+    });
+  }
+  const body = {
+    contents: contents,
+  };
+  if (systemPrompt) {
+    body.systemInstruction = {
+      parts: [{ text: systemPrompt }],
+    };
+  }
+  const data = await request({
+    method: "post",
+    url: \`\${baseUrl}/v1beta/models/\${model}:generateContent\`,
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
+    data: body,
+  });
+  let text = "";
+  for (const part of data.candidates?.[0]?.content?.parts || []) {
+    text += part.text || "";
+  }
+  onDelta(text);
+  return text;
+}
+
+return await generateText({
+  messages,
+  systemPrompt,
+  model,
+  baseUrl,
+  apiKey,
+  request,
+  onDelta,
+});`,
+        },
+    ],
+    };
+}
+
+/** Normalize whatever an image script returns into the app's generated-image shape. */
+export function normalizePluginImages(result: unknown): string[] {
+    const items = Array.isArray(result) ? result : [result];
+    const urls = items
+        .map((item) => {
+            if (typeof item === "string") return item;
+            if (item && typeof item === "object") {
+                const record = item as Record<string, unknown>;
+                if (typeof record.dataUrl === "string") return record.dataUrl;
+                if (typeof record.url === "string") return record.url;
+                if (typeof record.b64_json === "string") return `data:image/png;base64,${record.b64_json}`;
+            }
+            return "";
+        })
+        .filter(Boolean);
+    if (!urls.length) throw new Error(i18n.t("modelPlugin.noImages"));
+    return urls;
+}
+
+
+========================================================================
+FILE: web/src/services/api/pricing.ts
+LINES: 1-6
+========================================================================
+import { apiRequest } from './client';
+
+export type CreditEstimate = { minCredits: number; maxCredits: number; member: boolean };
+export function fetchCreditEstimate(params: { model: string; mode: 'image' | 'video' | 'text' | 'audio'; seconds: string; resolution: string; inputLength?: string; routeId?: string }, signal: AbortSignal) {
+    return apiRequest<CreditEstimate>(`/api/pricing/estimate?${new URLSearchParams(params)}`, { signal });
+}
+
+
+========================================================================
+FILE: web/src/services/api/promo.ts
+LINES: 1-88
+========================================================================
+import { apiRequest } from "./client";
+
+export type PromoPlacement = "topbar" | "carousel" | "popup" | "corner";
+export type PromoActionType = "none" | "internal" | "external" | "contact" | "copy";
+export type PromoFrequency = "visit" | "session" | "24h" | "daily";
+export type PromoContactChannel = "wechat" | "wechat_group" | "wecom" | "qq" | "qq_group" | "email" | "phone" | "telegram" | "whatsapp" | "link";
+
+export type PromoItem = {
+    id: string;
+    placement: PromoPlacement;
+    enabled: boolean;
+    sort: number;
+    title: string;
+    description: string;
+    imageUrl: string;
+    mobileImageUrl: string;
+    alt: string;
+    ctaLabel: string;
+    actionType: PromoActionType;
+    actionValue: string;
+    countdownAt: string | null;
+    frequency: PromoFrequency;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type PromoContact = {
+    id: string;
+    channel: PromoContactChannel;
+    name: string;
+    value: string;
+    qrUrl: string;
+    description: string;
+    enabled: boolean;
+    sort: number;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type PromoClickStat = {
+    placement: "topbar" | "carousel" | "popup" | "corner" | "contact";
+    itemId: string | null;
+    contactId: string | null;
+    label: string;
+    today: number;
+    last7: number;
+    total: number;
+};
+
+export type PromoConfig = {
+    topbar: PromoItem | null;
+    carousel: PromoItem[];
+    popup: PromoItem | null;
+    corner: PromoItem | null;
+    contacts: PromoContact[];
+};
+
+export type AdminPromoData = { items: PromoItem[]; contacts: PromoContact[]; clicks: PromoClickStat[] };
+
+export async function fetchPromoConfig() {
+    return apiRequest<PromoConfig>("/api/promo");
+}
+
+let promoCache: PromoConfig | null = null;
+let promoPending: Promise<PromoConfig> | null = null;
+
+// 宣发配置被多个组件同时请求（布局、首页、联系按钮、联系弹窗），共用一份结果避免重复拉取。
+export function loadPromoConfig() {
+    if (promoCache) return Promise.resolve(promoCache);
+    if (promoPending) return promoPending;
+    promoPending = fetchPromoConfig()
+        .then((data) => {
+            promoCache = data;
+            return data;
+        })
+        .finally(() => {
+            promoPending = null;
+        });
+    return promoPending;
+}
+
+export async function trackPromoClick(input: { placement: "topbar" | "carousel" | "popup" | "corner" | "contact"; itemId?: string; contactId?: string }) {
+    try {
+        await apiRequest("/api/promo/click", { method: "POST", json: input });
+    } catch {
+        // Click tracking must never block the actual action.
+    }
+}
+
+
+========================================================================
+FILE: web/src/services/api/prompt-optimizer.ts
+LINES: 1-24
+========================================================================
+import { apiRequest } from "./client";
+
+export type PromptOptimizerCapability = "image" | "video";
+
+export type PromptOptimizerResult = {
+    prompt: string;
+    skill: { key: string; label: string };
+    creditsCharged: number;
+};
+
+export function optimizePrompt(
+    input: { prompt: string; model: string; capability: PromptOptimizerCapability },
+    signal?: AbortSignal,
+) {
+    return apiRequest<PromptOptimizerResult>("/api/prompts/optimize", {
+        method: "POST",
+        json: input,
+        signal,
+    });
+}
+
+export function estimatePromptOptimization(model: string, capability: PromptOptimizerCapability, signal?: AbortSignal) {
+    return apiRequest<{ credits: number }>(`/api/prompts/optimize/estimate?${new URLSearchParams({ model, capability })}`, { signal });
+}
+
+
+========================================================================
+FILE: web/src/services/api/prompts.ts
+LINES: 1-79
+========================================================================
+import { apiRequest } from "./client";
+
+export const ALL_PROMPTS_OPTION = "all";
+
+export type Prompt = {
+    id: string;
+    sourceId: string;
+    category: string;
+    title: string;
+    prompt: string;
+    description: string;
+    coverUrl: string;
+    referenceImageUrls: string[];
+    tags: string[];
+    preview: string;
+    previewVideoUrl?: string;
+    githubUrl: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type PromptSourceInfo = {
+    id: string;
+    name: string;
+    count: number;
+};
+
+export type PromptListResponse = {
+    items: Prompt[];
+    tags: string[];
+    categories: string[];
+    total: number;
+    page: number;
+    pageSize: number;
+    hasMore: boolean;
+};
+
+export async function fetchPrompts({
+    keyword = "",
+    tag = [],
+    category = ALL_PROMPTS_OPTION,
+    page = 1,
+    pageSize = 20,
+    metadata = true,
+    sourceId,
+    kind,
+    signal,
+}: {
+    keyword?: string;
+    tag?: string[];
+    category?: string;
+    page?: number;
+    pageSize?: number;
+    metadata?: boolean;
+    sourceId?: string;
+    kind?: 'image' | 'video';
+    signal?: AbortSignal;
+} = {}) {
+    const params = new URLSearchParams();
+    if (keyword.trim()) params.set("keyword", keyword.trim());
+    if (tag.length) params.set("tags", tag.join(","));
+    if (category && category !== ALL_PROMPTS_OPTION) params.set("category", category);
+    if (!metadata) params.set("metadata", "false");
+    if (sourceId) params.set("sourceId", sourceId);
+    if (kind) params.set("kind", kind);
+    params.set("page", String(page));
+    params.set("pageSize", String(pageSize));
+    return apiRequest<PromptListResponse>(`/api/prompts?${params.toString()}`, { signal });
+}
+
+export async function fetchPromptSources() {
+    const data = await apiRequest<{ sources: PromptSourceInfo[] }>("/api/prompts/sources");
+    return data.sources;
+}
+
+export function formatPromptDate(value: string, locale?: string) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+
+========================================================================
+FILE: web/src/services/api/request.ts
+LINES: 1-15
+========================================================================
+export type ApiParams = Record<string, string | string[] | number | number[] | undefined>;
+
+export function compactApiParams(params: ApiParams) {
+    return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== "" && value !== undefined && (!Array.isArray(value) || value.length > 0))) as ApiParams;
+}
+
+export function serializeApiParams(params?: ApiParams) {
+    const queryParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(params || {})) {
+        if (value === undefined) continue;
+        if (Array.isArray(value)) value.forEach((item) => queryParams.append(key, String(item)));
+        else queryParams.set(key, String(value));
+    }
+    return queryParams;
+}
+
+
+========================================================================
+FILE: web/src/services/api/site.ts
+LINES: 1-78
+========================================================================
+import { apiRequest } from "./client";
+
+/** 后台「首页文案」配置：全部可为空，空值表示沿用前端内置默认文案。 */
+export type SiteHomeCopy = {
+    heroKicker?: string;
+    heroTitleLead?: string;
+    heroTitleAccent?: string;
+    heroTitleTail?: string;
+    heroDescription?: string;
+    heroVideoCta?: string;
+    heroCanvasCta?: string;
+    composerVideoMode?: string;
+    composerImageMode?: string;
+    composerPlaceholder?: string;
+    composerStartCta?: string;
+    composerLoginCta?: string;
+    composerHint?: string;
+    canvasesTitle?: string;
+    canvasesNote?: string;
+    canvasesViewAll?: string;
+    canvasesNew?: string;
+    canvasesOpen?: string;
+    canvasesEnabled?: boolean;
+    inspirationTitle?: string;
+    inspirationDescription?: string;
+    inspirationViewAll?: string;
+    inspirationVideoTab?: string;
+    inspirationImageTab?: string;
+    inspirationEmpty?: string;
+    inspirationEnabled?: boolean;
+    promptLimit?: number;
+    /** 灵感大厅只展示该来源的提示词；留空表示不限来源。 */
+    inspirationSourceId?: string;
+    /** 视频页签条数，0 表示沿用 promptLimit。 */
+    inspirationVideoLimit?: number;
+    /** 图片页签条数，0 表示沿用 promptLimit。 */
+    inspirationImageLimit?: number;
+};
+
+export type SiteAnnouncement = { id: string; title: string; content: string };
+
+export type SiteInfo = {
+    site: { name: string; description: string; apiIntegrationUrl?: string };
+    home: SiteHomeCopy;
+    creditPriceCents: number;
+    minCredits: number;
+    payTypes: string[];
+    providers: string[];
+    alipayProducts?: ('page' | 'wap')[];
+    announcements: SiteAnnouncement[];
+};
+
+let siteCache: SiteInfo | null = null;
+let sitePending: Promise<SiteInfo> | null = null;
+
+/** 站点信息与首页文案在多个组件里都会用到，合并为一次请求并复用结果。 */
+export function loadSiteInfo() {
+    if (siteCache) return Promise.resolve(siteCache);
+    if (sitePending) return sitePending;
+    sitePending = apiRequest<SiteInfo>("/api/site")
+        .then((data) => {
+            siteCache = data;
+            return data;
+        })
+        .finally(() => {
+            sitePending = null;
+        });
+    return sitePending;
+}
+
+export function clearSiteInfoCache() {
+    siteCache = null;
+}
+
+/** 后台填了就用后台的，没填则回退到传入的默认文案（跟随界面语言）。 */
+export function copyOf(value: unknown, fallback: string) {
+    return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+
+========================================================================
+FILE: web/src/services/api/storage.ts
+LINES: 1-47
+========================================================================
+import { apiRequest } from "./client";
+
+export type StorageCategoryKey = "generated_images" | "generated_videos" | "history_uploads";
+
+export type StorageSummary = {
+    usedBytes: number;
+    limitBytes: number;
+    cleanableFiles: number;
+    cleanableBytes: number;
+    categories: Array<{ key: StorageCategoryKey; files: number; bytes: number }>;
+};
+
+export type StorageItem = {
+    id: string;
+    name: string;
+    kind: string;
+    mime: string;
+    bytes: number;
+    createdAt: string;
+    pinned: boolean;
+    url: string;
+    canDelete: boolean;
+};
+
+export type StoragePage = {
+    total: number;
+    page: number;
+    pageSize: number;
+    category: StorageCategoryKey;
+    items: StorageItem[];
+};
+
+export function fetchStorageSummary() {
+    return apiRequest<StorageSummary>("/api/storage");
+}
+
+export function fetchStorageItems(category: StorageCategoryKey, page = 1, pageSize = 20) {
+    return apiRequest<StoragePage>(`/api/storage/items?${new URLSearchParams({ category, page: String(page), pageSize: String(pageSize) })}`);
+}
+
+export function deleteStorageMedia(id: string) {
+    return apiRequest<{ ok: true }>(`/api/storage/media/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function cleanupHistoryStorage() {
+    return apiRequest<{ deleted: number; bytes: number; failed: number }>("/api/storage/cleanup-history", { method: "POST" });
+}
+
+
+========================================================================
+FILE: web/src/services/api/video-task-wait.ts
+LINES: 1-36
+========================================================================
+import type { VideoGenerationResult, VideoGenerationTaskState } from './video';
+
+export async function waitForVideoResult(poll: () => Promise<VideoGenerationTaskState>, signal?: AbortSignal): Promise<VideoGenerationResult> {
+    const startedAt = Date.now();
+    while (true) {
+        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        let state: VideoGenerationTaskState | undefined;
+        try { state = await poll(); }
+        catch (error) {
+            if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+            // 查询异常不代表生成失败，继续查询同一任务；不创建新任务或改变计费。
+        }
+        if (state?.status === "completed") return state.result;
+        if (state?.status === "failed") {
+            const error = new Error(state.error); error.name = "VideoTaskFailed"; throw error;
+        }
+        if (state?.status === "unavailable") throw new Error(state.error);
+        if (Date.now() - startedAt >= 60 * 60 * 1000) throw new Error("已等待超过 60 分钟，任务结果尚未确认，积分以后台任务状态为准；请查询原任务，不要重复生成。");
+        await delay(5000, signal);
+    }
+}
+
+function delay(ms: number, signal?: AbortSignal) {
+    return new Promise<void>((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(new DOMException("Aborted", "AbortError"));
+            return;
+        }
+        const abort = () => {
+            clearTimeout(timer);
+            reject(new DOMException("Aborted", "AbortError"));
+        };
+        const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, ms);
+        signal?.addEventListener("abort", abort, { once: true });
+    });
+}
+
+
+========================================================================
+FILE: web/src/services/api/video.ts
+LINES: 1-523
+========================================================================
+import axios from "axios";
+import { waitForVideoResult } from "./video-task-wait";
+import { expectedAccountHeaders } from "./account-headers";
+import { refreshGenerationWallet } from "./generation-wallet";
+import { nanoid } from "nanoid";
+
+import i18n from "@/i18n";
+import { friendlyErrorMessage } from "@/lib/error-messages";
+import { dataUrlToFile, readFileAsDataUrl } from "@/lib/image-utils";
+import { clampVideoSecondsToRange, computeVideoSize, inferVideoRatio, parseVideoResolution, videoSecondsRangeForDurations } from "@/lib/media-size";
+import { getMediaBlob, InvalidMediaResponseError, resolveMediaUrl, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
+import { imageToDataUrl } from "@/services/image-storage";
+import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, useConfigStore, withLocalProxy, type AiConfig } from "@/stores/use-config-store";
+import { runModelPlugin } from "./model-plugin";
+import type { ReferenceImage } from "@/types/image";
+import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
+
+type VideoResponse = { id: string; status?: string; review?: boolean; statusMessage?: string; resultAvailable?: boolean | null; error?: string | { message?: string }; url?: string; result_url?: string; video_url?: string; content?: { video_url?: string; url?: string } | null };
+type ApiVideoResponse = VideoResponse | { code?: number | string; data?: VideoResponse | null; msg?: string; message?: string; error?: { message?: string } };
+type ApiEnvelope<T> = T | { code?: number | string; data?: T | null; msg?: string; message?: string; error?: { message?: string } };
+type RequestOptions = { signal?: AbortSignal; expectedUserId?: string; surface?: "canvas" | "workbench"; onProgress?: (message: string) => void };
+type VideoMediaOptions = RequestOptions & { videos?: ReferenceVideo[]; audios?: ReferenceAudio[]; clientTaskId?: string };
+const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
+
+export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
+export type VideoGenerationTask = { id: string; provider: "openai" | "gemini" | "plugin"; model: string };
+type GeminiInlineData = { bytesBase64Encoded: string; mimeType: string };
+type GeminiVideoOperation = {
+    name?: string;
+    done?: boolean;
+    error?: { message?: string };
+    response?: { generateVideoResponse?: { generatedSamples?: Array<{ video?: { uri?: string } }> } };
+};
+export type VideoGenerationTaskState = { status: "pending"; review?: boolean; statusMessage?: string } | { status: "completed"; result: VideoGenerationResult } | { status: "failed"; error: string } | { status: "unavailable"; error: string };
+
+/** Results for scripted (plugin) video models, which run their own create+poll in one shot at task creation. */
+const pluginVideoResults = new Map<string, VideoGenerationResult>();
+
+function aiApiUrl(config: AiConfig, path: string) {
+    return buildApiUrl(config.baseUrl, path);
+}
+
+function aiHeaders(config: AiConfig, contentType?: string, expectedUserId?: string) {
+    return {
+        Authorization: `Bearer ${config.apiKey}`,
+        ...expectedAccountHeaders(aiApiUrl(config, "/videos"), expectedUserId),
+        ...(contentType ? { "Content-Type": contentType } : {}),
+    };
+}
+
+export async function requestVideoGeneration(config: AiConfig, prompt: string, references: ReferenceImage[] = [], options?: VideoMediaOptions): Promise<VideoGenerationResult> {
+    return waitForVideoGenerationTask(config, await createVideoGenerationTask(config, prompt, references, options), options);
+}
+
+export async function waitForVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationResult> {
+    return waitForVideoResult(() => pollVideoGenerationTask(config, task, options), options?.signal);
+}
+
+export function isVideoTaskFailed(error: unknown) {
+    return error instanceof Error && error.name === "VideoTaskFailed";
+}
+
+export function isVideoInsufficientCredits(error: unknown) {
+    return error instanceof Error && error.name === "VideoInsufficientCredits";
+}
+
+export function isVideoSubmissionRejected(error: unknown) {
+    return error instanceof Error && error.name === "VideoSubmissionRejected";
+}
+
+
+export async function createVideoGenerationTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], options?: VideoMediaOptions): Promise<VideoGenerationTask> {
+    try { return await createVideoGenerationTaskInner(config, prompt, references, options); }
+    finally { refreshGenerationWallet(options?.expectedUserId); }
+}
+
+async function createVideoGenerationTaskInner(config: AiConfig, prompt: string, references: ReferenceImage[] = [], options?: VideoMediaOptions): Promise<VideoGenerationTask> {
+    const selectedModel = (config.model || config.videoModel).trim();
+    const requestConfig = resolveModelRequestConfig(config, selectedModel);
+    const script = resolveModelScript(config, selectedModel);
+    if (script) return createPluginVideoTask(requestConfig, selectedModel, script, prompt, references, options);
+    assertVideoConfig(requestConfig, requestConfig.model);
+    return createOpenAIVideoTask(requestConfig, selectedModel, prompt, references, options);
+}
+
+export async function pollVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
+    const state = await pollVideoGenerationTaskInner(config, task, options);
+    if (state.status === 'pending' && state.statusMessage) options?.onProgress?.(state.statusMessage);
+    if (state.status !== "pending") refreshGenerationWallet(options?.expectedUserId);
+    return state;
+}
+
+async function pollVideoGenerationTaskInner(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
+    if (task.provider === "plugin") {
+        const result = pluginVideoResults.get(task.id);
+        return result ? { status: "completed", result } : { status: "failed", error: apiText("pluginVideoExpired") };
+    }
+    const requestConfig = resolveModelRequestConfig(config, task.model);
+    assertVideoConfig(requestConfig, requestConfig.model);
+    if (task.provider === "gemini") return pollGeminiVideoTask(requestConfig, task, options);
+    return pollOpenAIVideoTask(requestConfig, task, options);
+}
+
+async function createPluginVideoTask(config: AiConfig, model: string, script: string, prompt: string, references: ReferenceImage[], options?: VideoMediaOptions): Promise<VideoGenerationTask> {
+    if (!config.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
+    if (!config.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
+    const refs = await Promise.all(references.map((image) => imageToDataUrl(image)));
+    const videos = await Promise.all((options?.videos || []).map((video) => referenceMediaToFile(video, "ref.mp4", "invalidReferenceVideo", options)));
+    const audios = await Promise.all((options?.audios || []).map((audio) => referenceMediaToFile(audio, "ref.mp3", "invalidReferenceAudio", options)));
+    const result = videoPluginResult(
+        await runModelPlugin({
+            capability: "video",
+            script,
+            config,
+            prompt,
+            images: refs,
+            videos,
+            audios,
+            params: {
+                seconds: normalizeVideoSeconds(config.videoSeconds, model),
+                size: normalizeVideoSize(config.size, config.vquality),
+                resolution: normalizeVideoResolution(config.vquality),
+                ratio: videoAspectRatio(config.size),
+                generateAudio: boolConfig(config.videoGenerateAudio, true),
+                watermark: boolConfig(config.videoWatermark, false),
+                mode: resolveVideoMode(config.videoMode, refs.length),
+            },
+            signal: options?.signal,
+        }),
+    );
+    const id = nanoid();
+    pluginVideoResults.set(id, result);
+    return { id, provider: "plugin", model };
+}
+
+function videoPluginResult(result: unknown): VideoGenerationResult {
+    if (result instanceof Blob) return { blob: result };
+    if (typeof result === "string") return { url: result, mimeType: "video/mp4" };
+    if (result && typeof result === "object") {
+        const record = result as Record<string, unknown>;
+        if (record.blob instanceof Blob) return { blob: record.blob };
+        const url = [record.url, record.video_url, record.result_url].find((value) => typeof value === "string" && value) as string | undefined;
+        if (url) return { url, mimeType: "video/mp4" };
+    }
+    throw new Error(apiText("scriptNoVideo"));
+}
+
+export async function storeGeneratedVideo(result: VideoGenerationResult, options?: { expectedOwner?: string | null; signal?: AbortSignal }): Promise<UploadedFile> {
+    if (result.blob) return uploadMediaFile(result.blob, "video", options);
+    if (result.url) {
+        try {
+            return await uploadMediaFile(result.url, "video", options);
+        } catch (error) {
+            if (error instanceof InvalidMediaResponseError || (error instanceof Error && error.name === "AbortError")) throw error;
+            return { url: result.url, storageKey: "", bytes: 0, mimeType: result.mimeType || "video/mp4" };
+        }
+    }
+    throw new Error(apiText("noPlayableVideo"));
+}
+
+function mediaKeyFromUrl(value?: string) {
+    if (!value) return "";
+    const path = value.startsWith("http") ? (() => { try { return new URL(value).pathname; } catch { return ""; } })() : value.split(/[?#]/)[0];
+    const marker = "/media/";
+    const index = path.indexOf(marker);
+    if (index < 0) return "";
+    const key = decodeURIComponent(path.slice(index + marker.length));
+    return key.startsWith("private/") || key.startsWith("upload/") ? key : "";
+}
+
+type PreparedReference = { file: File } | { key: string; name: string; mime: string };
+
+/**
+ * 参考视频/音频已经存在本站媒体库时只传对象键，由服务端直接取文件。
+ * 旧做法是把文件整包下载回浏览器再塞进提交请求：手机上常见 100-200MB 的视频会让请求体翻倍，
+ * 既超出 nginx 的请求体上限（直接 413），上行慢的手机还会在上传阶段超时或被系统回收标签页。
+ */
+async function prepareReferenceMedia(
+    item: { name: string; type?: string; url?: string; storageKey?: string },
+    fallbackName: string,
+    errorKey: "invalidReferenceVideo" | "invalidReferenceAudio",
+    options?: RequestOptions,
+): Promise<PreparedReference> {
+    const key = item.storageKey ? "" : mediaKeyFromUrl(item.url);
+    if (key) return { key, name: key.split("/").pop() || item.name || fallbackName, mime: item.type || "application/octet-stream" };
+    return { file: await referenceMediaToFile(item, fallbackName, errorKey, options) };
+}
+
+async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: VideoMediaOptions): Promise<VideoGenerationTask> {
+    const prepare = async () => {
+        const images: PreparedReference[] = await Promise.all(references.map(async (image) => {
+            const key = mediaKeyFromUrl(image.url) || mediaKeyFromUrl(image.dataUrl);
+            if (key) return { key, name: image.name, mime: image.type || "image/png" };
+            return { file: await dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) }) };
+        }));
+        const videos = await Promise.all((options?.videos || []).map((video) => prepareReferenceMedia(video, "ref.mp4", "invalidReferenceVideo", options)));
+        const audios = await Promise.all((options?.audios || []).map((audio) => prepareReferenceMedia(audio, "ref.mp3", "invalidReferenceAudio", options)));
+        return { images, videos, audios };
+    };
+    const { images, videos, audios } = await prepare().catch((error: unknown) => {
+        if (error instanceof Error && error.name === "AbortError") throw error;
+        const rejected = new Error(error instanceof Error ? error.message : apiText("videoTaskCreateFailed"));
+        rejected.name = "VideoSubmissionRejected";
+        throw rejected;
+    });
+    const mode = resolveVideoMode(config.videoMode, images.length);
+    const ratio = inferVideoRatio(config.size || "16:9");
+    const body = new FormData();
+    body.append("model", modelOptionName(model));
+    if (config.videoRouteId && model.startsWith('server::')) body.append("routeId", config.videoRouteId);
+    if (options?.clientTaskId) body.append("clientTaskId", options.clientTaskId);
+    body.append("prompt", prompt);
+    body.append("seconds", normalizeVideoSeconds(config.videoSeconds, model));
+    body.append("size", normalizeVideoSize(config.size, config.vquality) || "1280x720");
+    if (ratio && ratio !== "auto") {
+        body.append("ratio", ratio);
+    }
+    body.append("resolution_name", normalizeVideoResolution(config.vquality));
+    body.append("generate_audio", String(boolConfig(config.videoGenerateAudio, true)));
+    body.append("watermark", String(boolConfig(config.videoWatermark, false)));
+    body.append("mode", mode);
+    const referenceKeys: { field: string; key: string; name: string; mime: string }[] = [];
+    const appendImage = (field: string, item: PreparedReference, filename: string) => {
+        if ("key" in item) referenceKeys.push({ field, key: item.key, name: filename, mime: item.mime });
+        else body.append(field, item.file, filename);
+    };
+    // 视频/音频沿用媒体库里的原始文件名：保留真实扩展名，且每个对象键天然唯一。
+    const appendMedia = (field: string, item: PreparedReference, fallbackName: string) => {
+        if ("key" in item) referenceKeys.push({ field, key: item.key, name: item.name || fallbackName, mime: item.mime });
+        else body.append(field, item.file);
+    };
+    if (mode === "frames") {
+        if (images[0]) appendImage("first_frame", images[0], "first.png");
+        if (images[1]) appendImage("last_frame", images[1], "last.png");
+    } else {
+        images.forEach((item, idx) => appendImage("image[]", item, `ref_${idx + 1}.png`));
+    }
+    videos.forEach((item, idx) => appendMedia("video[]", item, `ref_video_${idx + 1}.mp4`));
+    audios.forEach((item, idx) => appendMedia("audio[]", item, `ref_audio_${idx + 1}.mp3`));
+    // 所有参考素材登记完再写 referenceKeys，服务端按字段名把它们还原成对应的文件。
+    if (referenceKeys.length) body.append("referenceKeys", JSON.stringify(referenceKeys));
+    try {
+        const send = (confirmed = false) => axios.post<ApiVideoResponse>(aiApiUrl(config, "/videos"), body, { headers: { ...aiHeaders(config, undefined, options?.expectedUserId), ...(options?.surface ? { 'X-Sundas-Surface': options.surface } : {}), ...(confirmed ? { 'X-Confirm-Duplicate': 'true' } : {}) }, signal: options?.signal });
+        let response;
+        try { response = await send(); }
+        catch (error) {
+            if (!axios.isAxiosError(error) || error.response?.data?.errorCode !== 'DUPLICATE_VIDEO_IN_PROGRESS') throw error;
+            if (!window.confirm('已经有一条相同的内容正在生成中，继续提交会再次消耗积分。是否继续？')) {
+                const cancelled = new Error('已取消重复提交');
+                cancelled.name = 'VideoSubmissionRejected';
+                throw cancelled;
+            }
+            response = await send(true);
+        }
+        const created = unwrapVideoResponse(response.data);
+        if (!created.id) throw new Error(apiText("noVideoTaskId"));
+        return { id: created.id, provider: "openai", model };
+    } catch (error) {
+        if (isVideoSubmissionRejected(error)) throw error;
+        if (axios.isAxiosError(error) && error.response?.status === 402) {
+            const insufficientCredits = new Error("积分不足，请充值后再生成视频");
+            insufficientCredits.name = "VideoInsufficientCredits";
+            throw insufficientCredits;
+        }
+        const message = new Error(readVideoSubmissionError(error));
+        if (axios.isAxiosError(error) && error.response && [400, 401, 403, 404, 409, 413, 415, 422, 429].includes(error.response.status)) message.name = "VideoSubmissionRejected";
+        throw message;
+    }
+}
+
+/**
+ * 提交失败时要给出能据此行动的原因。
+ * 手机端最常见的是请求体过大被网关拒绝（413）和慢速上行中断（无响应），
+ * 这两类错误此前只剩一句“视频任务创建失败”，用户无法判断该怎么处理。
+ */
+function readVideoSubmissionError(error: unknown) {
+    if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        if (status === 413) return "提交内容过大，服务器拒绝了本次请求（413）。请压缩或减少参考视频/图片后重试。";
+        if (status === 409) return readApiErrorMessage(error.response?.data) || "登录账户已变化，请刷新页面后重试。";
+        if (status === 415) return readApiErrorMessage(error.response?.data) || "参考素材格式不受支持，请换成常见的 JPG/PNG、MP4 或 MP3 后重试。";
+        if (status === 429) return apiText("rateLimited");
+        if (status === 502 || status === 503 || status === 504) return `网关返回 ${status}，提交结果未确认。请先刷新生成记录，确认没有已创建的任务后再重试。`;
+        if (!error.response) return error.code === "ECONNABORTED" ? "提交超时，网络较慢时请减少参考素材或改用更小的文件后重试。" : "网络异常，提交没有完成，请检查网络后重试。";
+    }
+    return readAxiosError(error, apiText("videoTaskCreateFailed"));
+}
+
+async function pollOpenAIVideoTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
+    try {
+        const video = unwrapVideoResponse((await axios.get<ApiVideoResponse>(aiApiUrl(config, `/videos/${task.id}`), { headers: aiHeaders(config, undefined, options?.expectedUserId), signal: options?.signal })).data);
+        if (video.status === "completed" && video.resultAvailable === false) return { status: "unavailable", error: "任务已完成，但视频记录不可用，请联系管理员核查。" };
+        const url = videoResultUrl(video);
+        if (url) return { status: "completed", result: await videoResultFromUrl(url, options) };
+        if (video.status === "completed") {
+            const content = await axios.get<Blob>(aiApiUrl(config, `/videos/${task.id}/content`), { headers: aiHeaders(config, undefined, options?.expectedUserId), responseType: "blob", signal: options?.signal });
+            await assertVideoBlob(content.data);
+            return { status: "completed", result: { blob: content.data } };
+        }
+        if (video.status === "failed" || video.status === "cancelled") return { status: "failed", error: readApiErrorMessage(typeof video.error === "string" ? video.error : video.error?.message) || apiText("videoGenerationFailed") };
+        return { status: "pending", review: video.review, statusMessage: video.statusMessage };
+    } catch (error) {
+        throw new Error(readAxiosError(error, apiText("videoTaskQueryFailed")));
+    }
+}
+
+async function videoResultFromUrl(url: string, options?: RequestOptions): Promise<VideoGenerationResult> {
+    try {
+        const response = await axios.get<Blob>(withLocalProxy(url), { responseType: "blob", signal: options?.signal });
+        await assertVideoBlob(response.data);
+        return { blob: response.data };
+    } catch (error) {
+        if (axios.isCancel(error) || options?.signal?.aborted) throw error;
+        return { url, mimeType: "video/mp4" };
+    }
+}
+
+async function createGeminiVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: VideoMediaOptions): Promise<VideoGenerationTask> {
+    const images = await Promise.all(references.map((image) => imageToDataUrl(image)));
+    const videos = await Promise.all((options?.videos || []).map((video) => referenceMediaToFile(video, "ref.mp4", "invalidReferenceVideo", options)));
+    const audios = await Promise.all((options?.audios || []).map((audio) => referenceMediaToFile(audio, "ref.mp3", "invalidReferenceAudio", options)));
+    const mode = resolveVideoMode(config.videoMode, images.length);
+    const instance: Record<string, unknown> = { prompt };
+    if (mode === "frames") {
+        if (images[0]) instance.image = parseDataUrlInline(images[0]);
+        if (images[1]) instance.lastFrame = parseDataUrlInline(images[1]);
+    } else {
+        instance.referenceImages = images.map((dataUrl) => ({ image: parseDataUrlInline(dataUrl), referenceType: "asset" }));
+    }
+    if (videos[0]) instance.video = await fileToGeminiInline(videos[0]);
+    if (audios[0]) instance.audio = await fileToGeminiInline(audios[0]);
+    try {
+        const created = unwrapEnvelope((await axios.post<ApiEnvelope<GeminiVideoOperation>>(geminiVideoUrl(config, model, "predictLongRunning"), {
+            instances: [instance],
+            parameters: {
+                aspectRatio: videoAspectRatio(config.size),
+                durationSeconds: Number(normalizeVideoSeconds(config.videoSeconds, model)) || 8,
+                resolution: normalizeVideoResolution(config.vquality),
+                generateAudio: boolConfig(config.videoGenerateAudio, true),
+                addWatermark: boolConfig(config.videoWatermark, false),
+            },
+        }, { headers: geminiVideoHeaders(config), signal: options?.signal })).data, apiText("noVideoTask"));
+        if (!created.name) throw new Error(apiText("noVideoTaskId"));
+        return { id: created.name, provider: "gemini", model };
+    } catch (error) {
+        throw new Error(readAxiosError(error, apiText("videoTaskCreateFailed")));
+    }
+}
+
+async function pollGeminiVideoTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
+    try {
+        const state = unwrapEnvelope((await axios.get<ApiEnvelope<GeminiVideoOperation>>(geminiOperationUrl(config, task.id), { headers: geminiVideoHeaders(config), signal: options?.signal })).data, apiText("videoTaskQueryFailed"));
+        if (state.error) return { status: "failed", error: readApiErrorMessage(state.error.message) || apiText("videoGenerationFailed") };
+        if (!state.done) return { status: "pending" };
+        const uri = state.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
+        if (!uri) return { status: "failed", error: apiText("noPlayableVideo") };
+        const url = uri.includes("key=") ? uri : `${uri}${uri.includes("?") ? "&" : "?"}key=${config.apiKey}`;
+        return { status: "completed", result: await videoResultFromUrl(url, options) };
+    } catch (error) {
+        throw new Error(readAxiosError(error, apiText("videoTaskQueryFailed")));
+    }
+}
+
+function assertVideoConfig(config: AiConfig, model: string) {
+    if (!model) throw new Error(apiText("videoModelRequired"));
+    if (!config.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
+    if (!config.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
+}
+
+function geminiVideoBaseUrl(config: Pick<AiConfig, "baseUrl">) {
+    const normalizedBaseUrl = config.baseUrl.trim().replace(/\/+$/, "");
+    const lowerBaseUrl = normalizedBaseUrl.toLowerCase();
+    return lowerBaseUrl.endsWith("/v1") || lowerBaseUrl.endsWith("/v1beta") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1beta`;
+}
+
+function geminiVideoUrl(config: Pick<AiConfig, "baseUrl">, model: string, action: string) {
+    return withLocalProxy(`${geminiVideoBaseUrl(config)}/models/${encodeURIComponent(modelOptionName(model).replace(/^models\//, ""))}:${action}`);
+}
+
+function geminiOperationUrl(config: Pick<AiConfig, "baseUrl">, name: string) {
+    return withLocalProxy(`${geminiVideoBaseUrl(config)}/${name.replace(/^\//, "")}`);
+}
+
+function geminiVideoHeaders(config: Pick<AiConfig, "apiKey">) {
+    return { "x-goog-api-key": config.apiKey, "Content-Type": "application/json" };
+}
+
+function videoAspectRatio(size: string) {
+    const ratio = inferVideoRatio(size);
+    return ratio === "auto" ? "16:9" : ratio;
+}
+
+function parseDataUrlInline(dataUrl: string, fallbackType = "image/png"): GeminiInlineData {
+    const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+    return { bytesBase64Encoded: match?.[2] || "", mimeType: match?.[1] || fallbackType };
+}
+
+async function fileToGeminiInline(file: File): Promise<GeminiInlineData> {
+    return parseDataUrlInline(await readFileAsDataUrl(file), file.type || "application/octet-stream");
+}
+
+async function referenceMediaToFile(item: { name: string; type?: string; url?: string; storageKey?: string }, fallbackName: string, errorKey: "invalidReferenceVideo" | "invalidReferenceAudio", options?: RequestOptions) {
+    let blob = item.storageKey ? await getMediaBlob(item.storageKey) : null;
+    if (!blob) {
+        const url = item.storageKey ? await resolveMediaUrl(item.storageKey, item.url || "") : item.url || "";
+        if (!url) throw new Error(apiText(errorKey));
+        try {
+            const response = await fetch(url, { signal: options?.signal });
+            if (!response.ok) throw new Error(apiText(errorKey));
+            blob = await response.blob();
+        } catch (error) {
+            if (error instanceof DOMException && error.name === "AbortError") throw error;
+            throw new Error(apiText(errorKey));
+        }
+    }
+    if (!blob.size) throw new Error(apiText(errorKey));
+    return new File([blob], item.name || fallbackName, { type: item.type || blob.type || "application/octet-stream" });
+}
+
+function normalizeVideoSeconds(value: string, model?: string) {
+    const serverModel = useConfigStore.getState().serverModels.find((item) => item.id === modelOptionName(model ?? ""));
+    const { min, max } = videoSecondsRangeForDurations((serverModel?.metadata as { durations?: { min?: number; max?: number } } | undefined)?.durations);
+    return clampVideoSecondsToRange(value, min, max);
+}
+
+function resolveVideoMode(mode: string | undefined, imageCount: number) {
+    if (mode === "reference" || imageCount > 2) return "reference";
+    return "frames";
+}
+
+function normalizeVideoSize(value: string, resolution?: string) {
+    if (value === "auto") return null;
+    if (/^\d+x\d+$/.test(value || "")) return value;
+    const ratio = inferVideoRatio(value || "16:9");
+    if (ratio === "auto") return null;
+    return computeVideoSize(resolution || "720", ratio);
+}
+
+function normalizeVideoResolution(value: string) {
+    const resolution = parseVideoResolution(value);
+    return resolution === "2k" || resolution === "4k" ? resolution : `${resolution}p`;
+}
+
+function unwrapVideoResponse(payload: ApiVideoResponse) {
+    return unwrapEnvelope(payload, apiText("noVideoTask"));
+}
+
+function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {
+    if (!payload) throw new Error(emptyMessage);
+    if (typeof payload === "object" && "code" in payload && payload.code !== undefined) {
+        if (payload.code !== 0 && payload.code !== "0") throw new Error(readApiErrorMessage(payload) || apiText("requestFailed"));
+        if (!payload.data) throw new Error(emptyMessage);
+        return payload.data;
+    }
+    return payload as T;
+}
+
+function videoResultUrl(payload: VideoResponse) {
+    return [payload.video_url, payload.result_url, payload.url, payload.content?.video_url, payload.content?.url].find((url) => typeof url === "string" && (isPublicMediaUrl(url) || /\.mp4(\?|#|$)/i.test(url)));
+}
+
+function readApiErrorMessage(value: unknown): string {
+    if (!value) return "";
+    if (typeof value === "string") {
+        try {
+            const parsed = JSON.parse(value);
+            const inner = readApiErrorMessage(parsed) || value;
+            if (inner === value && typeof parsed === "object" && Object.keys(parsed).length === 0) return "";
+            return inner;
+        } catch {
+            if (/<[a-z][\s\S]*>/i.test(value)) return apiText("htmlError", { preview: `${value.slice(0, 80)}...` });
+            return friendlyErrorMessage(value);
+        }
+    }
+    if (typeof value !== "object") return "";
+    const payload = value as { msg?: unknown; message?: unknown; error?: unknown; detail?: unknown };
+    // error may be a string or an object containing a message.
+    const errorMsg =
+        typeof payload.error === "string"
+            ? payload.error
+            : (payload.error as { message?: unknown })?.message;
+    return friendlyErrorMessage(
+        readApiErrorMessage(payload.msg) ||
+        readApiErrorMessage(payload.message) ||
+        readApiErrorMessage(errorMsg) ||
+        readApiErrorMessage(payload.detail) ||
+        ""
+    );
+}
+
+function readAxiosError(error: unknown, fallback: string) {
+    if (axios.isCancel(error)) return apiText("requestCanceled");
+    if (axios.isAxiosError<{ error?: { message?: string }; msg?: string; message?: string; code?: number | string }>(error)) {
+        if (!error.response && error.code === "ERR_NETWORK") return apiText("requestFailed");
+        const responseData = error.response?.data;
+        return readApiErrorMessage(responseData) || statusMessage(error.response?.status, fallback);
+    }
+    if (error instanceof DOMException && error.name === "AbortError") return apiText("requestCanceled");
+    return error instanceof Error ? readApiErrorMessage(error.message) || error.message : fallback;
+}
+
+function statusMessage(status: number | undefined, fallback: string) {
+    if (status === 401 || status === 403) return apiText("authenticationFailed");
+    if (status === 429) return apiText("rateLimited");
+    return status ? `${fallback}（${status}）` : fallback;
+}
+
+async function assertVideoBlob(blob: Blob) {
+    if (!blob.type.includes("json")) return;
+    let payload: { code?: number; msg?: string; error?: { message?: string } };
+    try {
+        payload = JSON.parse(await blob.text()) as { code?: number; msg?: string; error?: { message?: string } };
+    } catch {
+        return;
+    }
+    if (typeof payload.code === "number" && payload.code !== 0) throw new Error(readApiErrorMessage(payload) || apiText("videoDownloadFailed"));
+    if (payload.error?.message) throw new Error(readApiErrorMessage(payload.error.message) || payload.error.message);
+}
+
+function isPublicMediaUrl(value: string) {
+    return /^https?:\/\//i.test(value || "");
+}
+
+
+
+========================================================================
+FILE: web/src/services/cloud-media.ts
+LINES: 1-204
+========================================================================
+import { notification } from "antd";
+import i18n from "@/i18n";
+import { useAuthStore } from "@/stores/use-auth-store";
+
+const EXT: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
+    "video/x-m4v": "m4v",
+    "audio/mpeg": "mp3",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/ogg": "ogg",
+    // 手机录音多为 m4a/aac，缺映射时会被当成 .bin 上传，服务端与上游都难判断格式。
+    "audio/mp4": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/aac": "aac",
+    "audio/flac": "flac",
+    "audio/x-flac": "flac",
+    "audio/aiff": "aiff",
+};
+
+export function isOwnMediaUrl(value: string) {
+    if (value.startsWith("/media/")) return true;
+    return typeof window !== "undefined" && value.startsWith(`${window.location.origin}/media/`);
+}
+
+export function currentMediaOwner() {
+    const auth = useAuthStore.getState();
+    return auth.ready ? auth.user?.id ?? null : null;
+}
+
+export function assertMediaOwner(owner: string | null, signal?: AbortSignal) {
+    if (signal?.aborted || currentMediaOwner() !== owner) throw new DOMException("Account changed or request canceled", "AbortError");
+}
+
+export function localMediaKey(prefix: string, owner: string | null, id: string) {
+    return owner ? `${prefix}:user:${owner}:${id}` : `${prefix}:unowned:${id}`;
+}
+
+export class LocalMediaOwnershipError extends Error {
+    name = "LocalMediaOwnershipError";
+    constructor() { super("本地素材引用了其他账户的文件，请核对历史素材后重试"); }
+}
+
+export class StorageQuotaError extends Error {
+    constructor(message: string) { super(message); this.name = "StorageQuotaError"; }
+}
+
+export function assertLocalMediaOwner(key: string, owner = currentMediaOwner()) {
+    const match = key.match(/^[^:]+:user:([^:]+):/);
+    if (match && (!owner || match[1] !== owner)) throw new LocalMediaOwnershipError();
+}
+
+export function notifyLocalMediaOnly(owner: string | null) {
+    if (!owner || currentMediaOwner() !== owner) return;
+    notification.warning({ key: "media-local-only", message: i18n.t("common.mediaLocalOnlyTitle"), description: i18n.t("common.mediaLocalOnlyDescription"), duration: 0 });
+}
+
+const UPLOAD_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+function isImageUpload(blob: Blob, prefix: string) {
+    return blob.type.toLowerCase().startsWith("image/") || ["image", "reference", "promo", "prompts"].includes(prefix);
+}
+
+async function normalizeImageForUpload(blob: Blob, prefix: string, force = false) {
+    if (!isImageUpload(blob, prefix)) return blob;
+    if (!force && UPLOAD_IMAGE_TYPES.has(blob.type.toLowerCase())) return blob;
+
+    let source: ImageBitmap | HTMLImageElement | undefined;
+    let bitmap: ImageBitmap | undefined;
+    let image: HTMLImageElement | undefined;
+    let sourceUrl: string | undefined;
+    try {
+        if (typeof createImageBitmap === "function") {
+            try { bitmap = await createImageBitmap(blob); source = bitmap; } catch { bitmap = undefined; }
+        }
+        if (!source) {
+            sourceUrl = URL.createObjectURL(blob);
+            image = new Image();
+            image.decoding = "async";
+            await new Promise<void>((resolve, reject) => {
+                image!.onload = () => resolve();
+                image!.onerror = () => reject(new Error("image decode failed"));
+                image!.src = sourceUrl!;
+            });
+            source = image;
+        }
+        const width = bitmap ? bitmap.width : image?.naturalWidth ?? 0;
+        const height = bitmap ? bitmap.height : image?.naturalHeight ?? 0;
+        if (!width || !height) throw new Error("image has no dimensions");
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("canvas unavailable");
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, width, height);
+        context.drawImage(source, 0, 0, width, height);
+        const jpeg = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+        if (!jpeg) throw new Error("image conversion failed");
+        return new Blob([jpeg], { type: "image/jpeg" });
+    } finally {
+        if (bitmap) bitmap.close();
+        if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+    }
+}
+
+function uploadWithProgress(url: string, form: FormData, owner: string, signal: AbortSignal, onProgress: (progress: number) => void) {
+    return new Promise<Response>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const cleanup = () => signal.removeEventListener("abort", abort);
+        const abort = () => xhr.abort();
+        xhr.open("POST", url);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader("X-Sundas-User", owner);
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable && event.total > 0) onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+        };
+        xhr.onload = () => resolve(new Response(xhr.responseText, { status: xhr.status, headers: { "content-type": xhr.getResponseHeader("content-type") || "" } }));
+        xhr.onerror = () => reject(new TypeError("Network request failed"));
+        xhr.onabort = () => reject(new DOMException("Upload aborted", "AbortError"));
+        xhr.ontimeout = () => reject(new DOMException("Upload timed out", "AbortError"));
+        xhr.onloadend = cleanup;
+        if (signal.aborted) {
+            cleanup();
+            reject(new DOMException("Upload aborted", "AbortError"));
+            return;
+        }
+        signal.addEventListener("abort", abort, { once: true });
+        onProgress(0);
+        xhr.send(form);
+    });
+}
+
+export async function uploadBlobToServer(blob: Blob, prefix: string, expectedOwner = currentMediaOwner(), signal?: AbortSignal, reportError = false, normalize = true, onProgress?: (progress: number) => void) {
+    if (!blob.size) return null;
+    const owner = expectedOwner;
+    assertMediaOwner(owner, signal);
+    if (!owner) return null;
+    const notifyUnsupported = () => notification.error({ key: "image-format-unsupported", message: i18n.t("common.unsupportedImageFormatTitle"), description: i18n.t("common.unsupportedImageFormatDescription") });
+    let upload: Blob = blob;
+    if (normalize) {
+        try { upload = await normalizeImageForUpload(blob, prefix); }
+        catch { notifyUnsupported(); return null; }
+    }
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
+    const timer = window.setTimeout(() => controller.abort(), 180_000);
+    const send = async (body: Blob) => {
+        if (!['promo', 'prompts', 'prompt-video'].includes(prefix)) {
+            const { tryDirectMediaUpload } = await import('@/services/api/media-upload');
+            const direct = await tryDirectMediaUpload(body, { owner, signal: controller.signal, onProgress });
+            assertMediaOwner(owner, controller.signal);
+            if (direct) return direct;
+        }
+        const form = new FormData();
+        form.append("file", body, `${prefix}.${EXT[body.type] ?? "bin"}`);
+        const url = prefix === 'promo' ? '/api/admin/promo/upload' : ['prompts', 'prompt-video'].includes(prefix) ? '/api/admin/prompts/upload' : '/api/uploads';
+        return onProgress ? uploadWithProgress(url, form, owner, controller.signal, onProgress) : fetch(url, { method: "POST", body: form, credentials: "include", headers: { "X-Sundas-User": owner }, signal: controller.signal });
+    };
+    assertMediaOwner(owner, signal);
+    let response: Response;
+    try {
+        response = await send(upload);
+        if (response.status === 400 && !response.headers.get("content-type")?.includes("application/json")) {
+            response = await send(upload);
+        }
+        if (normalize && response.status === 415 && isImageUpload(blob, prefix)) {
+            try {
+                const converted = await normalizeImageForUpload(blob, prefix, true);
+                if (converted !== upload) response = await send(converted);
+            } catch { notifyUnsupported(); return null; }
+        }
+    } catch (error) {
+        if (signal?.aborted) throw error;
+        if (controller.signal.aborted) throw new DOMException("Upload timed out", "AbortError");
+        throw error;
+    } finally {
+        window.clearTimeout(timer);
+        signal?.removeEventListener("abort", abort);
+    }
+    if (!response.ok) {
+        const body = await response.json().catch(() => null) as { message?: unknown; errorCode?: unknown } | null;
+        if (body?.errorCode === "STORAGE_QUOTA_EXCEEDED") {
+            void useAuthStore.getState().refreshWallet().catch(() => undefined);
+            throw new StorageQuotaError(typeof body.message === "string" ? body.message : i18n.t("home.materialUploadFailed"));
+        }
+        if (reportError) {
+            throw new Error(typeof body?.message === "string" ? body.message : i18n.t("home.materialUploadFailed"));
+        }
+        return null;
+    }
+    const result = (await response.json()) as { url: string; mime: string; bytes: number };
+    assertMediaOwner(owner, signal);
+    return result;
+}
+
+
+
+========================================================================
+FILE: web/src/services/desktop-update-preparation.ts
+LINES: 1-32
+========================================================================
+type PrepareEditor = () => void | Promise<void>;
+
+/**
+ * 桌面更新前的编辑器准备钩子（sundas 精简版）。
+ *
+ * BeefTV 桌面端在更新前要等编辑器落盘；sundas 是纯 Web，没有原生宿主，
+ * 但导演台的保存协调器仍然注册这个钩子来表达「我还有未落盘的内容」。
+ * 这里保留注册/注销与会话级查询，让调用方代码零改动、语义不丢。
+ */
+const editors = new Set<{ prepare: PrepareEditor; isSaving: () => boolean; mounted: boolean }>();
+
+export function registerDesktopUpdatePreparation(prepare: PrepareEditor, isSaving: () => boolean = () => false) {
+    const editor = { prepare, isSaving, mounted: true };
+    editors.add(editor);
+    return () => {
+        editor.mounted = false;
+        if (!isSaving()) editors.delete(editor);
+    };
+}
+
+export async function prepareDesktopEditorsForUpdate() {
+    for (const editor of [...editors]) if (editor.mounted) await editor.prepare();
+}
+
+export function hasActiveDesktopEditorSaves() {
+    let saving = false;
+    for (const editor of editors) {
+        if (editor.isSaving()) saving = true;
+        else if (!editor.mounted) editors.delete(editor);
+    }
+    return saving;
+}
+
+
+========================================================================
+FILE: web/src/services/diagnostics/client-diagnostics.ts
+LINES: 1-22
+========================================================================
+/**
+ * 客户端诊断（sundas 精简版）。
+ *
+ * BeefTV 有一套带本地事件存储、上传与去重的诊断管道；sundas 还没有对应后端，
+ * 这里保留 recordDiagnosticEvent 的签名，开发环境落到 console，生产环境静默丢弃。
+ * 目的只有一个：让从 BeefTV 平移过来的调用点保持可编译、可观测、且不引入新后端依赖。
+ */
+export type DiagnosticEventInput = {
+    level: "info" | "warning" | "error";
+    category?: string;
+    code?: string;
+    message: string;
+    detail?: Record<string, unknown>;
+    timestamp?: string;
+};
+
+export function recordDiagnosticEvent(input: DiagnosticEventInput) {
+    if (!import.meta.env.DEV) return;
+    const line = `[diagnostic:${input.level}] ${input.code || input.category || "runtime"} — ${input.message}`;
+    if (input.level === "error") console.warn(line, input.detail ?? "");
+    else console.info(line, input.detail ?? "");
+}
+
+
+========================================================================
+FILE: web/src/services/file-storage.ts
+LINES: 1-151
+========================================================================
+import { nanoid } from "nanoid";
+
+import { assertLocalMediaOwner, assertMediaOwner, currentMediaOwner, isOwnMediaUrl, localMediaKey, notifyLocalMediaOnly, StorageQuotaError, uploadBlobToServer } from "@/services/cloud-media";
+import { lazyStore } from "@/lib/localforage-store";
+import { withLocalProxy } from "@/stores/use-config-store";
+import { MediaObjectUrls, registerSessionMediaCache } from "@/lib/media-object-urls";
+
+export type UploadedFile = { mediaId?: string; taskId?: string; objectKey?: string; url: string; storageKey: string; bytes: number; mimeType: string; width?: number; height?: number; durationMs?: number };
+
+const store = lazyStore("media_files");
+const objectUrls = registerSessionMediaCache(new MediaObjectUrls());
+
+export class InvalidMediaResponseError extends Error {
+    constructor() { super("媒体地址返回了错误或无效内容，请检查来源后重试"); this.name = "InvalidMediaResponseError"; }
+}
+
+export async function uploadMediaFile(input: string | Blob, prefix = "file", options?: { expectedOwner?: string | null; signal?: AbortSignal }): Promise<UploadedFile> {
+    const owner = options?.expectedOwner === undefined ? currentMediaOwner() : options.expectedOwner;
+    assertMediaOwner(owner, options?.signal);
+    if (typeof input === "string" && isOwnMediaUrl(input)) {
+        const meta = await readMediaMetaByUrl(input);
+        assertMediaOwner(owner, options?.signal);
+        return { url: input, storageKey: "", bytes: 0, mimeType: "", ...meta };
+    }
+
+    let blob: Blob;
+    if (typeof input === "string") {
+        const response = await fetch(withLocalProxy(input), { signal: options?.signal });
+        const contentType = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
+        if (!response.ok || contentType.startsWith("text/") || contentType === "application/json" || contentType.endsWith("+json")) throw new InvalidMediaResponseError();
+        blob = await response.blob();
+        if (!blob.size) throw new InvalidMediaResponseError();
+    } else blob = input;
+    assertMediaOwner(owner, options?.signal);
+    const uploaded = await uploadBlobToServer(blob, prefix, owner, options?.signal).catch((error) => { if (error instanceof StorageQuotaError) throw error; return null; });
+    assertMediaOwner(owner, options?.signal);
+    const probeUrl = URL.createObjectURL(blob);
+    const meta = blob.type.startsWith("video/") ? await readVideoMeta(probeUrl) : blob.type.startsWith("audio/") ? await readAudioMeta(probeUrl) : {};
+    URL.revokeObjectURL(probeUrl);
+    assertMediaOwner(owner, options?.signal);
+
+    if (uploaded) {
+        return { url: uploaded.url, storageKey: "", bytes: blob.size, mimeType: blob.type || "application/octet-stream", ...meta };
+    }
+
+    const storageKey = localMediaKey(prefix, owner, nanoid());
+    await store.setItem(storageKey, blob);
+    try { assertMediaOwner(owner, options?.signal); } catch (error) { await store.removeItem(storageKey); throw error; }
+    notifyLocalMediaOnly(owner);
+    const url = URL.createObjectURL(blob);
+    objectUrls.set(storageKey, url);
+    return { url, storageKey, bytes: blob.size, mimeType: blob.type || "application/octet-stream", ...meta };
+}
+
+function readMediaMetaByUrl(url: string) {
+    if (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(url)) return readVideoMeta(url);
+    if (/\.(mp3|wav|ogg|m4a|aac|flac)(\?|$)/i.test(url)) return readAudioMeta(url);
+    return Promise.resolve({});
+}
+
+export async function resolveMediaUrl(storageKey?: string, fallback = "", hydration?: { owner: string; isActive: () => boolean }) {
+    if (!storageKey) return fallback;
+    const owner = hydration?.owner ?? currentMediaOwner();
+    assertLocalMediaOwner(storageKey, owner);
+    if (hydration && !hydration.isActive()) throw new DOMException("账户数据加载已中断", "AbortError");
+    const url = await objectUrls.resolve(storageKey, async () => {
+        const blob = await store.getItem<Blob>(storageKey);
+        if (hydration) { if (!hydration.isActive()) throw new DOMException("账户数据加载已中断", "AbortError"); }
+        else assertMediaOwner(owner);
+        return blob;
+    });
+    if (hydration) { if (!hydration.isActive()) throw new DOMException("账户数据加载已中断", "AbortError"); }
+    else assertMediaOwner(owner);
+    return url || fallback;
+}
+
+export async function getMediaBlob(storageKey: string) {
+    const owner = currentMediaOwner();
+    assertLocalMediaOwner(storageKey, owner);
+    const blob = await store.getItem<Blob>(storageKey);
+    assertMediaOwner(owner);
+    return blob;
+}
+
+export async function setMediaBlob(storageKey: string, blob: Blob) {
+    await store.setItem(storageKey, blob);
+    const url = URL.createObjectURL(blob);
+    objectUrls.set(storageKey, url);
+    return url;
+}
+
+export async function deleteStoredMedia(keys: Iterable<string>) {
+    await Promise.all(
+        Array.from(new Set(keys)).map(async (key) => {
+            objectUrls.delete(key);
+            await store.removeItem(key);
+        }),
+    );
+}
+
+export async function cleanupUnusedMedia(usedData: unknown) {
+    const usedKeys = collectMediaStorageKeys(usedData);
+    const unused: string[] = [];
+    await store.iterate((_value, key) => {
+        if (!usedKeys.has(key)) unused.push(key);
+    });
+    await deleteStoredMedia(unused);
+}
+
+export function collectMediaStorageKeys(value: unknown, keys = new Set<string>()) {
+    if (!value || typeof value !== "object") return keys;
+    if ("storageKey" in value && typeof value.storageKey === "string" && value.storageKey.includes(":")) keys.add(value.storageKey);
+    Object.values(value).forEach((item) => (Array.isArray(item) ? item.forEach((child) => collectMediaStorageKeys(child, keys)) : collectMediaStorageKeys(item, keys)));
+    return keys;
+}
+
+function readVideoMeta(url: string) {
+    return new Promise<{ width: number; height: number; durationMs?: number }>((resolve) => {
+        const video = document.createElement("video");
+        const done = () => {
+            const meta = { width: video.videoWidth || 1280, height: video.videoHeight || 720, durationMs: Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : undefined };
+            video.onloadedmetadata = null;
+            video.onerror = null;
+            video.removeAttribute("src");
+            video.load();
+            resolve(meta);
+        };
+        video.onloadedmetadata = done;
+        video.onerror = done;
+        video.preload = "metadata";
+        video.src = url;
+    });
+}
+
+function readAudioMeta(url: string) {
+    return new Promise<{ durationMs?: number }>((resolve) => {
+        const audio = document.createElement("audio");
+        const done = () => {
+            const meta = { durationMs: Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : undefined };
+            audio.onloadedmetadata = null;
+            audio.onerror = null;
+            audio.removeAttribute("src");
+            audio.load();
+            resolve(meta);
+        };
+        audio.onloadedmetadata = done;
+        audio.onerror = done;
+        audio.preload = "metadata";
+        audio.src = url;
+    });
+}
+

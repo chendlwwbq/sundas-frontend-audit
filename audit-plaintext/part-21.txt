@@ -1,0 +1,4039 @@
+SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
+This is uncompressed source text, not a directory index or archive.
+Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
+Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+
+========================================================================
+FILE: web/src/pages/home/home-jimeng.css
+LINES: 1-404
+========================================================================
+/* 首页（landing）：参考即梦的「大输入框 + 胶囊参数 + 圆形发送」布局 */
+
+.home-landing {
+    --hj-surface: #1A1A1A;
+    --hj-border: rgba(255, 255, 255, 0.08);
+    --hj-border-focus: rgba(255, 255, 255, 0.24);
+    --hj-chip: rgba(255, 255, 255, 0.06);
+    --hj-chip-hover: rgba(255, 255, 255, 0.11);
+    --hj-text: rgba(255, 255, 255, 0.88);
+    --hj-muted: rgba(255, 255, 255, 0.70);
+    --hj-faint: rgba(255, 255, 255, 0.40);
+}
+
+/* ---------- 欢迎区 ---------- */
+.home-landing .landing-welcome {
+    padding: 40px 0 28px;
+    background: none;
+}
+.home-landing .landing-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 4px 12px;
+    border: 1px solid var(--hj-border);
+    border-radius: 999px;
+    color: var(--hj-muted);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+}
+.home-landing .landing-welcome h1 {
+    font-size: clamp(28px, 3vw, 44px);
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    color: #FFFFFF;
+}
+.home-landing .landing-intro {
+    margin-top: 12px;
+    color: var(--hj-muted);
+    font-size: 14px;
+}
+.home-landing .landing-switch {
+    width: auto;
+    display: inline-flex;
+    gap: 4px;
+    margin: 24px auto 0;
+    padding: 4px;
+    border: 1px solid var(--hj-border);
+    background: rgba(255, 255, 255, 0.03);
+}
+.home-landing .landing-switch a {
+    flex: none;
+    min-width: 96px;
+    padding: 8px 18px;
+    color: var(--hj-muted);
+    font-size: 13px;
+    font-weight: 500;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+.home-landing .landing-switch a:hover { color: var(--hj-text); }
+.home-landing .landing-switch .is-active {
+    /* 激活态走品牌青柠：淡青柠底 + 青柠字 + 1px 青柠描边 */
+    background: rgba(216, 255, 62, 0.14);
+    color: #d8ff3e;
+    box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.32);
+}
+
+/* ---------- 生成框 ---------- */
+.home-landing .home-composer {
+    max-width: 960px;
+    padding: 18px 18px 14px;
+    border: 1px solid var(--hj-border);
+    border-radius: 24px;
+    background: var(--hj-surface);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 24px 60px rgba(0, 0, 0, 0.35);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.home-landing .home-composer:focus-within { border-color: var(--hj-border-focus); }
+.home-landing .home-composer.is-dragging {
+    border-color: color-mix(in srgb, var(--brand) 60%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 12%, transparent);
+}
+
+.home-landing .home-editor {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+}
+.home-landing .home-prompt-wrap { flex: 1; min-width: 0; }
+.home-landing .home-editor .home-prompt {
+    height: 96px;
+    min-height: 96px;
+    padding: 6px 40px 8px 2px;
+    background: transparent;
+    color: var(--hj-text);
+    font-size: 15px;
+    line-height: 1.6;
+}
+.home-landing .home-editor .home-prompt::placeholder { color: var(--hj-faint); }
+
+/* 参考素材：左侧倾斜卡片堆叠 */
+.home-landing .home-editor .home-material-bar {
+    order: -1;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    flex: none;
+    max-width: 260px;
+    margin: 0;
+    padding: 4px 0 0 4px;
+    border: 0;
+    gap: 0;
+}
+.home-landing .home-editor .home-material-hint { display: none; }
+.home-landing .home-editor .home-material-add.is-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    width: 56px;
+    height: 72px;
+    padding: 0;
+    border: 1px dashed rgba(255, 255, 255, 0.22);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--hj-muted);
+    font-size: 11px;
+    transform: rotate(-6deg);
+    transition: transform 0.18s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.home-landing .home-editor .home-material-add.is-card::before { display: none; }
+.home-landing .home-editor .home-material-add.is-card:hover:not(:disabled),
+.home-landing .home-editor .home-material-add.is-card:focus-visible {
+    transform: rotate(0deg);
+    border-color: rgba(255, 255, 255, 0.4);
+    color: var(--hj-text);
+}
+.home-landing .home-editor .home-material-item {
+    width: 56px;
+    height: 72px;
+    margin-left: -18px;
+    border: 2px solid var(--hj-surface);
+    border-radius: 12px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    transform: rotate(4deg);
+}
+.home-landing .home-editor .home-material-item:nth-of-type(even) { transform: rotate(-3deg); }
+.home-landing .home-editor .home-material-item:hover {
+    z-index: 2;
+    transform: rotate(0deg) translateY(-4px);
+}
+.home-landing .home-editor .home-material-item img { object-fit: cover; }
+
+/* 工具栏：胶囊参数 */
+.home-landing .home-composer .home-toolbar {
+    margin-top: 12px;
+    gap: 10px;
+    align-items: center;
+}
+.home-landing .home-toolbar-left { gap: 6px; row-gap: 6px; }
+
+.home-landing .home-mode-pills {
+    display: inline-flex;
+    height: 34px;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--hj-chip);
+}
+.home-landing .home-mode-pills button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 999px;
+    color: var(--hj-muted);
+    font-size: 12px;
+    font-weight: 500;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+.home-landing .home-mode-pills button:hover:not(:disabled) { color: var(--hj-text); }
+.home-landing .home-mode-pills button.is-active {
+    background: rgba(216, 255, 62, 0.16);
+    color: #d8ff3e;
+    box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.32);
+}
+.home-landing .home-mode-pills button:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.home-landing .home-toolbar .canvas-composer-model-picker {
+    height: 34px !important;
+    min-width: 0 !important;
+    max-width: 240px;
+    gap: 6px;
+    padding-inline: 12px;
+    border: 0 !important;
+    border-radius: 999px !important;
+    background: var(--hj-chip) !important;
+    box-shadow: none !important;
+    color: var(--hj-text);
+    font-size: 12px;
+    font-weight: 500;
+}
+.home-landing .home-toolbar .canvas-composer-model-picker:hover,
+.home-landing .home-toolbar .canvas-composer-model-picker[data-state="open"] { background: var(--hj-chip-hover) !important; }
+
+.home-landing .home-composer .home-param {
+    height: 34px;
+    gap: 0;
+    padding-left: 12px;
+    border-radius: 999px;
+    background: var(--hj-chip);
+    transition: background-color 0.15s ease;
+}
+.home-landing .home-composer .home-param:hover { background: var(--hj-chip-hover); }
+.home-landing .home-composer .home-param > span {
+    color: var(--hj-faint);
+    font-size: 12px;
+}
+.home-landing .home-composer .home-value-trigger {
+    height: 34px;
+    padding: 0 10px 0 6px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--hj-text);
+    font-size: 12px;
+    font-weight: 500;
+}
+.home-landing .home-composer .home-value-trigger:hover,
+.home-landing .home-composer .home-value-trigger.is-open { background: transparent; }
+.home-landing .home-composer .home-value-trigger svg { opacity: 0.55; }
+.home-landing .home-control-panel {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: #1F1F1F;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* 右侧：积分 + 发送 */
+.home-landing .home-toolbar-right { gap: 8px; flex: none; }
+.home-landing .home-credit-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 34px;
+    padding: 0 6px;
+    color: var(--hj-muted);
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+.home-landing .home-credit-chip svg { color: var(--brand); fill: currentColor; }
+.home-landing .home-send {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    flex: none;
+    border-radius: 999px;
+    background: var(--brand);
+    color: var(--brand-ink);
+    box-shadow: none;
+    transition: transform 0.15s ease, background-color 0.15s ease;
+}
+.home-landing .home-send:hover:not(:disabled) { transform: scale(1.02); background: var(--accent-hover); }
+.home-landing .home-send:active:not(:disabled) { transform: scale(0.96); background: var(--accent-active); }
+.home-landing .home-send:disabled {
+    cursor: not-allowed;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--hj-faint);
+    box-shadow: none;
+}
+.home-landing .home-send:focus-visible,
+.home-landing .home-mode-pills button:focus-visible,
+.home-landing .home-value-trigger:focus-visible,
+.home-landing .home-material-add.is-card:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+}
+.home-landing .home-caption {
+    margin: 12px 0 0;
+    color: var(--hj-faint);
+    font-size: 12px;
+}
+
+/* ---------- 快捷入口 ---------- */
+.home-landing .landing-tools { margin: 40px 0 48px; gap: 12px; }
+.home-landing .landing-tool {
+    gap: 14px;
+    padding: 12px;
+    border: 1px solid var(--hj-border);
+    border-radius: 16px;
+    background: #1A1A1A;
+    transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+.home-landing .landing-tool:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: #202020;
+    transform: translateY(-1px);
+}
+/* 每个入口一个低饱和主色，只用于底座光晕与图标渐变末端，避免四张卡片花掉 */
+.home-landing .landing-tool[data-tool="image"] { --tool-rgb: 124, 192, 255; }
+.home-landing .landing-tool[data-tool="video"] { --tool-rgb: 176, 158, 255; }
+.home-landing .landing-tool[data-tool="canvas"] { --tool-rgb: 108, 226, 200; }
+.home-landing .landing-tool[data-tool="prompts"] { --tool-rgb: 255, 199, 138; }
+
+/* 玻璃质感底座：顶部高光 + 主色渐变 + 内阴影，比纯色方块更像「图标容器」。
+   选择器带上 .landing-tool 是为了压过 pages-redesign.css 里的 main.home-landing .landing-tool-art。 */
+main.home-landing .landing-tool .landing-tool-art {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    flex: 0 0 64px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    background:
+        radial-gradient(120% 110% at 26% 6%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 58%),
+        linear-gradient(158deg, rgba(var(--tool-rgb), 0.26) 0%, rgba(var(--tool-rgb), 0.08) 58%, rgba(var(--tool-rgb), 0.16) 100%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.16),
+        inset 0 -16px 24px -18px rgba(0, 0, 0, 0.7),
+        0 10px 22px -18px rgba(var(--tool-rgb), 0.9);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.28s ease, border-color 0.2s ease;
+}
+/* 顶部一层极淡的玻璃反光，让底座有厚度而不是平涂 */
+main.home-landing .landing-tool .landing-tool-art::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 44%);
+    pointer-events: none;
+}
+main.home-landing .landing-tool .landing-tool-icon {
+    position: relative;
+    z-index: 1;
+    width: 28px;
+    height: 28px;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+}
+main.home-landing .landing-tool:hover .landing-tool-art {
+    transform: translateY(-1px) scale(1.03);
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -16px 24px -18px rgba(0, 0, 0, 0.7),
+        0 14px 28px -16px rgba(var(--tool-rgb), 1);
+}
+.home-landing .landing-tool h2 { color: var(--hj-text); font-size: 14px; }
+.home-landing .landing-tool p { margin-top: 4px; color: var(--hj-muted); font-size: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .home-landing .home-send,
+    .home-landing .landing-tool,
+    main.home-landing .landing-tool .landing-tool-art,
+    .home-landing .home-editor .home-material-add.is-card,
+    .home-landing .home-editor .home-material-item { transition: none; }
+    main.home-landing .landing-tool:hover .landing-tool-art { transform: none; }
+}
+
+/* ---------- 窄屏 ---------- */
+@media (max-width: 640px) {
+    .home-landing .landing-welcome { padding-top: 20px; }
+    .home-landing .home-composer { padding: 14px 12px 12px; border-radius: 20px; }
+    .home-landing .home-editor { gap: 12px; padding-inline: 0; }
+    .home-landing .home-editor .home-material-bar { max-width: 120px; }
+    .home-landing .home-editor .home-material-add.is-card,
+    .home-landing .home-editor .home-material-item { width: 46px; height: 60px; }
+    .home-landing .home-editor .home-prompt { height: 84px; min-height: 84px; font-size: 14px; }
+    .home-landing .home-composer .home-toolbar { flex-wrap: wrap; }
+    .home-landing .home-composer .home-toolbar-left {
+        display: flex;
+        flex-wrap: wrap;
+        width: 100%;
+        gap: 6px;
+    }
+    .home-landing .home-toolbar-left > :first-child { grid-column: auto; }
+    .home-landing .home-composer .home-param { flex-direction: row; align-items: center; height: 34px; }
+    .home-landing .home-composer .home-control-wrap { position: static; width: auto; }
+    .home-landing .home-composer .home-value-trigger { width: auto; min-height: 34px; }
+    .home-landing .home-composer .home-control-panel { left: 12px; right: 12px; width: auto; }
+    .home-landing .home-composer .home-toolbar-right { flex-direction: row; align-items: center; justify-content: flex-end; width: 100%; }
+    .home-landing .landing-tool { gap: 10px; }
+    main.home-landing .landing-tool .landing-tool-art {
+        width: 44px;
+        height: 44px;
+        flex-basis: 44px;
+        border-radius: 13px;
+    }
+    main.home-landing .landing-tool .landing-tool-icon { width: 22px; height: 22px; }
+}
+.home-landing .home-editor .home-prompt,
+.home-landing .home-editor .home-prompt:focus,
+.home-landing .home-editor .home-prompt:focus-visible {
+    border: 0;
+    outline: none;
+    box-shadow: none;
+}
+
+
+========================================================================
+FILE: web/src/pages/home/home-landing.css
+LINES: 1-151
+========================================================================
+.home-landing { background: #121212; color: #ffffff; }
+.home-landing .home-content { width: min(1360px, 100%); margin: 0 auto; padding: 36px 40px 64px; }
+.home-landing .landing-welcome { position: relative; text-align: center; padding: 8px 0 30px; background: radial-gradient(ellipse 60% 80% at 50% 0%, rgba(216, 255, 62, 0.06), transparent 72%); }
+.home-landing .landing-eyebrow { color: #9aaba5; font-size: 11px; letter-spacing: .2em; margin-bottom: 14px; }
+.home-landing .landing-welcome h1 { font-size: clamp(24px, 2.4vw, 34px); font-weight: 600; letter-spacing: -.035em; }
+.home-landing .landing-intro { color: #92928c; margin-top: 12px; font-size: 13px; }
+.home-landing .landing-switch { display: flex; width: 320px; padding: 2px; gap: 2px; margin: 22px auto 0; border-radius: 110px; background: rgba(255, 255, 255, 0.08); }
+.home-landing .landing-switch > a,
+.home-landing .landing-switch > button { flex: 1; display: flex; align-items: center; justify-content: center; height: 36px; border: 0; border-radius: 999px; padding: 0 16px; background: transparent; font: inherit; font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.6); cursor: pointer; transition: background-color .16s cubic-bezier(.4,0,.2,1), color .16s cubic-bezier(.4,0,.2,1); }
+.home-landing .landing-switch > a:hover,
+.home-landing .landing-switch > button:hover { color: rgba(255, 255, 255, 0.9); }
+.home-landing .landing-switch .is-active { color: #121212; background: linear-gradient(90deg, #fceae0 0%, #fcf6f2 38%, #eaf7fd 70%, #d8f1fe 100%); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6); }
+.home-landing .landing-switch .is-active:hover { color: #121212; }
+.home-landing .home-composer { max-width: 1040px; margin: 0 auto; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; background: #1a1a1a; box-shadow: none; }
+.home-landing .home-composer::before { display: none; }
+.home-landing .home-prompt { min-height: 88px; }
+.home-landing .home-caption { text-align: center; margin: 12px 0 30px; }
+.home-landing .landing-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 34px 0 44px; }
+.home-landing .landing-tool { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 16px; background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.08); color: #ffffff; transition: background-color .14s cubic-bezier(.4,0,.2,1), border-color .14s cubic-bezier(.4,0,.2,1); }
+.home-landing .landing-tool:hover { background: #202020; border-color: rgba(255, 255, 255, 0.12); }
+.home-landing .landing-tool-art { display: grid; place-items: center; width: 56px; height: 56px; flex-shrink: 0; overflow: hidden; border-radius: 12px; background: rgba(216, 255, 62, 0.12); color: #e3ff6b; }
+.home-landing .landing-tool-art img { width: 100%; height: 100%; object-fit: cover; }
+.home-landing .landing-tool h2 { font-size: 14px; font-weight: 600; }
+.home-landing .landing-tool p { font-size: 12px; color: rgba(255, 255, 255, 0.6); margin-top: 4px; }
+.home-landing .home-prompt-grid { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 18px; }
+.home-landing .home-section { margin-top: 28px; }
+@media (max-width: 1200px) { .home-landing .landing-tools { grid-template-columns: repeat(2,minmax(0,1fr)); } .home-landing .home-prompt-grid { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media (max-width: 640px) { .home-landing .home-content { padding: 22px 16px 40px; } .home-landing .landing-tools { gap: 8px; margin: 24px 0; } .home-landing .landing-tool { gap: 8px; } .home-landing .landing-tool-art { width: 42px; height: 56px; } .home-landing .landing-tool p { line-height: 1.5; } .home-landing .landing-tool > svg { display: none; } .home-landing .home-prompt-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; } }
+
+.home-landing .landing-welcome { padding-bottom: 24px; }
+.home-landing .home-composer { padding: 16px 20px; }
+.home-landing .home-mode-row { margin-bottom: 8px; }
+.home-landing .home-mode { padding: 7px 14px; font-size: 13px; }
+.home-landing .home-editor { padding: 0; background: transparent; border: 0; box-shadow: none; }
+.home-landing .home-editor-label { display: none; }
+.home-landing .home-editor .home-prompt { min-height: 66px; height: 66px; margin-top: 0; padding: 8px 38px 12px 4px; font-size: 14px; font-weight: 400; }
+.home-landing .home-editor .home-materials { padding-top: 8px; margin-top: 0; border-top: 0; }
+.home-landing .home-composer .home-toolbar { margin-top: 10px; }
+.home-landing .home-caption { margin-bottom: 12px; }
+.home-landing .landing-tools { margin-top: 24px; }
+
+/* ------------------------------------------------------------ 影幕展示背景
+   顶部铺满竖版片段墙（6 列循环播放），暗幕压到底色，向下渐隐到 #121212，
+   保证标题、合成器与卡片区仍是干净的深色底。 */
+.home-landing .home-backdrop {
+    height: clamp(560px, 88vh, 900px);
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 48%, rgba(0, 0, 0, 0.86) 72%, transparent 99%);
+    mask-image: linear-gradient(180deg, #000 0%, #000 48%, rgba(0, 0, 0, 0.86) 72%, transparent 99%);
+}
+
+/* 暗幕：只在中段与底部压深，顶部保留影片本色，整体比上一版透亮 */
+.home-landing .home-backdrop::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background:
+        radial-gradient(64% 52% at 50% 28%, rgba(18, 18, 18, 0.02), rgba(18, 18, 18, 0.54) 68%, #121212 100%),
+        linear-gradient(180deg, rgba(18, 18, 18, 0.4) 0%, rgba(18, 18, 18, 0.46) 42%, rgba(18, 18, 18, 0.9) 100%);
+}
+
+.home-landing .home-backdrop .home-film-wall {
+    opacity: 0.95;
+    filter: saturate(1.06) brightness(1.06);
+}
+
+/* 影片变亮后给标题补一层柔影，避免文字压在亮画面上发糊 */
+.home-landing .landing-welcome h1 { text-shadow: 0 1px 18px rgba(0, 0, 0, 0.55); }
+.home-landing .landing-eyebrow,
+.home-landing .landing-intro { text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6); }
+
+/* ------------------------------------------------------ 画布页签：最近画布面板
+   点击「画布」后替换生成对话框，宽度跟随 .home-content，与下方灵感大厅同一栅格；
+   一行四格：首格新建，其余三格是最近画布。 */
+.home-landing .home-canvas-panel {
+    margin: 0;
+    padding: 16px 18px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 16px;
+    background:
+        radial-gradient(120% 150% at 50% -40%, rgba(216, 255, 62, 0.05), rgba(216, 255, 62, 0) 62%),
+        #161616;
+}
+
+.home-landing .home-canvas-panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 14px;
+}
+
+.home-landing .home-canvas-panel-copy h2 {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.4;
+}
+
+.home-landing .home-canvas-panel-copy p {
+    margin: 3px 0 0;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11.5px;
+    line-height: 1.5;
+}
+
+.home-landing .home-canvas-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding-top: 1px;
+}
+
+.home-landing .home-canvas-panel-action {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    font: inherit;
+    font-size: 12px;
+    line-height: 20px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color .14s cubic-bezier(.4, 0, .2, 1);
+}
+
+.home-landing .home-canvas-panel-action:hover { color: #ffffff; }
+
+/* 卡片外观统一在 jimeng-theme.css 的 .jm-canvas-*（与 /canvas 画布库同一套） */
+
+@media (max-width: 560px) {
+    .home-landing .home-canvas-panel { padding: 14px 14px 16px; }
+    .home-landing .home-canvas-panel-head { gap: 12px; margin-bottom: 12px; }
+    .home-landing .home-canvas-panel-actions { gap: 14px; }
+    /* 窄屏卡宽不够，日期先让位，节点/连线数允许折两行，不做半截省略 */
+    .home-landing .home-canvas-date { display: none; }
+    .home-landing .jm-canvas-meta { white-space: normal; text-overflow: clip; }
+}
+
+@media (max-width: 767px) {
+    .home-landing .home-backdrop {
+        height: clamp(420px, 62vh, 620px);
+    }
+
+    .home-landing .home-backdrop .home-film-wall {
+        opacity: 0.66;
+    }
+}
+
+
+========================================================================
+FILE: web/src/pages/home/home.css
+LINES: 1-1774
+========================================================================
+.home-page {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+    background: var(--background);
+}
+
+/* 页脚永远贴底：内容不足一屏（如「发现灵感」）时把 footer 压到页面底部，
+   否则它会紧跟内容浮在中间，下方留一大片空白 */
+.home-page > .home-content {
+    flex: 1 0 auto;
+}
+
+.home-page > .site-footer {
+    flex: 0 0 auto;
+    margin-top: auto;
+}
+
+/* 页面级背景影片墙：全幅铺在首页顶部约一屏高度，向下渐隐 */
+.home-backdrop {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 0;
+    height: clamp(760px, 104vh, 1200px);
+    overflow: hidden;
+    pointer-events: none;
+    -webkit-mask-image: linear-gradient(180deg, #000 26%, transparent 94%);
+    mask-image: linear-gradient(180deg, #000 26%, transparent 94%);
+}
+
+.home-content {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 1360px);
+    margin: 0 auto;
+    padding: 16px 40px 72px;
+}
+
+/* ===== hero stage ===== */
+
+.home-hero {
+    position: relative;
+}
+
+.home-hero-stage {
+    position: relative;
+    height: clamp(360px, 36vw, 440px);
+    /* 箭头骑跨左右边缘；图片和遮罩分别继承圆角，不裁切舞台。 */
+    overflow: visible;
+    isolation: isolate;
+    border-radius: 24px;
+    background:
+        radial-gradient(900px 500px at 85% -10%, rgba(216, 255, 62, 0.08), transparent 60%),
+        linear-gradient(132deg, #101208 0%, #15170e 56%, #0d0f09 100%);
+    box-shadow: 0 0 0 1px var(--border);
+}
+
+.home-hero-media {
+    position: absolute;
+    inset: 0;
+    /* 不设 z-index：避免形成层叠上下文后，箭头被上层遮罩（scrim）压住 */
+}
+
+/* the default carousel fills the whole stage behind the copy */
+.home-hero-media .promo-carousel {
+    position: absolute;
+    inset: 0;
+    aspect-ratio: auto;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
+}
+
+/* 圆角裁切下沉到 slide，容器放开后箭头才能骑跨边缘 */
+.home-hero-media .promo-carousel-slide {
+    overflow: hidden;
+    border-radius: 24px;
+}
+
+/* 左右箭头：垂直居中，圆心压在轮播左右边缘线上 */
+.home-hero-media .promo-carousel-arrow {
+    z-index: 6;
+    width: 40px;
+    height: 40px;
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(10, 10, 12, 0.58);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.home-hero-media .promo-carousel-arrow.is-prev {
+    left: -20px;
+}
+
+.home-hero-media .promo-carousel-arrow.is-next {
+    right: -20px;
+}
+
+/* hover 态需同等特异性覆盖，否则只剩深色图标压在深色圆底上（不可见） */
+.home-hero-media .promo-carousel-arrow:hover,
+.home-hero-media .promo-carousel-arrow:focus-visible {
+    border-color: transparent;
+    background: rgba(255, 255, 255, 0.9);
+    color: #121212;
+    box-shadow: none;
+}
+
+.home-hero-media .promo-carousel .promo-carousel-main {
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.home-hero-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    /* 遮罩必须跟随舞台圆角，否则左上/左下/右下三个直角会把图片的圆角糊掉（stage 是 overflow:visible，不会替它裁） */
+    border-radius: inherit;
+    background:
+        linear-gradient(90deg, rgba(11, 12, 10, 0.94) 0%, rgba(11, 12, 10, 0.72) 32%, rgba(11, 12, 10, 0) 62%),
+        linear-gradient(0deg, rgba(11, 12, 10, 0.8), transparent 40%);
+}
+
+.home-hero-copy {
+    position: absolute;
+    z-index: 3;
+    top: 44px;
+    left: 64px;
+    max-width: 560px;
+}
+
+.home-hero-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid rgba(216, 255, 62, 0.55);
+    border-radius: 999px;
+    padding: 4px 12px;
+    background: rgba(216, 255, 62, 0.06);
+    color: var(--brand);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.home-hero-kicker-dot {
+    width: 6px;
+    height: 6px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--brand);
+    box-shadow: none;
+    animation: home-hero-pulse 2s infinite;
+}
+
+@keyframes home-hero-pulse {
+    50% {
+        opacity: 0.35;
+    }
+}
+
+.home-hero-title {
+    margin: 14px 0 0;
+    color: var(--foreground);
+    font-size: clamp(38px, 4.6vw, 62px);
+    font-weight: 600;
+    line-height: 1.08;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+}
+
+.home-hero-title-accent {
+    font-style: normal;
+    color: var(--brand);
+    text-shadow: none;
+}
+
+.home-hero-description {
+    max-width: 46ch;
+    margin: 16px 0 0;
+    color: rgba(244, 245, 239, 0.85);
+    font-size: 16px;
+    line-height: 1.7;
+}
+
+.home-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 24px;
+}
+
+.home-hero-cta {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--input);
+    border-radius: 12px;
+    padding: 0 18px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--foreground);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.home-hero-cta:hover {
+    border-color: rgba(216, 255, 62, 0.6);
+    background: var(--brand-soft);
+}
+
+.home-hero-cta.is-primary {
+    min-height: 48px;
+    border-color: transparent;
+    background: var(--brand);
+    color: var(--brand-ink);
+    font-size: 15px;
+    font-weight: 500;
+    box-shadow: none;
+}
+
+.home-hero-cta.is-primary:hover {
+    background: var(--accent-hover);
+    box-shadow: none;
+}
+
+/* ===== composer (overlaps the stage) ===== */
+
+.home-composer {
+    position: relative;
+    z-index: 6;
+    overflow: visible;
+    max-width: 1120px;
+    margin: -81px auto 0;
+    border: 1px solid var(--input);
+    border-radius: 20px;
+    padding: 4px 28px 24px;
+    background: rgba(22, 23, 20, 0.88);
+    backdrop-filter: blur(24px);
+    box-shadow:
+        0 30px 60px -20px rgba(0, 0, 0, 0.7),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* 1px 发丝描边（即梦式：不用渐变环），masked to the edges */
+.home-composer::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: linear-gradient(120deg, rgba(255, 255, 255, 0.16), transparent 30%, transparent 70%, rgba(255, 255, 255, 0.08));
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+}
+
+:root:not(.dark) .home-composer {
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow:
+        0 30px 60px -20px rgba(28, 25, 23, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.home-composer.is-dragging {
+    border-color: rgba(216, 255, 62, 0.7);
+    box-shadow: 0 0 0 3px rgba(216, 255, 62, 0.12);
+}
+
+.home-mode-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    padding: 0;
+}
+
+.home-mode-switch {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.home-mode {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 12px;
+    border: 0;
+    background: transparent;
+    color: var(--muted-foreground);
+    font: inherit;
+    font-size: 15px;
+    cursor: pointer;
+    transition: color 160ms ease;
+}
+
+.home-mode:hover {
+    color: var(--foreground);
+}
+
+.home-mode.is-active {
+    color: var(--brand);
+    font-weight: 600;
+}
+
+.home-mode.is-active::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--brand);
+}
+
+.home-mode-hint {
+    color: var(--muted-foreground);
+    font-size: 11px;
+}
+
+.home-prompt-wrap {
+    position: relative;
+}
+
+.home-prompt {
+    display: block;
+    width: 100%;
+    min-height: calc(5 * 1.4em); /* 至少 5 行 */
+    resize: vertical;
+    border: 0;
+    outline: 0;
+    margin-top: 18px;
+    padding: 0 38px 28px 0;
+    background: transparent;
+    color: var(--foreground);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+}
+
+.home-prompt::placeholder {
+    color: var(--muted-foreground);
+    opacity: 0.45;
+}
+
+/* 下拉输入类控件不用 outline 框（直角生硬），聚焦反馈由控件自身边框承担 */
+.home-page button:focus-visible,
+.home-page a:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 3px;
+}
+
+/* The composer is the focus surface; a textarea outline would hit the clipped edges. */
+.home-prompt:focus-visible {
+    outline: none;
+}
+
+.home-composer:focus-within {
+    border-color: color-mix(in srgb, var(--brand) 55%, var(--input));
+}
+
+.home-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 18px;
+    padding: 0;
+}
+
+.home-toolbar-left,
+.home-toolbar-right {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+}
+
+.home-toolbar-left {
+    flex-wrap: wrap;
+    row-gap: 6px;
+}
+
+.home-param {
+    display: inline-flex;
+    height: 38px;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 5px;
+}
+
+.home-param > span {
+    color: var(--muted-foreground);
+    font-size: 10px;
+    white-space: nowrap;
+}
+
+.home-param-number {
+    height: 38px;
+    width: 48px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--muted);
+    color: var(--foreground);
+    font: inherit;
+    font-size: 11px;
+    outline: 0;
+    padding: 0 4px;
+    text-align: center;
+    appearance: textfield;
+}
+
+.home-param-number::-webkit-inner-spin-button,
+.home-param-number::-webkit-outer-spin-button {
+    margin: 0;
+    appearance: none;
+}
+
+.home-param-number:focus {
+    border-color: var(--brand);
+}
+
+.home-select-trigger {
+    width: auto;
+    min-width: 64px;
+    height: 38px;
+    gap: 5px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0 7px 0 9px;
+    background: var(--muted);
+    color: var(--foreground);
+    font-size: 12px;
+    font-weight: 400;
+    box-shadow: none;
+}
+
+.home-select-trigger:hover {
+    border-color: var(--input);
+    background: var(--muted);
+}
+
+.home-select-trigger:focus-visible {
+    border-color: var(--brand);
+    --tw-ring-color: transparent;
+}
+
+.home-select-trigger [data-slot="select-value"] {
+    line-height: 1;
+}
+
+.home-select-content {
+    z-index: 1200;
+    min-width: 7rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
+}
+
+.home-select-item {
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+}
+
+.home-control-wrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.home-value-trigger {
+    display: inline-flex;
+    height: 38px;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0 10px;
+    background: var(--muted);
+    color: var(--foreground);
+    font: inherit;
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease;
+}
+
+.home-value-trigger:hover,
+.home-value-trigger.is-open {
+    border-color: var(--input);
+    background: var(--accent);
+}
+
+.home-control-panel {
+    position: absolute;
+    z-index: 80;
+    left: 0;
+    bottom: calc(100% + 8px);
+    width: 330px;
+    max-width: calc(100vw - 32px);
+    overflow: visible;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 15px;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: 0 20px 52px rgba(0, 0, 0, 0.34);
+    animation: home-control-in 140ms ease-out;
+}
+
+.home-control-panel.is-right {
+    right: 0;
+    left: auto;
+}
+
+.home-control-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.home-control-head h3 {
+    margin: 0;
+    color: var(--foreground);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+.home-control-head span {
+    color: var(--muted-foreground);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+}
+
+.home-option-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 14px;
+}
+
+.home-option {
+    display: flex;
+    min-height: 38px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted-foreground);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.home-option:hover {
+    color: var(--foreground);
+    border-color: rgba(216, 255, 62, 0.6);
+    background: var(--brand-soft);
+}
+
+.home-option.is-selected {
+    border-color: var(--brand);
+    background: var(--brand-soft);
+    color: var(--foreground);
+}
+
+.home-ratio-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 14px;
+}
+
+.home-ratio-option {
+    display: flex;
+    min-height: 66px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted-foreground);
+    font: inherit;
+    font-size: 10px;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.home-ratio-option:hover {
+    color: var(--foreground);
+    border-color: rgba(216, 255, 62, 0.6);
+    background: var(--brand-soft);
+}
+
+.home-ratio-option.is-selected {
+    border-color: var(--brand);
+    background: var(--brand-soft);
+    color: var(--foreground);
+}
+
+.home-ratio-shape {
+    display: block;
+    border: 1.5px solid currentColor;
+    border-radius: 3px;
+    color: var(--muted-foreground);
+}
+
+.home-ratio-option.is-selected .home-ratio-shape {
+    border-color: var(--brand);
+    color: var(--brand);
+}
+
+.home-ratio-shape.is-auto {
+    width: 20px;
+    height: 20px;
+    border-style: dashed;
+}
+
+.home-control-hint {
+    margin: 13px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    color: var(--muted-foreground);
+    font-size: 10px;
+    line-height: 1.55;
+}
+
+.home-seconds-range {
+    margin-top: 13px;
+    color: var(--foreground);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+.home-seconds-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.home-seconds-head > span {
+    color: var(--muted-foreground);
+    font-size: 10px;
+}
+
+.home-seconds-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.home-seconds-actions strong {
+    min-width: 38px;
+    color: var(--foreground);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.home-seconds-actions strong small {
+    margin-left: 1px;
+    color: var(--muted-foreground);
+    font-size: 10px;
+    font-weight: 500;
+}
+
+.home-step-button {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border: 1px solid var(--input);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--foreground);
+    cursor: pointer;
+}
+
+.home-step-button:hover {
+    border-color: rgba(216, 255, 62, 0.6);
+    background: var(--brand-soft);
+}
+
+.home-range {
+    width: 100%;
+    height: 5px;
+    margin: 18px 0 0;
+    appearance: none;
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--brand) 0 var(--home-range-progress), var(--border) var(--home-range-progress) 100%);
+    outline: none;
+    cursor: pointer;
+}
+
+.home-range::-webkit-slider-thumb {
+    width: 16px;
+    height: 16px;
+    appearance: none;
+    border: 3px solid var(--background);
+    border-radius: 999px;
+    background: var(--brand);
+    box-shadow: 0 0 0 1px rgba(216, 255, 62, 0.5);
+}
+
+.home-range::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--background);
+    border-radius: 999px;
+    background: var(--brand);
+}
+
+.home-range-ends {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    color: var(--muted-foreground);
+    font-size: 9px;
+}
+
+@keyframes home-control-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-control-panel {
+        animation: none;
+    }
+}
+
+.home-material-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 0;
+}
+
+.home-material-add {
+    display: flex;
+    width: 66px;
+    height: 66px;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border: 1px dashed var(--input);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted-foreground);
+    font: inherit;
+    font-size: 9px;
+    cursor: pointer;
+    transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.home-material-add:hover:not(:disabled) {
+    border-color: var(--brand);
+    background: var(--brand-soft);
+    color: var(--foreground);
+}
+
+.home-material-add:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.home-material-item {
+    position: relative;
+    width: 66px;
+    height: 66px;
+    flex: 0 0 auto;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--muted);
+}
+
+.home-material-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.home-material-file {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 6px;
+    color: var(--muted-foreground);
+}
+
+.home-material-file span {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 8px;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.home-material-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: grid;
+    width: 17px;
+    height: 17px;
+    place-items: center;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.72);
+    color: #fff;
+    cursor: pointer;
+}
+
+.home-material-hint {
+    min-width: 180px;
+    flex: 1;
+    color: var(--muted-foreground);
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.home-toolbar .canvas-composer-model-picker {
+    height: 38px;
+    border-radius: 10px;
+    padding-inline: 9px;
+    font-size: 12px;
+}
+
+.home-ratio {
+    height: 38px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0 9px;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    font: inherit;
+    font-size: 12px;
+    outline: 0;
+}
+
+.home-ratio:focus {
+    border-color: var(--brand);
+}
+
+.home-submit {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 48px;
+    border: 0;
+    border-radius: 12px;
+    padding: 0 30px;
+    background: var(--brand);
+    color: var(--brand-ink);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: none;
+    transition: background 160ms ease, transform 160ms ease;
+}
+
+.home-submit:hover:not(:disabled) {
+    background: var(--accent-hover);
+    transform: none;
+}
+
+.home-submit:active:not(:disabled) {
+    background: var(--accent-active);
+    transform: none;
+}
+
+.home-submit:active:not(:disabled) {
+    transform: none;
+}
+
+.home-submit:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+    transform: none;
+    box-shadow: none;
+}
+
+.home-caption {
+    max-width: 1120px;
+    margin: 11px auto 0;
+    color: var(--muted-foreground);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+/* ===== sections ===== */
+
+.home-section {
+    margin-top: 56px;
+}
+
+/* 与站内二级页（素材库 / 提示词中心 / 账户中心 / 我的画布）的 .jm-page-head 完全同一套：
+   标题 30/38、字重 600、字距 -0.01em；副标题 14/22、上间距 8、颜色 text-3；区块下间距 24。 */
+.home-section-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.home-section-title {
+    margin: 0;
+    color: var(--text-1);
+    font-family: var(--font-heading);
+    font-size: 30px;
+    line-height: 38px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.home-section + .home-section .home-section-title {
+    font-size: 30px;
+    line-height: 38px;
+    font-weight: 600;
+}
+
+.home-section-note {
+    margin: 8px 0 0;
+    color: var(--text-3);
+    font-size: 14px;
+    line-height: 22px;
+}
+
+.home-section-link {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--muted-foreground);
+    font-size: 13px;
+    text-decoration: none;
+    transition: color 160ms ease;
+}
+
+.home-section-link:hover {
+    color: var(--brand);
+}
+
+/* inspiration grid */
+
+.home-prompt-tabs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 16px;
+    border-bottom: 0;
+}
+
+/* 频道筛选：即梦胶囊 tab（不用下划线，选中用白 8% 底） */
+.home-prompt-tab {
+    position: relative;
+    display: inline-flex;
+    height: 32px;
+    align-items: center;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+        background-color 140ms cubic-bezier(0.4, 0, 0.2, 1),
+        color 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.home-prompt-tab:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: #ffffff;
+}
+
+.home-prompt-tab.is-active {
+    background: rgba(216, 255, 62, 0.16);
+    box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.32);
+    color: var(--brand);
+    font-weight: 500;
+}
+
+.home-prompt-tab.is-active::after {
+    content: none;
+}
+
+.home-prompt-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.home-prompt-card {
+    min-width: 0;
+    border: 0;
+    border-radius: 14px;
+    padding: 10px;
+    /* 负 margin 抵消 padding，悬浮出现背景时不挤动网格布局 */
+    margin: -10px;
+    background: transparent;
+    color: var(--foreground);
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms ease;
+}
+
+/* 整卡悬浮背景：媒体 + 标题行一起沉入 card 底色（参照 liblib.tv 卡片） */
+.home-prompt-card:hover {
+    background: var(--card);
+}
+
+/* 封面媒体区：圆角裁切 + hover 遮罩 */
+.home-prompt-media {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    border-radius: 12px;
+    background: var(--muted);
+}
+
+.home-prompt-card .home-prompt-cover {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9.6;
+    object-fit: cover;
+    background: var(--muted);
+    transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* hover 遮罩：底部压暗渐变 + 右上爱心胶囊 + 右下分享圆钮（参照 liblib.tv） */
+.home-prompt-hover {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 10px;
+    background: linear-gradient(180deg, rgba(5, 6, 3, 0.22) 0%, rgba(5, 6, 3, 0) 36%, rgba(5, 6, 3, 0.55) 100%);
+    opacity: 0;
+    transition: opacity 200ms ease;
+}
+
+.home-prompt-like,
+.home-prompt-share {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    min-width: 28px;
+    padding: 0 9px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    background: rgba(10, 11, 8, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: rgba(255, 255, 255, 0.92);
+    transition: background 160ms ease, transform 160ms ease;
+}
+
+.home-prompt-share {
+    width: 30px;
+    height: 30px;
+    min-width: 0;
+    padding: 0;
+}
+
+.home-prompt-card:hover .home-prompt-hover {
+    opacity: 1;
+}
+
+.home-prompt-card:hover .home-prompt-like,
+.home-prompt-card:hover .home-prompt-share {
+    transform: translateY(0);
+}
+
+.home-prompt-card:hover .home-prompt-cover {
+    transform: scale(1.04);
+}
+
+/* 底部信息行：头像圈 + 标题/作者 */
+.home-prompt-body {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 2px 0;
+}
+
+.home-prompt-avatar {
+    display: grid;
+    flex: none;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.32), transparent 46%),
+        linear-gradient(135deg, #33371f 0%, #1c1e12 100%);
+    color: rgba(244, 245, 239, 0.9);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.home-prompt-card:nth-child(4n + 2) .home-prompt-avatar {
+    background:
+        radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.32), transparent 46%),
+        linear-gradient(135deg, #3d2f1a 0%, #20180d 100%);
+}
+
+.home-prompt-card:nth-child(4n + 3) .home-prompt-avatar {
+    background:
+        radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.32), transparent 46%),
+        linear-gradient(135deg, #1f3230 0%, #0f1b1a 100%);
+}
+
+.home-prompt-card:nth-child(4n) .home-prompt-avatar {
+    background:
+        radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.32), transparent 46%),
+        linear-gradient(135deg, #2e2438 0%, #17111d 100%);
+}
+
+.home-prompt-info {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.home-prompt-title {
+    overflow: hidden;
+    color: var(--foreground);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.home-prompt-tags {
+    overflow: hidden;
+    color: var(--muted-foreground);
+    font-size: 12px;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.home-empty {
+    display: flex;
+    min-height: 96px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: #1a1a1a;
+    padding: 24px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 12px;
+}
+
+/* ===== 平台数据条 ===== */
+
+.home-stats {
+    --stats-value-from: #17180f;
+    --stats-value-to: #4b4f38;
+    --stats-dot: rgba(23, 24, 15, 0.055);
+    --stats-glow: rgba(216, 255, 62, 0.1);
+    --stats-shadow: 0 24px 60px -38px rgba(23, 24, 15, 0.5);
+    --stats-accent: #5d7a06;
+    --stats-accent-line: rgba(93, 122, 6, 0.4);
+    --stats-accent-glow: rgba(93, 122, 6, 0.18);
+
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 36px 0 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background:
+        radial-gradient(120% 180% at 0% -60%, var(--stats-glow), transparent 58%),
+        radial-gradient(85% 130% at 100% 150%, rgba(61, 184, 180, 0.06), transparent 62%),
+        var(--card);
+    box-shadow:
+        var(--stats-shadow),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    isolation: isolate;
+}
+
+/* 顶部品牌发丝线 */
+.home-stats::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 2;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--stats-accent-line) 18%, rgba(216, 255, 62, 0.14) 64%, transparent);
+    pointer-events: none;
+}
+
+/* 点阵底纹：自上而下淡出 */
+.home-stats::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-image: radial-gradient(circle at 1px 1px, var(--stats-dot) 1px, transparent 0);
+    background-size: 18px 18px;
+    -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 78%);
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 78%);
+    pointer-events: none;
+}
+
+.dark .home-stats {
+    --stats-value-from: #f7f8f1;
+    --stats-value-to: #b3b99c;
+    --stats-dot: rgba(244, 245, 239, 0.05);
+    --stats-glow: rgba(216, 255, 62, 0.09);
+    --stats-shadow: 0 30px 70px -42px rgba(0, 0, 0, 0.9);
+    --stats-accent: #D8FF3E;
+    --stats-accent-line: rgba(216, 255, 62, 0.6);
+    --stats-accent-glow: rgba(216, 255, 62, 0.4);
+    box-shadow:
+        var(--stats-shadow),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.home-stats-item {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    padding: 28px 30px 30px;
+    transition: background 260ms ease;
+}
+
+.home-stats-item:hover {
+    background: radial-gradient(120% 140% at 16% 0%, rgba(216, 255, 62, 0.07), transparent 66%);
+}
+
+/* 分割线：上下淡出的渐变竖线，比整条实线更轻 */
+.home-stats-item + .home-stats-item::before {
+    content: "";
+    position: absolute;
+    top: 22%;
+    bottom: 22%;
+    left: 0;
+    width: 1px;
+    background: linear-gradient(180deg, transparent, var(--border) 18%, var(--border) 82%, transparent);
+}
+
+/* 序号：右上角弱化的等宽数字，给四格建立秩序感 */
+.home-stats-index {
+    position: absolute;
+    top: 18px;
+    right: 22px;
+    color: var(--muted-foreground);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.42;
+}
+
+.home-stats-value {
+    display: flex;
+    align-items: flex-start;
+    gap: 3px;
+    line-height: 0.95;
+    font-variant-numeric: tabular-nums;
+}
+
+/* 数值：自上而下的金属渐变，避免纯白/纯黑的呆板 */
+.home-stats-number {
+    font-size: clamp(30px, 2.6vw, 38px);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(180deg, var(--stats-value-from) 8%, var(--stats-value-to));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* 单位/后缀：品牌绿上标，与数值齐顶 */
+.home-stats-unit {
+    margin-top: 3px;
+    color: var(--stats-accent);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-shadow: none;
+}
+
+.home-stats-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    color: var(--muted-foreground);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+}
+
+/* 标签前的品牌小点 */
+.home-stats-label::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--stats-accent);
+    box-shadow: none;
+    opacity: 0.9;
+    transition: transform 260ms ease;
+}
+
+.home-stats-item:hover .home-stats-label::before {
+    transform: scale(1.6);
+}
+
+/* ===== responsive ===== */
+
+@media (max-width: 1100px) {
+    .home-content {
+        padding-inline: 28px;
+    }
+
+    .home-prompt-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .home-hero-copy {
+        left: 36px;
+        right: 36px;
+    }
+}
+
+@media (max-width: 860px) {
+    .home-content {
+        padding: 12px 16px 56px;
+    }
+
+    .home-hero-stage {
+        display: flex;
+        align-items: flex-end;
+        height: auto;
+        min-height: 280px;
+        padding: 24px;
+        border-radius: 18px;
+    }
+
+    .home-hero-media .promo-carousel-slide {
+        border-radius: 18px;
+    }
+
+    /* 窄屏收进容器内，避免骑跨按钮被屏幕边缘裁掉 */
+    .home-hero-media .promo-carousel-arrow {
+        width: 30px;
+        height: 30px;
+        opacity: 1;
+    }
+
+    .home-hero-media .promo-carousel-arrow.is-prev {
+        left: 8px;
+    }
+
+    .home-hero-media .promo-carousel-arrow.is-next {
+        right: 8px;
+    }
+
+    /* 数据条：窄屏两列，分隔线改成「列间竖线 + 行间横线」 */
+    .home-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 24px;
+    }
+
+    .home-stats-item {
+        padding: 20px 18px 22px;
+    }
+
+    .home-stats-item:nth-child(odd)::before {
+        display: none;
+    }
+
+    .home-stats-item:nth-child(n + 3)::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 12%;
+        left: 12%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--border) 18%, var(--border) 82%, transparent);
+    }
+
+    .home-stats-index {
+        top: 14px;
+        right: 14px;
+        font-size: 10px;
+    }
+
+    .home-stats-label {
+        margin-top: 12px;
+        font-size: 11.5px;
+    }
+
+    .home-hero-scrim {
+        background:
+            linear-gradient(0deg, rgba(11, 12, 10, 0.96) 25%, rgba(11, 12, 10, 0.35) 70%, rgba(11, 12, 10, 0.12));
+    }
+
+    .home-hero-copy {
+        position: relative;
+        inset: auto;
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+    }
+
+    .home-hero-title {
+        font-size: clamp(30px, 8vw, 40px);
+    }
+
+    .home-hero-description {
+        display: none;
+    }
+
+    .home-composer {
+        margin: 16px 0 0;
+        padding: 4px 16px 16px;
+    }
+
+    .home-prompt {
+        font-size: 15px;
+    }
+
+    .home-toolbar {
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+
+    .home-toolbar-right {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .home-mode-hint {
+        display: none;
+    }
+
+    .home-prompt-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .home-section {
+        margin-top: 40px;
+    }
+}
+
+@media (max-width: 560px) {
+    .home-hero-actions .home-hero-cta {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .home-prompt-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .home-prompt {
+        min-height: calc(5 * 1.4em);
+        font-size: 15px;
+    }
+}
+
+/* ===== hero 背景影片墙（1:1 移植自 aid-studio 首页）===== */
+
+.home-film-wall {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 10px;
+    opacity: 0.72;
+    transform: perspective(1400px) rotateX(18deg) scale(1.15) translateY(-6%);
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.home-film-column {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.home-film-column:nth-child(even) {
+    margin-top: -100px;
+}
+
+.home-film-slot {
+    position: relative;
+    isolation: isolate;
+    display: block;
+    width: 100%;
+    flex: none;
+    aspect-ratio: 4 / 5;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--muted);
+}
+
+/* 影片墙：片段铺满格子，尺寸形状完全由格子决定；海报与色板渐变在加载前兜底 */
+.home-film-slot video {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.home-film-column > :nth-child(2) {
+    aspect-ratio: 9 / 16;
+}
+
+/* 16 色板渐变兜底（与旧项目逐条一致） */
+.home-film-tone-0 { background: radial-gradient(120% 90% at 25% 15%, #ffb36b 0%, #c2410c 28%, #3b0a1e 62%, #07030a 100%); }
+.home-film-tone-1 { background: linear-gradient(160deg, #04121c 0%, #0c3a4a 38%, #13c8d8 70%, #ff7ae6 120%); }
+.home-film-tone-2 { background: radial-gradient(90% 70% at 70% 25%, #f9d29d 0%, #b06ab3 35%, #2b1055 70%, #05030c 100%); }
+.home-film-tone-3 { background: linear-gradient(200deg, #0b0b0f 0%, #1e293b 45%, #94a3b8 100%); }
+.home-film-tone-4 { background: radial-gradient(100% 80% at 50% 0%, #E3FF6B 0%, #0068A8 35%, #071018 75%); }
+.home-film-tone-5 { background: linear-gradient(145deg, #1a0000 0%, #7f1d1d 40%, #f97316 85%, #fde68a 110%); }
+.home-film-tone-6 { background: radial-gradient(80% 80% at 30% 70%, #3ee6ff 0%, #1d4ed8 35%, #0b1020 80%); }
+.home-film-tone-7 { background: linear-gradient(180deg, #fef3c7 -20%, #d97706 25%, #451a03 70%, #0c0603 100%); }
+.home-film-tone-8 { background: radial-gradient(120% 80% at 80% 10%, #ff4fd8 0%, #6d28d9 40%, #0b0420 85%); }
+.home-film-tone-9 { background: linear-gradient(170deg, #e0f2fe -10%, #64748b 40%, #0f172a 90%); }
+.home-film-tone-10 { background: radial-gradient(90% 70% at 40% 30%, #86efac 0%, #166534 40%, #021006 85%); }
+.home-film-tone-11 { background: linear-gradient(120deg, #111827 0%, #374151 30%, #f43f5e 70%, #fda4af 110%); }
+.home-film-tone-12 { background: radial-gradient(70% 60% at 60% 40%, #fff7ed 0%, #fdba74 18%, #9a3412 45%, #1c0a02 85%); }
+.home-film-tone-13 { background: linear-gradient(200deg, #020617 0%, #172554 40%, #7dd3fc 95%); }
+.home-film-tone-14 { background: radial-gradient(100% 70% at 50% 100%, #a78bfa 0%, #4c1d95 40%, #0a0614 85%); }
+.home-film-tone-15 { background: linear-gradient(160deg, #052e16 0%, #14532d 35%, #a3e635 80%, #ecfccb 110%); }
+
+@media (max-width: 767px) {
+    .home-film-wall {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .home-film-column:nth-child(n + 4) {
+        display: none;
+    }
+}
+
+/* 与创作栏同一层级，积分为辅助信息，不增加独立卡片。 */
+.home-credit-estimate {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted-foreground);
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+.home-credit-estimate svg { color: var(--primary); }
+@media (max-width: 640px) {
+    .home-toolbar-right { flex-wrap: wrap; gap: 10px; }
+    .home-credit-estimate { margin-right: auto; }
+    /* 与 .jm-page-head 一致：窄屏标题与右侧动作改纵向排列 */
+    .home-section-head { flex-direction: column; align-items: stretch; gap: 12px; }
+}
+
+.home-composer .home-mode-row {
+    padding-block: 12px;
+    border-bottom: 0;
+}
+
+.home-composer .home-mode-switch {
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--muted);
+}
+
+.home-composer .home-mode-switch::before,
+.home-composer .home-mode.is-active::after {
+    content: none;
+}
+
+.home-composer .home-mode {
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 8px;
+    color: var(--muted-foreground);
+    font-size: 13px;
+    font-weight: 600;
+    transform: none;
+}
+
+.home-composer .home-mode:hover { color: var(--foreground); }
+
+.home-composer .home-mode.is-active {
+    background: var(--brand);
+    color: var(--brand-ink);
+}
+
+.home-editor {
+    min-width: 0;
+    padding: 15px 16px 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--background) 76%, transparent);
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.home-editor:focus-within {
+    border-color: color-mix(in srgb, var(--brand) 66%, var(--border));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 14%, transparent);
+}
+
+.home-editor-label {
+    display: block;
+    color: var(--foreground);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.home-editor .home-prompt {
+    min-height: 4.8em;
+    margin-top: 6px;
+    font-weight: 400;
+    line-height: 1.6;
+}
+
+.home-editor .home-prompt:focus {
+    background: transparent;
+    transform: none;
+    box-shadow: none;
+}
+
+.home-editor .home-prompt::placeholder { opacity: 1; }
+
+.home-editor .home-material-bar {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
+.home-editor .home-material-add {
+    width: auto;
+    height: 44px;
+    flex-direction: row;
+    gap: 6px;
+    padding-inline: 10px;
+    background: var(--muted);
+    color: var(--foreground);
+    font-size: 12px;
+}
+
+.home-editor .home-material-item {
+    width: 44px;
+    height: 44px;
+}
+
+.home-editor .home-material-hint { min-width: min(100%, 150px); }
+
+.home-composer .home-toolbar { margin-top: 14px; }
+.home-composer .home-param > span { font-size: 11px; }
+
+.home-composer .home-credit-estimate {
+    padding: 6px 9px;
+    border-radius: 8px;
+    background: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: normal;
+}
+
+.home-composer .home-credit-estimate svg { flex: none; }
+
+.home-composer .home-submit {
+    height: 44px;
+    justify-content: center;
+    padding-inline: 20px;
+    font-size: 14px;
+}
+
+.home-composer .home-submit:disabled {
+    background: var(--muted);
+    color: var(--muted-foreground);
+    opacity: 1;
+    box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.home-composer .home-submit:disabled::after { content: none; }
+
+@media (max-width: 640px) {
+    .home-editor { padding-inline: 12px; }
+    .home-composer .home-toolbar-left {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px 8px;
+        width: 100%;
+        min-width: 0;
+    }
+    .home-toolbar-left > :first-child { grid-column: 1 / -1; max-width: 100%; }
+    .home-composer .home-param { height: auto; min-width: 0; flex-direction: column; align-items: stretch; gap: 6px; }
+    .home-composer .home-control-wrap { position: static; width: 100%; }
+    .home-composer .home-control-panel { left: 0; right: auto; width: 100%; max-width: 100%; }
+    .home-composer .home-value-trigger { width: 100%; min-height: 44px; justify-content: space-between; }
+    .home-composer .home-toolbar-right { flex-direction: column; align-items: stretch; gap: 10px; }
+    .home-composer .home-credit-estimate { margin: 0; }
+    .home-composer .home-submit { width: 100%; }
+}
+
+
+========================================================================
+FILE: web/src/pages/home/index.tsx
+LINES: 1-661
+========================================================================
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { App } from "antd";
+import { ArrowUp, ArrowUpRight, ChevronDown, Heart, ImagePlus, LoaderCircle, Minus, Music, PlayCircle, Plus, Share2, Sparkles, Video, X, Zap } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { nanoid } from "nanoid";
+import { useTranslation } from "react-i18next";
+
+import { BrandName } from "@/components/brand/brand-wordmark";
+import { LANDING_TOOL_ICONS } from "@/components/home/landing-tool-icons";
+import { ModelPicker } from "@/components/model-picker";
+import { PromptOptimizeButton } from "@/components/prompt-optimize-button";
+import { SiteFooter } from "@/components/layout/site-footer";
+import { PromptCover } from "@/components/prompts/prompt-cover";
+import { PromptVideoCover } from "@/components/prompts/prompt-video-cover";
+import { HeroFilmWall } from "@/pages/home/hero-film-wall";
+import { LandingCanvasPanel } from "@/pages/home/landing-canvas-panel";
+import { PromptDetailDialog } from "@/components/prompts/prompt-detail-dialog";
+import { PromoPopup } from "@/components/promo/promo-popup";
+import { inferMediaRatio, inferMediaScale, inferVideoRatio, mediaRatioOptions, videoRatioOptions, videoResolutionOptionsFromMap, parseVideoResolution, videoSecondsRangeForDurations } from "@/lib/media-size";
+import { useCopyText } from "@/hooks/use-copy-text";
+import { storePendingPrompt, type PendingMaterialKind, type PendingReference } from "@/lib/pending-prompt";
+import { fetchPrompts, type Prompt } from "@/services/api/prompts";
+import { loadPromoConfig, type PromoConfig } from "@/services/api/promo";
+import { copyOf, loadSiteInfo, type SiteHomeCopy } from "@/services/api/site";
+import { promptImageUrl } from "@/lib/prompt-image";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { useAuthDialogStore } from "@/stores/use-auth-dialog-store";
+import { matchesCanvasSession } from "@/lib/canvas/canvas-session";
+import { modelOptionName, useConfigStore } from "@/stores/use-config-store";
+import { currentMediaOwner, uploadBlobToServer } from "@/services/cloud-media";
+import "./home.css";
+import "./home-landing.css";
+import "./home-enhanced.css";
+import "./home-enhanced-v2.css";
+import "./home-jimeng.css";
+import { initHomePageEnhancements } from "./home-enhancements";
+import { useCreditEstimate } from '@/hooks/use-credit-estimate';
+
+type CreationMode = "image" | "video";
+
+type HomeMaterial = {
+    id: string;
+    name: string;
+    type: string;
+    url: string;
+    kind: PendingMaterialKind;
+};
+
+const PENDING_CREATION_KEY = "sundas:pending-creation";
+const MAX_MATERIALS = 7;
+// 灵感大厅默认展示条数：桌面端 4 列网格，12 条正好铺满 3 行，不留半行。
+const HOME_PROMPT_COUNT = 12;
+
+function HomeControlPopover({ label, value, title, kicker, align = "left", hint, children }: { label: string; value: string; title: string; kicker: string; align?: "left" | "right"; hint: string; children: ReactNode }) {
+    const [open, setOpen] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const closeOutside = (event: PointerEvent) => {
+            if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);
+        };
+        const closeEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setOpen(false);
+        };
+        document.addEventListener("pointerdown", closeOutside);
+        document.addEventListener("keydown", closeEscape);
+        return () => {
+            document.removeEventListener("pointerdown", closeOutside);
+            document.removeEventListener("keydown", closeEscape);
+        };
+    }, [open]);
+
+    return (
+        <div className="home-param">
+            <span>{label}</span>
+            <div ref={wrapperRef} className="home-control-wrap">
+                <button type="button" className={open ? "home-value-trigger is-open" : "home-value-trigger"} onClick={() => setOpen((current) => !current)} aria-expanded={open} aria-label={`${label}：${value}`} aria-haspopup="dialog">
+                    {value}
+                    <ChevronDown className={open ? "size-3.5 rotate-180 transition-transform" : "size-3.5 transition-transform"} />
+                </button>
+                {open ? (
+                    <div className={align === "right" ? "home-control-panel is-right" : "home-control-panel"} role="dialog" aria-label={title}>
+                        <div className="home-control-head">
+                            <h3>{title}</h3>
+                            <span>{kicker}</span>
+                        </div>
+                        {children}
+                        <p className="home-control-hint">{hint}</p>
+                    </div>
+                ) : null}
+            </div>
+        </div>
+    );
+}
+
+function isVideoPrompt(item: Prompt) {
+    return item.tags.some((tag) => tag === "short_video" || tag.startsWith("视频模板"));
+}
+
+export default function HomePage({ landing = false, suppressPromo = false }: { landing?: boolean; suppressPromo?: boolean }) {
+    const { message } = App.useApp();
+    const { t } = useTranslation();
+    const navigate = useNavigate();
+    const user = useAuthStore((state) => state.user);
+    const openAuthDialog = useAuthDialogStore((state) => state.open);
+    const authReady = useAuthStore((state) => state.ready);
+    const userId = authReady ? user?.id : undefined;
+    const sessionEpoch = useAuthStore((state) => state.sessionEpoch);
+    const config = useConfigStore((state) => state.config);
+    const updateConfig = useConfigStore((state) => state.updateConfig);
+    const serverModels = useConfigStore((state) => state.serverModels);
+    const [mode, setMode] = useState<CreationMode>("video");
+    // 首页顶部「生成 / 画布」两个页签：画布页签不跳转，直接把生成对话框换成最近画布展示区。
+    const [landingTab, setLandingTab] = useState<"create" | "canvas">("create");
+    const [prompt, setPrompt] = useState("");
+    const [materials, setMaterials] = useState<HomeMaterial[]>([]);
+    const [viewOwner, setViewOwner] = useState<string | undefined>(undefined);
+    const [viewEpoch, setViewEpoch] = useState<number | undefined>();
+    const [materialBusy, setMaterialBusy] = useState(false);
+    const [materialDragActive, setMaterialDragActive] = useState(false);
+    const materialInputRef = useRef<HTMLInputElement>(null);
+    const accountEpochRef = useRef(0);
+    const previousOwner = useRef<string | undefined>(undefined);
+    const previousEpoch = useRef(sessionEpoch);
+    const isCurrentView = () => viewOwner === userId && viewEpoch === sessionEpoch && matchesCanvasSession(userId ?? null, sessionEpoch, useAuthStore.getState());
+    const [inspirationMode, setInspirationMode] = useState<CreationMode>("video");
+    const [imagePrompts, setImagePrompts] = useState<Prompt[]>([]);
+    const [videoPrompts, setVideoPrompts] = useState<Prompt[]>([]);
+    const [promptsLoading, setPromptsLoading] = useState(true);
+    const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null);
+    const [promo, setPromo] = useState<PromoConfig | null>(null);
+    const [home, setHome] = useState<SiteHomeCopy>({});
+    const copyText = useCopyText();
+
+    useEffect(() => {
+        accountEpochRef.current += 1;
+        if (previousOwner.current && (previousOwner.current !== userId || previousEpoch.current !== sessionEpoch)) { setPrompt(""); setMaterials([]); }
+        previousOwner.current = userId;
+        previousEpoch.current = sessionEpoch;
+        setViewOwner(userId);
+        setViewEpoch(sessionEpoch);
+        setMaterialBusy(false);
+    }, [userId, sessionEpoch]);
+
+    // 灵感大厅数据来源：后台「首页文案」可指定只展示某个来源，留空表示不限。
+    const inspirationSourceId = (home.inspirationSourceId ?? "").trim() || undefined;
+    // 两个页签各自的条数，0 表示沿用统一的 promptLimit；接口一次最多取 60 条。
+    const fallbackLimit = Math.max(0, Number(home.promptLimit) || 0);
+    const videoLimit = Math.max(0, Number(home.inspirationVideoLimit) || 0) || fallbackLimit;
+    const imageLimit = Math.max(0, Number(home.inspirationImageLimit) || 0) || fallbackLimit;
+    const wanted = Math.min(60, Math.max(HOME_PROMPT_COUNT, videoLimit, imageLimit));
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+        const load = async () => {
+            try {
+                const [imageData, videoData] = await Promise.all([
+                    fetchPrompts({ kind: 'image', pageSize: wanted, metadata: false, sourceId: inspirationSourceId, signal: controller.signal }),
+                    fetchPrompts({ kind: 'video', pageSize: wanted, metadata: false, sourceId: inspirationSourceId, signal: controller.signal }),
+                ]);
+                if (cancelled) return;
+                setImagePrompts(imageData.items);
+                setVideoPrompts(videoData.items);
+            } catch (error) {
+                if (!cancelled) message.error(error instanceof Error ? error.message : t("home.promptError"));
+            } finally {
+                if (!cancelled) setPromptsLoading(false);
+            }
+        };
+        void load();
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [message, t, inspirationSourceId, wanted]);
+
+    useEffect(() => {
+        void loadPromoConfig().then(setPromo).catch(() => setPromo(null));
+    }, []);
+
+    useEffect(() => {
+        void loadSiteInfo().then((data) => setHome(data.home ?? {})).catch(() => setHome({}));
+    }, []);
+
+    const enhancementsRef = useRef<HTMLElement>(null);
+    useEffect(() => {
+        if (enhancementsRef.current) return initHomePageEnhancements(enhancementsRef.current);
+    }, [authReady, viewOwner, viewEpoch]);
+
+    // 灵感大厅展示条数：视频/图片页签可分别设置，未设置时沿用统一的 promptLimit，0 表示不限。
+    const activeLimit = inspirationMode === "video" ? videoLimit : imageLimit;
+    const promptCards = (inspirationMode === "video" ? videoPrompts : imagePrompts).slice(0, activeLimit || undefined);
+    const ratio = mode === "image" ? inferMediaRatio(config.size) : inferVideoRatio(config.size);
+    const selectedVideoModel = serverModels.find((model) => model.id === modelOptionName(config.videoModel));
+    const videoMetadata = (selectedVideoModel?.metadata ?? {}) as { durations?: { min?: number; max?: number }; aspectRatios?: string[] };
+    const { min: minSeconds, max: maxSeconds } = videoSecondsRangeForDurations(videoMetadata.durations);
+    const seconds = Math.max(minSeconds, Math.min(maxSeconds, Math.floor(Number(config.videoSeconds) || 6)));
+    const estimate = useCreditEstimate(modelOptionName(mode === 'video' ? config.videoModel : config.imageModel), mode, mode === 'video' ? seconds : 1, mode === 'video' ? parseVideoResolution(config.vquality) : inferMediaScale(config.size), `${userId ?? 'guest'}:${sessionEpoch}`, 0, mode === 'video' ? config.videoRouteId : '');
+    const estimateRange = estimate.data ? (estimate.data.minCredits === estimate.data.maxCredits ? String(estimate.data.minCredits) : `${estimate.data.minCredits}–${estimate.data.maxCredits}`) : "";
+    const estimateLabel = !estimate.hasModel ? t('home.estimateSelectModel') : estimate.loading ? t('home.estimateLoading') : estimate.error || !estimate.data ? t('home.estimateUnavailable') : t('home.estimateCredits', { credits: estimate.data.minCredits === estimate.data.maxCredits ? estimate.data.minCredits : `${estimate.data.minCredits}–${estimate.data.maxCredits}` });
+    const estimateShort = estimate.hasModel && !estimate.loading && !estimate.error && estimate.data ? estimateRange : estimate.loading ? "…" : "--";
+    const selectedVideoRouteResolutions = config.videoRouteId ? selectedVideoModel?.routes.find((route) => route.id === config.videoRouteId)?.resolutionMultipliers : undefined;
+    const videoResolutionOptions = videoResolutionOptionsFromMap(selectedVideoRouteResolutions ?? selectedVideoModel?.resolutionMultipliers);
+    const videoRatios = videoMetadata.aspectRatios?.length ? videoRatioOptions.filter((option) => videoMetadata.aspectRatios?.includes(option.value)) : videoRatioOptions;
+    const imageRatios = mediaRatioOptions;
+    const imageQualityOptions = ["auto", "low", "medium", "high"].map((value) => ({ value, label: t(`settingsPanels.common.${value}`) }));
+
+    useEffect(() => {
+        if (mode !== "video") return;
+        if (!videoResolutionOptions.some((option) => option.value === config.vquality)) {
+            updateConfig("vquality", videoResolutionOptions[0]?.value ?? "720");
+        }
+        if (String(seconds) !== config.videoSeconds) updateConfig("videoSeconds", String(seconds));
+        if (!videoRatios.some((option) => option.value === ratio)) updateConfig("size", videoRatios[0]?.value ?? "16:9");
+    }, [config.videoModel, config.videoSeconds, config.vquality, mode, ratio, seconds, updateConfig, videoRatios, videoResolutionOptions]);
+
+    async function addMaterials(files?: FileList | null) {
+        if (!files?.length) return;
+        const owner = userId, epoch = accountEpochRef.current;
+        const active = () => Boolean(owner && isCurrentView() && currentMediaOwner() === owner && accountEpochRef.current === epoch);
+        if (!active()) {
+            message.warning(t("home.referenceLogin"));
+            return;
+        }
+        const available = Math.max(0, MAX_MATERIALS - materials.length);
+        const selected = Array.from(files).slice(0, available);
+        if (!selected.length) return;
+        setMaterialBusy(true);
+        try {
+            const next: HomeMaterial[] = [];
+            for (const file of selected) {
+                const appleImage = /^image\/(heic|heif)(-sequence)?$/i.test(file.type) || (/\.(heic|heif)$/i.test(file.name) && (!file.type || file.type === "application/octet-stream"));
+                const kind = appleImage || file.type.startsWith("image/") || /\.(jpe?g|png|webp)$/i.test(file.name) ? "image" : file.type.startsWith("video/") || /\.(mp4|mov|webm)$/i.test(file.name) ? "video" : file.type.startsWith("audio/") || /\.(mp3|wav|ogg)$/i.test(file.name) ? "audio" : null;
+                if (!kind) throw new Error(t("home.materialUnsupported"));
+                if (mode === "image" && kind !== "image") throw new Error(t("home.imageMaterialsOnly"));
+                const maxBytes = kind === "image" ? 10 * 1024 * 1024 : 100 * 1024 * 1024;
+                if (file.size > maxBytes) throw new Error(t("home.materialTooLarge"));
+                if (!active()) return;
+                const uploaded = await uploadBlobToServer(file, kind === "image" ? "reference" : kind, owner, undefined, true, false);
+                if (!uploaded) throw new Error(t("home.materialUploadFailed"));
+                if (!active()) return;
+                next.push({ id: nanoid(), name: file.name, type: uploaded.mime, url: uploaded.url, kind });
+            }
+            if (active()) setMaterials((value) => [...value, ...next].slice(0, MAX_MATERIALS));
+        } catch (error) {
+            if (active()) message.error(error instanceof Error ? error.message : t("home.materialUploadFailed"));
+        } finally {
+            if (active()) { setMaterialBusy(false); if (materialInputRef.current) materialInputRef.current.value = ""; }
+        }
+    }
+
+    function changeMode(next: CreationMode) {
+        if (next === "image" && materials.some((material) => material.kind !== "image")) {
+            setMaterials((value) => value.filter((material) => material.kind === "image"));
+            message.info(t("home.imageMaterialsOnly"));
+        }
+        setMode(next);
+    }
+
+    function startCreating() {
+        if (!isCurrentView() || materialBusy) return;
+        const value = prompt.trim();
+        if (!value) return;
+        const pendingReferences = materials.map((material) => ({ name: material.name, type: material.type, dataUrl: material.url, kind: material.kind }));
+        if (!user) {
+            sessionStorage.setItem(PENDING_CREATION_KEY, JSON.stringify({ mode, prompt: value, references: pendingReferences }));
+            openAuthDialog("login", { redirect: "/" });
+            return;
+        }
+        if (!userId || currentMediaOwner() !== userId) return;
+        storePendingPrompt(mode, value, pendingReferences, userId);
+        navigate(`/${mode}`);
+    }
+
+    function openPromptDetail(item: Prompt) {
+        setSelectedPrompt(item.title.startsWith("视频模板") ? { ...item, title: item.title.replace(/^视频模板\s*-\s*/, "") } : item);
+    }
+
+    function useInspirationPrompt(item: Prompt) {
+        if (!isCurrentView()) return;
+        const value = item.prompt.trim();
+        if (!value) return;
+        const targetMode: CreationMode = isVideoPrompt(item) ? "video" : "image";
+        setSelectedPrompt(null);
+        if (!user) {
+            sessionStorage.setItem(PENDING_CREATION_KEY, JSON.stringify({ mode: targetMode, prompt: value }));
+            openAuthDialog("login", { redirect: "/" });
+            return;
+        }
+        if (!userId || currentMediaOwner() !== userId) return;
+        storePendingPrompt(targetMode, value, [], userId);
+        navigate(`/${targetMode}`);
+    }
+
+    if (viewOwner !== userId || viewEpoch !== sessionEpoch || !isCurrentView()) return null;
+
+    return (
+        <main ref={enhancementsRef} className={landing ? "home-page home-landing" : "home-page home-explore"}>
+            {/* 影幕展示：首页顶部竖版片段墙循环播放，向下渐隐到纯色底（内容层在其上方） */}
+            {landing ? (
+                <div className="home-backdrop" aria-hidden="true">
+                    <HeroFilmWall />
+                </div>
+            ) : null}
+            <div className="home-content">
+                {landing && <>
+                <section className="landing-welcome">
+                    <p className="landing-eyebrow"><BrandName text="SUNDAS · 创作空间" imageHeight="0.92em" /></p>
+                    <h1>你的故事，值得被看见。</h1>
+                    <p className="landing-intro">从灵感到画面，从分镜到成片。</p>
+                    <div className="landing-switch" role="tablist" aria-label="创作方式">
+                        <button type="button" role="tab" aria-selected={landingTab === "create"} className={landingTab === "create" ? "is-active" : undefined} onClick={() => setLandingTab("create")}>生成</button>
+                        <button type="button" role="tab" aria-selected={landingTab === "canvas"} className={landingTab === "canvas" ? "is-active" : undefined} onClick={() => setLandingTab("canvas")}>画布</button>
+                    </div>
+                </section>
+
+                {landingTab === "canvas" ? <LandingCanvasPanel home={home} /> : <>
+
+                <section
+                    className={materialDragActive ? "home-composer is-dragging" : "home-composer"}
+                    aria-label={t("home.composerTitle")}
+                    onDragEnter={(event) => {
+                        event.preventDefault();
+                        if (event.dataTransfer.types.includes("Files")) setMaterialDragActive(true);
+                    }}
+                    onDragOver={(event) => {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "copy";
+                    }}
+                    onDragLeave={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMaterialDragActive(false);
+                    }}
+                    onDrop={(event) => {
+                        event.preventDefault();
+                        setMaterialDragActive(false);
+                        void addMaterials(event.dataTransfer.files);
+                    }}
+                >
+                    {landing ? null: <>
+                    <div className="home-mode-row">
+                        <div className="home-mode-switch" role="tablist" aria-label={t("home.composerTitle")}>
+                            <button type="button" role="tab" aria-selected={mode === "video"} className={mode === "video" ? "home-mode is-active" : "home-mode"} onClick={() => changeMode("video")}>
+                                <Video className="size-3.5" />
+                                {copyOf(home.composerVideoMode, t("home.videoMode"))}
+                            </button>
+                            <button type="button" role="tab" aria-selected={mode === "image"} className={mode === "image" ? "home-mode is-active" : "home-mode"} onClick={() => changeMode("image")}>
+                                <ImagePlus className="size-3.5" />
+                                {copyOf(home.composerImageMode, t("home.imageMode"))}
+                            </button>
+                        </div>
+                    </div>
+
+                    </>}
+
+                    <div className="home-editor">
+                        <label className="home-editor-label" htmlFor="home-create-prompt">{t("workbench.prompt")}</label>
+                        <div className="home-prompt-wrap">
+                            <textarea
+                                id="home-create-prompt"
+                                className="home-prompt"
+                                value={prompt}
+                                onChange={(event) => setPrompt(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                                        event.preventDefault();
+                                        startCreating();
+                                    }
+                                }}
+                                placeholder={copyOf(home.composerPlaceholder, t("home.promptPlaceholder"))}
+                                aria-describedby="home-create-caption"
+                            />
+                            {userId ? (
+                                <PromptOptimizeButton
+                                    prompt={prompt}
+                                    model={mode === "image" ? config.imageModel : config.videoModel}
+                                    capability={mode}
+                                    disabled={materialBusy}
+                                    onOptimized={setPrompt}
+                                    className="!bottom-1 !right-1"
+                                />
+                            ) : null}
+                        </div>
+                        <div className="home-material-bar">
+                            <button
+                                type="button"
+                                className={landing ? "home-material-add is-card" : "home-material-add"}
+                                title={landing ? (mode === "video" ? t("home.materialHintVideo") : t("home.materialHintImage")) : undefined}
+                                aria-label={t("home.addMaterial")}
+                                disabled={materialBusy || materials.length >= MAX_MATERIALS}
+                                onClick={() => {
+                                    if (!user) {
+                                        message.warning(t("home.referenceLogin"));
+                                        return;
+                                    }
+                                    materialInputRef.current?.click();
+                                }}
+                            >
+                                {materialBusy ? <LoaderCircle className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                                <span>{t("home.addMaterial")}</span>
+                            </button>
+                            {materials.map((material) => (
+                                <div key={material.id} className="home-material-item" title={material.name}>
+                                    {material.kind === "image" ? (
+                                        <img src={material.url} alt={material.name} />
+                                    ) : (
+                                        <div className="home-material-file">
+                                            {material.kind === "video" ? <Video className="size-4" /> : <Music className="size-4" />}
+                                            <span>{material.name}</span>
+                                        </div>
+                                    )}
+                                    <button type="button" className="home-material-remove" aria-label={t("home.removeReference")} onClick={() => setMaterials((value) => value.filter((item) => item.id !== material.id))}>
+                                        <X className="size-3" />
+                                    </button>
+                                </div>
+                            ))}
+                            <span className="home-material-hint">{mode === "video" ? t("home.materialHintVideo") : t("home.materialHintImage")}</span>
+                            <input
+                                ref={materialInputRef}
+                                type="file"
+                                accept={mode === "video" ? "image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif,video/mp4,video/webm,video/quicktime,audio/mpeg,audio/wav,audio/ogg" : "image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif"}
+                                multiple
+                                className="hidden"
+                                onChange={(event) => void addMaterials(event.target.files)}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="home-toolbar">
+                        <div className="home-toolbar-left">
+                            {landing ? (
+                                <div className="home-mode-pills" role="tablist" aria-label="首页生成类型">
+                                    {(["image", "video"] as const).map((value) => (
+                                        <button key={value} type="button" role="tab" aria-selected={mode === value} className={mode === value ? "is-active" : undefined} disabled={materialBusy && mode !== value} title={materialBusy && mode !== value ? "素材上传中，请稍候" : undefined} onClick={() => changeMode(value)}>
+                                            {value === "image" ? <ImagePlus className="size-3.5" /> : <Video className="size-3.5" />}
+                                            {value === "image" ? copyOf(home.composerImageMode, t("home.imageMode")) : copyOf(home.composerVideoMode, t("home.videoMode"))}
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : null}
+                            <ModelPicker
+                                config={config}
+                                value={mode === "image" ? config.imageModel : config.videoModel}
+                                onChange={(value) => updateConfig(mode === "image" ? "imageModel" : "videoModel", value)}
+                                onRouteSelect={mode === "video" ? (value, routeId) => { updateConfig("videoModel", value); updateConfig("videoRouteId", routeId); } : undefined}
+                                capability={mode}
+                                placeholder={mode === "video" ? "选择视频模型" : "选择图片模型"}
+                            />
+                            {mode === "video" ? (
+                                <>
+                                    <HomeControlPopover
+                                        label={t("settingsPanels.video.quality")}
+                                        value={videoResolutionOptions.find((option) => option.value === config.vquality)?.label ?? config.vquality}
+                                        title={t("home.resolutionPanel")}
+                                        kicker="RESOLUTION"
+                                        align="left"
+                                        hint={t("home.resolutionPanelHint")}
+                                    >
+                                        <div className="home-option-grid">
+                                            {videoResolutionOptions.map((option) => (
+                                                <button key={option.value} type="button" className={"home-option" + (option.value === config.vquality ? " is-selected" : "")} onClick={() => updateConfig("vquality", option.value)}>
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                            {!videoResolutionOptions.some(option => option.value === "4k") && <button type="button" className="home-option opacity-40" disabled title="所选线路未声明支持 4K">4K</button>}
+                                        </div>
+                                        {!videoResolutionOptions.some(option => option.value === "4k") && <p className="mt-2 text-xs text-muted-foreground">4K 需选择支持该清晰度的线路。</p>}
+                                    </HomeControlPopover>
+                                    <HomeControlPopover
+                                        label={t("settingsPanels.video.seconds")}
+                                        value={`${seconds}s`}
+                                        title={t("home.secondsPanel")}
+                                        kicker="SECONDS"
+                                        align="left"
+                                        hint={t("home.secondsPanelHint")}
+                                    >
+                                        <div className="home-seconds-range">{t("home.secondsRange", { min: minSeconds, max: maxSeconds })}</div>
+                                        <div className="home-seconds-head">
+                                            <span>{t("home.secondsChoose")}</span>
+                                            <div className="home-seconds-actions">
+                                                <button type="button" className="home-step-button" onClick={() => updateConfig("videoSeconds", String(Math.max(minSeconds, seconds - 1)))} aria-label={t("home.decreaseSeconds")}><Minus className="size-3.5" /></button>
+                                                <strong>{seconds}<small>s</small></strong>
+                                                <button type="button" className="home-step-button" onClick={() => updateConfig("videoSeconds", String(Math.min(maxSeconds, seconds + 1)))} aria-label={t("home.increaseSeconds")}><Plus className="size-3.5" /></button>
+                                            </div>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            className="home-range"
+                                            min={minSeconds}
+                                            max={maxSeconds}
+                                            step={1}
+                                            value={seconds}
+                                            style={{ "--home-range-progress": `${((seconds - minSeconds) / Math.max(1, maxSeconds - minSeconds)) * 100}%` } as CSSProperties}
+                                            onChange={(event) => updateConfig("videoSeconds", event.target.value)}
+                                            aria-label={t("settingsPanels.video.seconds")}
+                                        />
+                                        <div className="home-range-ends"><span>{minSeconds}s</span><span>{maxSeconds}s</span></div>
+                                    </HomeControlPopover>
+                                </>
+                            ) : (
+                                <HomeControlPopover
+                                    label={t("settingsPanels.video.quality")}
+                                    value={imageQualityOptions.find((option) => option.value === (config.quality || "auto"))?.label ?? (config.quality || "auto")}
+                                    title={t("home.imageQualityPanel")}
+                                    kicker="IMAGE QUALITY"
+                                    align="left"
+                                    hint={t("home.imageQualityPanelHint")}
+                                >
+                                    <div className="home-option-grid">
+                                        {imageQualityOptions.map((option) => (
+                                            <button key={option.value} type="button" className={"home-option" + (option.value === (config.quality || "auto") ? " is-selected" : "")} onClick={() => updateConfig("quality", option.value)}>
+                                                {option.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </HomeControlPopover>
+                            )}
+                            <HomeControlPopover
+                                label={mode === "video" ? t("settingsPanels.video.ratio") : t("settingsPanels.image.aspectRatio")}
+                                value={ratio === "auto" ? t("settingsPanels.common.auto") : ratio}
+                                title={t("home.ratioPanel")}
+                                kicker="ASPECT RATIO"
+                                align="right"
+                                hint={t("home.ratioPanelHint")}
+                            >
+                                <div className="home-ratio-grid">
+                                    {(mode === "video" ? videoRatios : imageRatios).map((item) => (
+                                        <button key={item.value} type="button" className={"home-ratio-option" + (item.value === ratio ? " is-selected" : "")} onClick={() => updateConfig("size", item.value)}>
+                                            <span className={"home-ratio-shape" + (item.value === "auto" ? " is-auto" : "")} style={item.value === "auto" ? undefined : { width: item.width >= item.height ? 26 : Math.max(10, Math.round((26 * item.width) / item.height)), height: item.height >= item.width ? 26 : Math.max(10, Math.round((26 * item.height) / item.width)) }} />
+                                            <span>{item.value === "auto" ? t("settingsPanels.common.auto") : item.value}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </HomeControlPopover>
+                        </div>
+                        <div className="home-toolbar-right">
+                            {landing ? (
+                                <span className="home-credit-chip" role="status" aria-live="polite" aria-label={estimateLabel} title={`${estimateLabel}\n${t('home.estimateNote')}`}>
+                                    <Zap className="size-3.5" aria-hidden="true" />
+                                    <span>{estimateShort}</span>
+                                </span>
+                            ) : (
+                            <div className="home-credit-estimate" role="status" aria-live="polite" title={t('home.estimateNote')}>
+                                <Sparkles className="size-3.5" aria-hidden="true" />
+                                <span>{estimateLabel}</span>
+                            </div>
+                            )}
+                            {landing ? (
+                                <button type="button" className="home-send" disabled={!prompt.trim() || materialBusy} aria-busy={materialBusy} aria-label={user ? "进入创作" : "登录后创作"} title={`${user ? "进入创作" : "登录后创作"} · ${copyOf(home.composerHint, t("home.shortcutHint"))}`} onClick={startCreating}>
+                                    {materialBusy ? <LoaderCircle className="size-[18px] animate-spin" /> : <ArrowUp className="size-[18px]" strokeWidth={2.4} />}
+                                </button>
+                            ) : <>
+                            <button type="button" className="home-submit" disabled={!prompt.trim() || materialBusy} aria-busy={materialBusy} onClick={startCreating}>
+                                {user ? copyOf(home.composerStartCta, t("home.startCreating")) : copyOf(home.composerLoginCta, t("home.loginToCreate"))}
+                                {materialBusy ? <LoaderCircle className="size-3.5 animate-spin" /> : <ArrowUpRight className="size-3.5" />}
+                            </button>                            </>}
+
+                        </div>
+                    </div>
+                </section>
+                <p id="home-create-caption" className="home-caption">{copyOf(home.composerHint, t("home.shortcutHint"))}{landing ? null : <> · {t('home.estimateNote')}</>}</p>
+
+                {landing && <section className="landing-tools" aria-label="创作工具">
+                    {([
+                        { key: "image", title: "图片创作", note: "描述画面，继续改图", to: "/create?mode=image" },
+                        { key: "video", title: "视频创作", note: "从文字或参考素材开始", to: "/create?mode=video" },
+                        { key: "canvas", title: "无限画布", note: "串联灵感，自由创作", to: "/canvas" },
+                        { key: "prompts", title: "提示词库", note: "寻找灵感，复用创作描述", to: "/prompts" },
+                    ] as const).map(({ key, title, note, to }) => {
+                        const Icon = LANDING_TOOL_ICONS[key];
+                        return <Link className="landing-tool" to={to} key={to} data-tool={key}>
+                            <div className="landing-tool-art"><Icon className="landing-tool-icon" /></div>
+                            <div><h2>{title}</h2><p>{note}</p></div>
+                            <ArrowUpRight className="ml-auto size-4 shrink-0 opacity-40" />
+                        </Link>;
+                    })}
+                </section>}
+
+                </>}
+
+                </>}
+
+                {home.inspirationEnabled === false ? null : (
+                <section className="home-section">
+                    <div className="home-section-head">
+                        <div>
+                            <h2 className="home-section-title">{copyOf(home.inspirationTitle, t("home.inspirationTitle"))}</h2>
+                            <p className="home-section-note">{copyOf(home.inspirationDescription, t("home.inspirationDescription"))}</p>
+                        </div>
+                        <Link to="/prompts" className="home-section-link">{copyOf(home.inspirationViewAll, t("home.viewPrompts"))}</Link>
+                    </div>
+                    <div className="home-prompt-tabs" role="tablist" aria-label={copyOf(home.inspirationTitle, t("home.inspirationTitle"))}>
+                        <button type="button" role="tab" aria-selected={inspirationMode === "video"} className={inspirationMode === "video" ? "home-prompt-tab is-active" : "home-prompt-tab"} onClick={() => setInspirationMode("video")}>
+                            {copyOf(home.inspirationVideoTab, t("home.videoMode"))}
+                        </button>
+                        <button type="button" role="tab" aria-selected={inspirationMode === "image"} className={inspirationMode === "image" ? "home-prompt-tab is-active" : "home-prompt-tab"} onClick={() => setInspirationMode("image")}>
+                            {copyOf(home.inspirationImageTab, t("home.imageMode"))}
+                        </button>
+                    </div>
+                    {promptsLoading ? (
+                        <div className="home-empty">{t("common.loading")}</div>
+                    ) : (inspirationMode === "video" ? videoPrompts : imagePrompts).length ? (
+                        <div className="home-prompt-grid">
+                            {promptCards.map((item) => {
+                                const title = inspirationMode === "video" ? item.title.replace(/^视频模板\s*-\s*/, "") : item.title;
+                                const meta = item.tags.slice(0, 2).join(" · ") || item.category;
+                                return (
+                                <button key={`${item.sourceId}:${item.id}`} type="button" className="home-prompt-card" onClick={() => openPromptDetail(item)}>
+                                    <span className="home-prompt-media">
+                                        {item.previewVideoUrl ? (
+                                            <PromptVideoCover
+                                                src={item.previewVideoUrl}
+                                                poster={promptImageUrl(item.coverUrl)}
+                                                alt={title}
+                                                className="home-prompt-cover"
+                                            />
+                                        ) : (
+                                            <PromptCover src={item.coverUrl} alt={title} className="home-prompt-cover" />
+                                        )}
+                                        {item.previewVideoUrl ? (
+                                            <span className="pointer-events-none absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5 text-[10px] font-medium text-white">
+                                                <PlayCircle className="size-3" />
+                                                视频
+                                            </span>
+                                        ) : null}
+                                        {/* 遮罩层必须 pointer-events-none：否则鼠标命中的是遮罩而不是 <video>，悬浮播放不会触发 */}
+                                        <span className="home-prompt-hover pointer-events-none" aria-hidden="true">
+                                            <span className="home-prompt-like"><Heart className="size-3.5" /></span>
+                                            <span className="home-prompt-share"><Share2 className="size-3.5" /></span>
+                                        </span>
+                                    </span>
+                                    <span className="home-prompt-body">
+                                        <span className="home-prompt-avatar" aria-hidden="true">{title.slice(0, 1)}</span>
+                                        <span className="home-prompt-info">
+                                            <span className="home-prompt-title">{title}</span>
+                                            <span className="home-prompt-tags">{meta}</span>
+                                        </span>
+                                    </span>
+                                </button>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="home-empty">{copyOf(home.inspirationEmpty, t("home.emptyPrompts"))}</div>
+                    )}
+                </section>
+                )}
+
+            </div>
+            <SiteFooter />
+            {landing && !suppressPromo && <PromoPopup item={promo?.popup ?? null} />}
+            <PromptDetailDialog
+                prompt={selectedPrompt}
+                onClose={() => setSelectedPrompt(null)}
+                onCopy={(value) => copyText(value, t("common.promptCopied"))}
+                onUsePrompt={useInspirationPrompt}
+            />
+        </main>
+    );
+}
+
+
+========================================================================
+FILE: web/src/pages/home/landing-canvas-panel.tsx
+LINES: 1-142
+========================================================================
+import { useRef } from "react";
+import { App } from "antd";
+import { Frame, Plus } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+
+import { readCanvasPackage } from "@/lib/canvas/canvas-import";
+import { matchesCanvasSession } from "@/lib/canvas/canvas-session";
+import { captureAccountSession } from "@/lib/account-session";
+import { currentMediaOwner } from "@/services/cloud-media";
+import { formatPromptDate } from "@/services/api/prompts";
+import { copyOf, type SiteHomeCopy } from "@/services/api/site";
+import { isCanvasAccountActive, useCanvasStore } from "@/stores/canvas/use-canvas-store";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { useAuthDialogStore } from "@/stores/use-auth-dialog-store";
+
+/** 一行四格：首格恒为「新建画布」，其余三格是最近打开过的画布项目。 */
+const PROJECT_SLOTS = 3;
+const IMPORT_ACCEPT = ".sundas,.zip,application/zip";
+
+/**
+ * 首页「画布」页签的展示区：替换生成对话框，直接铺最近画布。
+ * 宽度跟随 .home-content（与「灵感大厅」同一栅格），不再单独限宽。
+ */
+export function LandingCanvasPanel({ home }: { home: SiteHomeCopy }) {
+    const { message } = App.useApp();
+    const { t, i18n } = useTranslation();
+    const navigate = useNavigate();
+    const inputRef = useRef<HTMLInputElement>(null);
+    const user = useAuthStore((state) => state.user);
+    const openAuthDialog = useAuthDialogStore((state) => state.open);
+    const authReady = useAuthStore((state) => state.ready);
+    const userId = user?.id ?? null;
+    const sessionEpoch = useAuthStore((state) => state.sessionEpoch);
+    const hydrated = useCanvasStore((state) => state.hydrated);
+    const projects = useCanvasStore((state) => state.projects);
+    const createProject = useCanvasStore((state) => state.createProject);
+    const importProject = useCanvasStore((state) => state.importProject);
+    // 未登录、或本地存储还没切到当前账户时一律按空处理，避免读到上一个账户的画布。
+    const accountReady = authReady && hydrated && isCanvasAccountActive(userId);
+    const isCurrent = () => matchesCanvasSession(userId, sessionEpoch, useAuthStore.getState()) && isCanvasAccountActive(userId);
+    const recent = accountReady
+        ? [...projects].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0)).slice(0, PROJECT_SLOTS)
+        : [];
+    const emptySlots = Math.max(0, PROJECT_SLOTS - recent.length);
+
+    function createAndOpenCanvas() {
+        if (!user) {
+            openAuthDialog("login", { redirect: "/" });
+            return;
+        }
+        if (!isCurrent()) return;
+        navigate(`/canvas/${createProject()}`);
+    }
+
+    function openCanvas(id: string) {
+        if (!isCurrent()) return;
+        navigate(`/canvas/${id}`);
+    }
+
+    async function importCanvas(file?: File) {
+        if (!file) return;
+        if (!user) {
+            openAuthDialog("login", { redirect: "/" });
+            return;
+        }
+        try {
+            const session = captureAccountSession();
+            const owner = session.owner;
+            const imported = await readCanvasPackage(file);
+            session.check();
+            if (!owner || currentMediaOwner() !== owner || !isCurrent()) throw new Error(t("canvas.importFailed"));
+            imported.forEach(importProject);
+            message.success(t("canvas.imported", { count: imported.length }));
+        } catch {
+            message.error(t("canvas.importFailed"));
+        } finally {
+            if (inputRef.current) inputRef.current.value = "";
+        }
+    }
+
+    return (
+        <section className="home-canvas-panel" aria-label={copyOf(home.canvasesTitle, t("home.recentCanvases"))}>
+            <header className="home-canvas-panel-head">
+                <div className="home-canvas-panel-copy">
+                    <h2>{copyOf(home.canvasesTitle, t("home.recentCanvases"))}</h2>
+                    <p>{copyOf(home.canvasesNote, t("home.recentCanvasesNote"))}</p>
+                </div>
+                <div className="home-canvas-panel-actions">
+                    <button type="button" className="home-canvas-panel-action" onClick={() => inputRef.current?.click()}>
+                        {t("canvas.import")}
+                    </button>
+                    <Link to="/canvas" className="home-canvas-panel-action">
+                        {copyOf(home.canvasesViewAll, t("home.viewAll"))}
+                    </Link>
+                </div>
+            </header>
+
+            <div className="jm-canvas-grid">
+                <button type="button" className="jm-canvas-card is-new" onClick={createAndOpenCanvas}>
+                    <span className="jm-canvas-icon"><Plus /></span>
+                    <span className="jm-canvas-body">
+                        <span className="jm-canvas-title">{copyOf(home.canvasesNew, t("home.newCanvas"))}</span>
+                        <span className="jm-canvas-meta">{copyOf(home.canvasesOpen, t("home.openCanvas"))}</span>
+                    </span>
+                </button>
+
+                {recent.map((project) => (
+                    <button key={project.id} type="button" className="jm-canvas-card" title={project.title} onClick={() => openCanvas(project.id)}>
+                        <span className="jm-canvas-icon"><Frame /></span>
+                        <span className="jm-canvas-body">
+                            <span className="jm-canvas-title">{project.title}</span>
+                            <span className="jm-canvas-meta">
+                                <span>{t("canvas.project.stats", { nodes: project.nodes.length, connections: project.connections.length })}</span>
+                                {project.updatedAt ? <span className="home-canvas-date"> · {formatPromptDate(project.updatedAt, i18n.resolvedLanguage)}</span> : null}
+                            </span>
+                        </span>
+                    </button>
+                ))}
+
+                {/* 画布少于一屏时用一张占位卡补满剩余列，避免三格重复同一句话 */}
+                {emptySlots > 0 ? (
+                    <div className="jm-canvas-card is-empty" style={{ gridColumn: `span ${emptySlots}` }} aria-hidden="true">
+                        <span className="jm-canvas-icon"><Frame /></span>
+                        <span className="jm-canvas-body">
+                            <span className="jm-canvas-title">{t("canvas.empty")}</span>
+                            {emptySlots === PROJECT_SLOTS ? <span className="jm-canvas-meta">{t("canvas.emptyDescription")}</span> : null}
+                        </span>
+                    </div>
+                ) : null}
+            </div>
+
+            <input
+                ref={inputRef}
+                type="file"
+                accept={IMPORT_ACCEPT}
+                className="hidden"
+                onChange={(event) => void importCanvas(event.target.files?.[0])}
+            />
+        </section>
+    );
+}
+
+
+========================================================================
+FILE: web/src/pages/image/index.tsx
+LINES: 1-866
+========================================================================
+import { useCreationChat, handoffCreationToChat, ensureCreationThread, newCreationThread, saveCreationRecord } from "@/pages/chat/chat-store";
+import { RecordActions } from "@/components/creation/record-actions";
+import { CreationToolbar } from "@/components/creation/creation-toolbar";
+import { Button as ActionButton } from "@astryxdesign/core/Button";
+import { CreationRequest, ContinuationNotice, continuationPrompt } from "@/components/creation/creation-conversation";
+import type { Continuation } from "@/components/creation/creation-drafts";
+import { PromptOptimizationEstimate } from "@/components/creation/prompt-optimization-estimate";
+import { OtherCreationRecord, useOtherCreationHistory } from "@/components/creation/mixed-creation-history";
+import { ChatComposer } from "@astryxdesign/core/Chat";
+import { Thumbnail } from "@astryxdesign/core/Thumbnail";
+import { Lightbox } from "@astryxdesign/core/Lightbox";
+import { CreationStream } from "@/components/creation/creation-stream";
+import { CreationRecordsRail, useNarrowRecords } from "@/components/creation/creation-records-rail";
+import { CreditEstimate } from "@/components/creation/credit-estimate";
+import { readCreationDraft, saveCreationDraft } from "@/components/creation/creation-drafts";
+import { useCreationHistory } from "@/components/creation/creation-history";
+import { useVisibleRecords } from "@/components/creation/use-visible-records";
+import { useReferenceTransfer } from "@/components/creation/use-reference-transfer";
+import { creationStatus } from "@/components/creation/creation-status";
+import { GenerationHistoryPager, mergeGenerationHistory, generationTaskIds, hideGenerationHistory } from "@/services/api/generation-history";
+import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, LoaderCircle, PenLine, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { App, Button, Checkbox, Drawer, Empty, Input, Modal, Tag, Tooltip, Typography } from "antd";
+import { saveAs } from "file-saver";
+import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+
+import { removePromptParameter, storePendingPrompt, takePendingPrompt } from "@/lib/pending-prompt";
+import { imageLogStorage } from "@/lib/image-log-storage";
+
+import { ImageSettingsPanel } from "@/components/image-settings-panel";
+import { PromptOptimizeButton } from "@/components/prompt-optimize-button";
+import { ModelPicker } from "@/components/model-picker";
+import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
+import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
+import { canvasThemes } from "@/lib/canvas-theme";
+import { imageReferenceLabel } from "@/lib/image-reference-prompt";
+import { mediaFileKind } from "@/lib/media-file";
+import { modelOptionLabel, normalizeModelOptionValue, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { useThemeStore } from "@/stores/use-theme-store";
+import { nanoid } from "nanoid";
+import { formatBytes, formatDuration } from "@/lib/image-utils";
+import { imageTaskIdFromError, requestEdit, requestGeneration } from "@/services/api/image";
+import { ensureImagePreview, getImagePreviewRevision, previewUrlFor, resolveImageUrl, retryLocalImage, subscribeImagePreviews, uploadImage } from "@/services/image-storage";
+import { useAssetStore } from "@/stores/use-asset-store";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
+import type { ReferenceImage } from "@/types/image";
+import i18n from "@/i18n";
+
+type GeneratedImage = {
+    taskId?: string;
+    id: string;
+    dataUrl: string;
+    storageKey?: string;
+    durationMs: number;
+    width: number;
+    height: number;
+    bytes: number;
+    mimeType?: string;
+};
+
+type GenerationResult = {
+    id: string;
+    status: "pending" | "success" | "failed";
+    image?: GeneratedImage;
+    error?: string;
+};
+
+type GenerationLog = {
+    serverTaskIds?: string[];
+    id: string;
+    createdAt: number;
+    title: string;
+    prompt: string;
+    time: string;
+    model: string;
+    config: GenerationLogConfig;
+    references: ReferenceImage[];
+    durationMs: number;
+    successCount: number;
+    failCount: number;
+    imageCount: number;
+    size: string;
+    quality: string;
+    status: "success" | "failed" | "pending" | "unavailable";
+    images: GeneratedImage[];
+    creditsCharged?: number;
+    reconciliationRequired?: boolean;
+    referenceHistoryUnknown?: boolean;
+};
+
+type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "size" | "count"> & Partial<Pick<AiConfig, "background">>;
+
+type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
+
+const RESULT_ACTION_BUTTON_CLASS = "min-w-0 px-1.5 [&_.ant-btn-icon]:shrink-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate";
+
+export default function ImagePage() {
+    const { message } = App.useApp();
+    const { run: transferReference, isTransferring } = useReferenceTransfer();
+    const reportMediaError = (error: unknown) => { if (!(error instanceof Error && error.name === "AbortError")) message.error(error instanceof Error ? error.message : String(error)); };
+    const { t } = useTranslation();
+    useSyncExternalStore(subscribeImagePreviews, getImagePreviewRevision);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const dragDepthRef = useRef(0);
+    const accountEpochRef = useRef(0);
+    const config = useConfigStore((state) => state.config);
+    const effectiveConfig = useEffectiveConfig();
+    const updateConfig = useConfigStore((state) => state.updateConfig);
+    const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
+    const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const addAsset = useAssetStore((state) => state.addAsset);
+    const userId = useAuthStore((state) => state.ready ? state.user?.id : undefined);
+    const sessionEpoch = useAuthStore((state) => state.sessionEpoch);
+    const [viewOwner, setViewOwner] = useState<string | undefined>();
+    const [viewEpoch, setViewEpoch] = useState<number | undefined>();
+    const isCurrentView = () => Boolean(userId && viewOwner === userId && viewEpoch === sessionEpoch && isCurrentUser(userId, sessionEpoch));
+    const [prompt, setPrompt] = useState("");
+    const [searchParams] = useSearchParams();
+    const location = useLocation();
+    const navigate = useNavigate();
+    const appliedInitialPrompt = useRef<string | undefined>(undefined);
+    const [references, setReferences] = useState<ReferenceImage[]>([]);
+    const [continuation, setContinuation] = useState<Continuation>();
+    const [submittedPrompt, setSubmittedPrompt] = useState("");
+    useEffect(() => {
+        if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch) return;
+        saveCreationDraft("image", userId, sessionEpoch, { continuation, prompt, references, videos: [], audios: [] });
+    }, [userId, viewOwner, viewEpoch, sessionEpoch, continuation, prompt, references]);
+    const [results, setResults] = useState<GenerationResult[]>([]);
+    const [logs, setLogs] = useState<GenerationLog[]>([]);
+    const requestedRecord = searchParams.get("record");
+    const targetRecord = logs.find((log) => log.id === requestedRecord || (requestedRecord && generationTaskIds(log).includes(requestedRecord)))?.id;
+
+    const otherHistory = useOtherCreationHistory(userId, sessionEpoch, "video");
+    const mixedLogs = [...logs.map(log => ({ id: log.id, kind: "active" as const, log })), ...otherHistory.logs.map(log => ({ id: log.id, kind: "other" as const, log }))].sort((a, b) => b.log.createdAt - a.log.createdAt);
+    const visibleHistory = useVisibleRecords(mixedLogs, userId, targetRecord ?? requestedRecord);
+
+    const mixedRecords = visibleHistory.records;
+    const locatedRecordRef = useRef("");
+    const historyPagerRef = useRef<GenerationHistoryPager | null>(null);
+    const [historyHasMore, setHistoryHasMore] = useState(false);
+    const [loadingEarlier, setLoadingEarlier] = useState(false);
+    useEffect(() => {
+        const pager = historyPagerRef.current;
+        if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch || !pager || !requestedRecord || targetRecord || !/^[0-9a-f-]{36}$/i.test(requestedRecord)) return;
+        let active = true;
+        void pager.loadRecord(requestedRecord).then(async snapshot => {
+            if (!active || historyPagerRef.current !== pager) return;
+            if (!snapshot.logs.some(log => log.id === requestedRecord)) { message.info("该记录不存在或已隐藏"); return; }
+            const { items, hasMore } = await readStoredLogs(userId, pager);
+            if (active && historyPagerRef.current === pager) { setLogs(items); setHistoryHasMore(hasMore); }
+        }).catch(() => { if (active) message.error("记录加载失败，请重试"); });
+        return () => { active = false; };
+    }, [userId, sessionEpoch, viewOwner, viewEpoch, requestedRecord, targetRecord]);
+
+    useEffect(() => {
+        if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch) return;
+        useCreationHistory.getState().update(`${userId}:${sessionEpoch}`, "image", logs.map((log) => ({ id: log.id, title: log.title, createdAt: log.createdAt, mode: "image" })));
+    }, [logs, userId, viewOwner, viewEpoch, sessionEpoch]);
+    useEffect(() => {
+        const id = targetRecord;
+        const navigation = `${userId}:${sessionEpoch}:${location.key}:${id}`;
+        if (id && locatedRecordRef.current !== navigation && logs.some((log) => log.id === id)) {
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                const record = document.getElementById(`creation-record-${id}`);
+                if (record && locatedRecordRef.current !== navigation) { locatedRecordRef.current = navigation; record.scrollIntoView({ block: "center" }); }
+            }));
+        }
+    }, [logs, targetRecord, location.key, userId, sessionEpoch]);
+    const [running, setRunning] = useState(false);
+    const [logsOpen, setLogsOpen] = useState(false);
+    // 宽屏把「生成记录」停靠在右侧，窄屏仍走底部抽屉
+    const [recordsRailOpen, setRecordsRailOpen] = useState(false);
+    const narrowRecords = useNarrowRecords();
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [referenceOpen, setReferenceOpen] = useState(false);
+    const [promptDialogOpen, setPromptDialogOpen] = useState(false);
+
+    useEffect(() => {
+        if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch || !isCurrentUser(userId, sessionEpoch) || appliedInitialPrompt.current === `${userId}:${sessionEpoch}:${location.key}`) return;
+        const pending = takePendingPrompt("image", userId);
+        if (pending) setContinuation(undefined);
+        const initialPrompt = pending?.prompt || searchParams.get("prompt") || "";
+        if (searchParams.has("prompt")) {
+            const rest = removePromptParameter(searchParams).toString();
+            navigate({ pathname: location.pathname, search: rest ? `?${rest}` : "", hash: location.hash }, { replace: true });
+        }
+        const pendingImages = pending?.references.filter((reference) => !reference.kind || reference.kind === "image") ?? [];
+        if (!initialPrompt && !pendingImages.length) return;
+        appliedInitialPrompt.current = `${userId}:${sessionEpoch}:${location.key}`;
+        if (initialPrompt) setPrompt(initialPrompt);
+        if (pending) setReferences(pendingImages.map((reference) => ({ id: nanoid(), name: reference.name, type: reference.type, dataUrl: reference.dataUrl, storageKey: reference.storageKey })));
+    }, [searchParams, userId, viewOwner, viewEpoch, sessionEpoch, navigate, location.pathname, location.hash, location.key]);
+    const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+    const [startedAt, setStartedAt] = useState(0);
+    const [elapsedMs, setElapsedMs] = useState(0);
+    const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
+    const [previewLog, setPreviewLog] = useState<GenerationLog | null>(null);
+    const [detailsLog, setDetailsLog] = useState<GenerationLog | null>(null);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [isReferenceDragActive, setIsReferenceDragActive] = useState(false);
+    const [autoRunToken, setAutoRunToken] = useState(0);
+    const imageCommand = useWorkbenchAgentStore((state) => state.imageCommand);
+    const clearImageCommand = useWorkbenchAgentStore((state) => state.clearImageCommand);
+    const updateAgentTask = useWorkbenchAgentStore((state) => state.updateTask);
+    const processedCommandRef = useRef(0);
+    const agentTaskIdRef = useRef<string | undefined>(undefined);
+
+    const model = effectiveConfig.imageModel || effectiveConfig.model;
+    const canGenerate = Boolean(prompt.trim());
+    const generationCount = Math.max(1, Math.min(10, Number(config.count) || 1));
+
+    useEffect(() => {
+        if (!running || !startedAt) return;
+        const timer = window.setInterval(() => setElapsedMs(performance.now() - startedAt), 1000);
+        return () => window.clearInterval(timer);
+    }, [running, startedAt]);
+
+    useEffect(() => {
+        accountEpochRef.current += 1;
+        historyPagerRef.current = userId ? new GenerationHistoryPager(userId, "image") : null;
+        setHistoryHasMore(false); setLoadingEarlier(false);
+        agentTaskIdRef.current = undefined;
+        setAutoRunToken(0);
+        setLogs([]); setResults([]); setPreviewLog(null); setDetailsLog(null); setSelectedLogIds([]); setRunning(false); setStartedAt(0);
+        const draft = userId ? readCreationDraft("image", userId, sessionEpoch) : undefined;
+        setContinuation(draft?.continuation); setPrompt(draft?.prompt ?? ""); setReferences(draft?.references ?? []);
+        setViewOwner(userId); setViewEpoch(sessionEpoch);
+        if (userId) void refreshLogs();
+    }, [userId, sessionEpoch]);
+
+    const addReferences = async (files?: FileList | null) => {
+        const owner = userId, epoch = accountEpochRef.current;
+        if (!owner || !isCurrentUser(owner, sessionEpoch)) return;
+        const selected = Array.from(files || []);
+        const imageFiles = selected.filter((file) => mediaFileKind(file) === "image");
+        if (imageFiles.length < selected.length) message.warning(t("imageWorkbench.unsupportedFiles"));
+        if (!imageFiles.length) return;
+        const queued = imageFiles.map((file) => ({ id: nanoid(), file, previewUrl: URL.createObjectURL(file) }));
+        setReferences((value) => [...value, ...queued.map(({ id, file, previewUrl }) => ({ id, name: file.name, type: file.type, dataUrl: previewUrl, queued: true, progress: 0 }))]);
+        let succeeded = 0;
+        for (const item of queued) {
+            if (!isCurrentUser(owner, sessionEpoch) || accountEpochRef.current !== epoch) return;
+            setReferences((value) => value.map((ref) => (ref.id === item.id ? { ...ref, queued: false, uploading: true, progress: 0 } : ref)));
+            try {
+                const image = await uploadImage(item.file, {
+                    expectedOwner: owner,
+                    onProgress: (progress) => setReferences((value) => value.map((ref) => (ref.id === item.id ? { ...ref, progress } : ref))),
+                });
+                succeeded += 1;
+                setReferences((value) => value.map((ref) => (ref.id === item.id ? { ...ref, dataUrl: image.url, type: image.mimeType, storageKey: image.storageKey, uploading: false, queued: false, progress: 100, error: undefined } : ref)));
+                if (image.url !== item.previewUrl) window.setTimeout(() => URL.revokeObjectURL(item.previewUrl), 1000);
+            } catch (error) {
+                setReferences((value) => value.map((ref) => (ref.id === item.id ? { ...ref, uploading: false, queued: false, progress: 0, error: error instanceof Error ? error.message : String(error) } : ref)));
+                reportMediaError(error);
+            }
+        }
+        if (succeeded) message.success(t("imageWorkbench.referenceAdded", { count: succeeded }));
+    };
+    const retryReference = async (item: ReferenceImage) => {
+        if (!item.storageKey || item.uploading) return;
+        const owner = userId, epoch = accountEpochRef.current;
+        if (!owner || !isCurrentUser(owner, sessionEpoch)) return;
+        setReferences((value) => value.map((ref) => ref.id === item.id ? { ...ref, uploading: true, queued: false, progress: 0, error: undefined } : ref));
+        try {
+            const image = await retryLocalImage(item.storageKey, {
+                expectedOwner: owner,
+                onProgress: (progress) => setReferences((value) => value.map((ref) => ref.id === item.id ? { ...ref, progress } : ref)),
+            });
+            if (!isCurrentUser(owner, sessionEpoch) || accountEpochRef.current !== epoch) return;
+            setReferences((value) => value.map((ref) => ref.id === item.id ? { ...ref, dataUrl: image.url, type: image.mimeType, storageKey: undefined, uploading: false, queued: false, progress: 100, error: undefined } : ref));
+            if (item.dataUrl.startsWith("blob:")) window.setTimeout(() => URL.revokeObjectURL(item.dataUrl), 1000);
+        } catch (error) {
+            setReferences((value) => value.map((ref) => ref.id === item.id ? { ...ref, uploading: false, queued: false, progress: 0, error: error instanceof Error ? error.message : String(error) } : ref));
+            reportMediaError(error);
+        }
+    };
+
+    const addReferencesFromClipboard = async () => {
+        const owner = userId, epoch = accountEpochRef.current;
+        if (!owner || !isCurrentUser(owner, sessionEpoch)) return;
+        try {
+            const items = await navigator.clipboard.read();
+            const blobs = await Promise.all(items.flatMap((item) => item.types.filter((type) => type.startsWith("image/")).map((type) => item.getType(type))));
+            if (!blobs.length) {
+                message.error(t("imageWorkbench.clipboardEmpty"));
+                return;
+            }
+            const nextReferences = await Promise.all(
+                blobs.map(async (blob, index) => {
+                    const image = await uploadImage(blob, { expectedOwner: owner });
+                    return { id: nanoid(), name: `clipboard-${index + 1}.png`, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
+                }),
+            );
+            if (!isCurrentUser(owner, sessionEpoch) || accountEpochRef.current !== epoch) return;
+            setReferences((value) => [...value, ...nextReferences]);
+            message.success(t("imageWorkbench.clipboardAdded", { count: nextReferences.length }));
+        } catch {
+            if (isCurrentUser(owner, sessionEpoch) && accountEpochRef.current === epoch) message.error(t("imageWorkbench.clipboardEmpty"));
+        }
+    };
+
+    const generationThread = useRef("");
+    const generate = async () => {
+        const owner = userId;
+        if (!owner || !isCurrentView()) return;
+        const epoch = accountEpochRef.current;
+        const active = () => isCurrentUser(owner, sessionEpoch) && accountEpochRef.current === epoch;
+        const agentTaskId = agentTaskIdRef.current;
+        agentTaskIdRef.current = undefined;
+        const text = continuationPrompt(prompt, continuation);
+        if (!text) {
+            message.error(t("imageWorkbench.promptRequired"));
+            if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", error: t("imageWorkbench.promptRequired") });
+            return;
+        }
+        if (!isAiConfigReady(effectiveConfig, model)) {
+            message.warning(t("workbench.configFirst"));
+            openConfigDialog(true);
+            if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", error: t("imageWorkbench.configIncomplete") });
+            return;
+        }
+
+        const snapshot = buildRequestSnapshot();
+        if (!snapshot) {
+            if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", error: t("imageWorkbench.invalidParams") });
+            return;
+        }
+
+        generationThread.current = await ensureCreationThread(owner);
+        if (!active()) return;
+        setElapsedMs(0);
+        setSubmittedPrompt(snapshot.text);
+        setRunning(true);
+        if (agentTaskId) updateAgentTask(agentTaskId, { status: "running", error: undefined });
+        setPreviewLog(null);
+        setResults(Array.from({ length: generationCount }, () => ({ id: nanoid(), status: "pending" })));
+        const batchStartedAt = performance.now();
+        setStartedAt(batchStartedAt);
+
+        const tasks = Array.from({ length: generationCount }, (_, index) => runGenerationSlot(index, snapshot, owner, active));
+
+        const result = await Promise.allSettled(tasks);
+        if (!active()) return;
+        const successImages = result.filter((item): item is PromiseFulfilledResult<GeneratedImage> => item.status === "fulfilled").map((item) => item.value);
+        const successCount = successImages.length;
+        const failCount = generationCount - successCount;
+        const failed = result.find((item): item is PromiseRejectedResult => item.status === "rejected");
+        const failedTaskIds = result.flatMap((item) => item.status === "rejected" ? [imageTaskIdFromError(item.reason)].filter((id): id is string => Boolean(id)) : []);
+        const error = failed?.reason instanceof Error ? failed.reason.message : failCount ? t("workbench.generationFailed") : undefined;
+        if (agentTaskId) updateAgentTask(agentTaskId, { status: successCount ? "succeeded" : "failed", successCount, failCount, error: successCount ? undefined : error });
+
+        try {
+            saveLog(
+                buildLog({
+                    prompt: text,
+                    model,
+                    config: { ...snapshot.config, count: String(generationCount) },
+                    references: snapshot.references,
+                    durationMs: performance.now() - batchStartedAt,
+                    successCount,
+                    failCount,
+                    status: successCount ? "success" : "failed",
+                    images: successImages,
+                    taskIds: failedTaskIds,
+                }),
+            );
+            successCount ? message.success(t("imageWorkbench.generated")) : message.error(failed?.reason instanceof Error ? failed.reason.message : t("workbench.generationFailed"));
+        } finally {
+            setRunning(false);
+        }
+    };
+
+    // Handle image-generation commands from the Agent panel by setting the prompt and optionally starting generation.
+    useEffect(() => {
+        if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch || !isCurrentUser(userId, sessionEpoch) || !imageCommand || imageCommand.nonce === processedCommandRef.current) return;
+        processedCommandRef.current = imageCommand.nonce;
+        clearImageCommand();
+        if (typeof imageCommand.prompt === "string") setPrompt(imageCommand.prompt);
+        if (imageCommand.run && running) {
+            if (imageCommand.taskId) updateAgentTask(imageCommand.taskId, { status: "failed", error: t("imageWorkbench.busy") });
+            return;
+        }
+        if (imageCommand.run) {
+            agentTaskIdRef.current = imageCommand.taskId;
+            setAutoRunToken((value) => value + 1);
+        }
+    }, [imageCommand, clearImageCommand, running, updateAgentTask, userId, viewOwner, viewEpoch, sessionEpoch]);
+
+    useEffect(() => {
+        if (!autoRunToken || !userId || !isCurrentUser(userId, sessionEpoch) || viewOwner !== userId || viewEpoch !== sessionEpoch) return;
+        void generate();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoRunToken]);
+
+    const downloadImage = (image: GeneratedImage, index: number) => {
+        if (!isCurrentView()) return;
+        saveAs(image.dataUrl, `image-${index + 1}.png`);
+    };
+
+    const useImageForVideo = (image: GeneratedImage, index: number) => {
+        if (!userId || !isCurrentView()) return;
+        if (isTransferring) { message.warning("参考素材正在处理，请等待完成后再切换页面"); return; }
+        storePendingPrompt("video", "", [{ kind: "image", name: `image-${index + 1}`, type: image.mimeType || "image/png", dataUrl: image.dataUrl, storageKey: image.storageKey }], userId, { appendReferences: true });
+        navigate("/create?mode=video");
+    };
+
+    const addResultToReferences = async (image: GeneratedImage, index: number) => {
+        const owner = userId, epoch = accountEpochRef.current;
+        if (!owner || !isCurrentView()) return;
+        const stored = await uploadImage(image.dataUrl, { expectedOwner: owner });
+        if (!isCurrentUser(owner, sessionEpoch) || accountEpochRef.current !== epoch) return;
+        setReferences((value) => [...value, { id: nanoid(), name: `result-${index + 1}.png`, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }]);
+        message.success(t("imageWorkbench.addedReference"));
+    };
+
+    const continueImage = async (image: GeneratedImage, index: number) => {
+        const owner = userId, epoch = accountEpochRef.current;
+        if (!owner || !isCurrentView() || running) return;
+        const stored = await uploadImage(image.dataUrl, { expectedOwner: owner });
+        if (!isCurrentUser(owner, sessionEpoch) || accountEpochRef.current !== epoch) return;
+        const source = logs.find(log => log.images.some(item => item.id === image.id));
+        setReferences([{ id: nanoid(), name: `result-${index + 1}.png`, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }]);
+        setContinuation({ title: source?.title || "选中图片", prompt: source?.prompt || "根据参考图片创作" });
+        setPrompt("");
+        setPreviewLog(null);
+    };
+
+    const saveResultToAssets = async (image: GeneratedImage, index: number) => {
+        const owner = userId, epoch = accountEpochRef.current;
+        if (!owner || !isCurrentView()) return;
+        const stored = await uploadImage(image.dataUrl, { expectedOwner: owner });
+        if (!isCurrentUser(owner, sessionEpoch) || accountEpochRef.current !== epoch) return;
+        addAsset({
+            kind: "image",
+            title: t("imageWorkbench.resultTitle", { count: index + 1 }),
+            coverUrl: stored.url,
+            tags: [],
+            source: t("imageWorkbench.source"),
+            data: { dataUrl: stored.url, storageKey: stored.storageKey, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType },
+            metadata: { source: "image-page", prompt },
+        });
+        message.success(t("common.addedToAssets"));
+    };
+
+    const insertPickedAsset = async (payload: InsertAssetPayload) => {
+        const owner = userId, epoch = accountEpochRef.current;
+        if (!owner || !isCurrentView()) return;
+        if (payload.kind === "text") {
+            setPrompt(payload.content);
+        } else if (payload.kind === "image") {
+            const stored = await uploadImage(payload.dataUrl, { expectedOwner: owner });
+            if (!isCurrentUser(owner, sessionEpoch) || accountEpochRef.current !== epoch) return;
+            setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }]);
+        } else {
+            message.warning(t("imageWorkbench.unsupportedAsset"));
+        }
+        setAssetPickerOpen(false);
+    };
+
+    const openChat = async () => {
+        if (!userId || !isCurrentView()) return;
+        const threadId = await ensureCreationThread(userId);
+        if (!isCurrentView()) return;
+        const selected = previewLog ?? logs.find(log => log.id === requestedRecord || (requestedRecord && generationTaskIds(log).includes(requestedRecord)));
+        const images = results.flatMap(result => result.image ? [result.image] : []);
+        const generated = images.length ? logs.find(log => log.images.some(image => images.some(result => result.id === image.id))) : undefined;
+        const activeThread = useCreationChat.getState().threads.find(t => t.id === threadId);
+        const displayedImage = !activeThread?.records.length && !activeThread?.contextCleared && !images.length && !references.length ? logs.find(log => log.images.length > 0) : undefined;
+        const record = selected ?? generated ?? displayedImage ?? (images.length || references.length ? { id: `draft-image-${threadId}`, createdAt: Date.now(), prompt: submittedPrompt || prompt, model, status: "success", images, references } : undefined);
+        return handoffCreationToChat(userId, record);
+    };
+
+    const createSession = () => {
+        if (!isCurrentView()) return;
+        if (isTransferring) { message.warning("参考素材正在处理，请等待完成后再新建创作"); return; }
+        if (userId) newCreationThread(userId);
+        setContinuation(undefined);
+        setPrompt("");
+        setReferences([]);
+        setResults([]);
+        setElapsedMs(0);
+        setStartedAt(0);
+        setSelectedLogIds([]);
+        setPreviewLog(null);
+    };
+
+    const deleteSelectedLogs = () => {
+        if (!userId || !isCurrentView()) return;
+        void hideGenerationHistory(userId, logs.filter(log => selectedLogIds.includes(log.id)).flatMap(generationTaskIds)).then(() => Promise.all(selectedLogIds.map((id) => imageLogStorage.remove(userId, id)))).then(() => { if (!isCurrentUser(userId, sessionEpoch)) return; historyPagerRef.current = new GenerationHistoryPager(userId, "image"); return refreshLogs(); }).catch(error => message.error(error instanceof Error ? error.message : String(error)));
+        if (previewLog && selectedLogIds.includes(previewLog.id)) {
+            setPreviewLog(null);
+            setResults([]);
+        }
+        setSelectedLogIds([]);
+        setDeleteConfirmOpen(false);
+    };
+
+    const saveLog = (log: GenerationLog) => {
+        if (!userId || !isCurrentUser(userId, sessionEpoch)) return;
+        saveCreationRecord(userId, log, generationThread.current);
+        const epoch = accountEpochRef.current;
+        void imageLogStorage.set(userId, log.id, serializeLog(log)).then(() => { if (isCurrentUser(userId, sessionEpoch) && accountEpochRef.current === epoch) void refreshLogs(); });
+    };
+
+    const refreshLogs = async () => {
+        if (!userId) return;
+        const epoch = accountEpochRef.current;
+        const pager = historyPagerRef.current;
+        if (!pager) return;
+        const { items, hasMore } = await readStoredLogs(userId, pager);
+        if (isCurrentUser(userId, sessionEpoch) && accountEpochRef.current === epoch && historyPagerRef.current === pager) { setLogs(items); setHistoryHasMore(hasMore); }
+    };
+
+    const showEarlierRecords = async () => {
+        if (visibleHistory.hasEarlier) { visibleHistory.showEarlier(); return; }
+        const pager = historyPagerRef.current;
+        if (!userId || !pager || (!historyHasMore && !otherHistory.more) || loadingEarlier) return;
+        const epoch = accountEpochRef.current;
+        setLoadingEarlier(true);
+        try {
+            const [{ items, hasMore }] = await Promise.all([
+                historyHasMore ? readStoredLogs(userId, pager, true) : Promise.resolve({ items: logs, hasMore: false }),
+                otherHistory.more ? otherHistory.loadMore() : Promise.resolve(),
+            ]);
+            if (!isCurrentUser(userId, sessionEpoch) || accountEpochRef.current !== epoch || historyPagerRef.current !== pager) return;
+            setLogs(items); setHistoryHasMore(hasMore); visibleHistory.showEarlier();
+        } catch (error) { reportMediaError(error); }
+        finally { if (historyPagerRef.current === pager) setLoadingEarlier(false); }
+    };
+
+    const previewGenerationLog = async (log: GenerationLog) => {
+        if (!isCurrentView()) return;
+        if (isTransferring) { message.warning("参考素材正在处理，请等待完成后再回填记录"); return; }
+        setPreviewLog(log);
+        setLogsOpen(false);
+        setContinuation(undefined);
+        setPrompt(log.prompt);
+        setReferences(log.references || []);
+        if (log.config.imageModel || log.model) updateConfig("imageModel", normalizeModelOptionValue(log.config.imageModel || log.model, effectiveConfig.channels));
+        if (log.config.quality) updateConfig("quality", log.config.quality);
+        if (log.config.size) updateConfig("size", log.config.size);
+        if (log.config.background) updateConfig("background", log.config.background);
+        if (log.config.count) updateConfig("count", log.config.count);
+        setResults(log.images.map((image) => ({ id: image.id, status: "success", image })));
+        const missing = imageHistoryGaps(log);
+        if (missing.length) message.warning(`${missing.join("；")}，请检查后再生成`);
+        return missing.length > 0;
+    };
+
+    const buildRequestSnapshot = () => {
+        const text = continuationPrompt(prompt, continuation);
+        if (!text) {
+            message.error(t("imageWorkbench.promptRequired"));
+            return null;
+        }
+        if (!isAiConfigReady(effectiveConfig, model)) {
+            message.warning(t("workbench.configFirst"));
+            openConfigDialog(true);
+            return null;
+        }
+        return { text, config: { ...effectiveConfig, model, count: "1" }, references: [...references] };
+    };
+
+    const runGenerationSlot = async (index: number, snapshot: { text: string; config: AiConfig; references: ReferenceImage[] }, owner: string, active: () => boolean) => {
+        const itemStartedAt = performance.now();
+        try {
+            const result = snapshot.references.length ? await requestEdit(snapshot.config, snapshot.text, snapshot.references, { expectedUserId: owner }) : await requestGeneration(snapshot.config, snapshot.text, { expectedUserId: owner });
+            if (!active()) throw new Error("账户已切换");
+            const image = result[0];
+            if (!image) throw new Error(t("imageWorkbench.missingResult"));
+            const stored = await uploadImage(image.dataUrl, { expectedOwner: owner });
+            if (!active()) throw new Error("账户已切换");
+            const nextImage: GeneratedImage = { taskId: 'taskId' in image && typeof image.taskId === 'string' ? image.taskId : undefined, id: image.id, dataUrl: stored.url, ...(stored.storageKey ? { storageKey: stored.storageKey } : {}), durationMs: performance.now() - itemStartedAt, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType };
+            setResults((value) => updateResultAt(value, index, { status: "success", image: nextImage }));
+            return nextImage;
+        } catch (error) {
+            if (active()) setResults((value) => updateResultAt(value, index, { status: "failed", error: error instanceof Error ? error.message : t("workbench.generationFailed") }));
+            throw error;
+        }
+    };
+
+    const retryResult = async (index: number) => {
+        const owner = userId;
+        if (!owner) return;
+        const epoch = accountEpochRef.current;
+        const active = () => isCurrentUser(owner, sessionEpoch) && accountEpochRef.current === epoch;
+        const snapshot = buildRequestSnapshot();
+        if (!snapshot) return;
+        generationThread.current = await ensureCreationThread(owner);
+        if (!active()) return;
+        setPreviewLog(null);
+        setResults((value) => updateResultAt(value, index, { status: "pending", error: undefined, image: undefined }));
+        const retryStartedAt = performance.now();
+        try {
+            const image = await runGenerationSlot(index, snapshot, owner, active);
+            if (!active()) return;
+            saveLog(
+                buildLog({
+                    prompt: snapshot.text,
+                    model,
+                    config: { ...snapshot.config, count: "1" },
+                    references: snapshot.references,
+                    durationMs: performance.now() - retryStartedAt,
+                    successCount: 1,
+                    failCount: 0,
+                    status: "success",
+                    images: [image],
+                }),
+            );
+            message.success(t("workbench.retrySuccess"));
+        } catch {
+            // runGenerationSlot has already marked the result as failed.
+        }
+    };
+
+    const editedNavigation = useRef("");
+    useEffect(() => {
+        if (!["edit", "continue"].includes(searchParams.get("action") || "") || !targetRecord || !isCurrentView() || isTransferring) return;
+        const key = `${userId}:${sessionEpoch}:${location.key}`;
+        if (editedNavigation.current === key) return;
+        const log = logs.find(item => item.id === targetRecord);
+        if (!log) return;
+        editedNavigation.current = key;
+        if (searchParams.get("action") === "continue") {
+            const index = Number(searchParams.get("image") || 0);
+            if (log.images[index]) void transferReference(() => continueImage(log.images[index], index)).catch(reportMediaError);
+        } else void previewGenerationLog(log);
+        const params = new URLSearchParams(searchParams);
+        params.delete("action");
+        params.delete("image");
+        navigate({ pathname: location.pathname, search: `?${params}`, hash: location.hash }, { replace: true });
+    }, [targetRecord, logs, searchParams, location.key, userId, sessionEpoch, viewOwner, viewEpoch, isTransferring]);
+    if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch) return null;
+    const previewGaps = previewLog ? imageHistoryGaps(previewLog) : [];
+
+    return (
+        <div className="flex h-full flex-col overflow-hidden bg-muted text-foreground dark:bg-background dark:text-foreground page-surface">
+            <div className="flex min-h-0 flex-1">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div className="creation-top-actions flex shrink-0 items-center justify-between gap-2 px-4 py-2">
+                    <ActionButton variant="ghost" size="sm" label="新建创作" icon={<Plus className="size-4" />} isDisabled={isTransferring} onClick={createSession} />
+                    {/* 宽屏入口在右侧停靠栏，顶栏不再放重复按钮；窄屏没有停靠栏，仍保留 */}
+                    {narrowRecords ? <ActionButton variant="ghost" size="sm" label="生成记录" icon={<History className="size-4" />} onClick={() => setLogsOpen(true)} /> : null}
+                </div>
+                <CreationStream tasks={mixedLogs.map(entry => ({ id: entry.id, status: entry.log.status }))} onScrollTop={() => void showEarlierRecords()} composer={
+                    <div className="creation-composer mx-auto w-full max-w-[960px]">
+                        {previewGaps.length > 0 && <div role="status" className="mb-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-300">{previewGaps.join("；")}，请核对后再生成。</div>}
+                        <ChatComposer
+                            value={prompt}
+                            onSubmit={() => void generate()}
+                            elevation="none"
+                            input={<div className="thin-scrollbar max-h-[30dvh] space-y-2 overflow-y-auto" onDragOver={(event) => { if (!referenceOpen && !references.length) event.preventDefault(); }} onDrop={(event) => { if (!referenceOpen && !references.length) { event.preventDefault(); void transferReference(() => addReferences(event.dataTransfer.files)).catch(reportMediaError); } }}>
+                        <ContinuationNotice value={continuation} mode="image" onCancel={() => { setContinuation(undefined); }} />
+                                <div className="relative">
+                                    <Input.TextArea className="!pb-9 !pr-10" value={prompt} onChange={(event) => setPrompt(event.target.value)} autoSize={{ minRows: 2, maxRows: 5 }} placeholder={continuation ? "例如：衣服换成红色，其他保持不变…" : "描述你想生成的图片，或选择一张作品继续修改…"} />
+                                    <PromptOptimizeButton prompt={prompt} model={model} capability="image" disabled={running} onOptimized={setPrompt} />
+                                </div>
+                                {(referenceOpen || references.length > 0) && (
+                                    <div className="min-w-0">
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                    <span className="text-base font-semibold">{t("imageWorkbench.references")}</span>
+                                    <div className="flex gap-2">
+                                        <Button size="small" icon={<ClipboardPaste className="size-3.5" />} onClick={() => void transferReference(addReferencesFromClipboard)}>
+                                            {t("workbench.clipboard")}
+                                        </Button>
+                                        <Button size="small" icon={<Upload className="size-3.5" />} onClick={() => fileInputRef.current?.click()}>
+                                            {t("workbench.upload")}
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div
+                                    className={`hover-scrollbar hover-scrollbar-hint relative flex min-h-24 w-full min-w-0 max-w-full gap-2 overflow-x-scroll overflow-y-hidden rounded-lg border border-dashed p-2 pb-3 overscroll-x-contain transition-colors ${isReferenceDragActive ? "border-foreground bg-muted/80 dark:border-white/20 dark:bg-muted/80" : "border-border dark:border-border"}`}
+                                    onDragEnter={(event) => {
+                                        event.preventDefault();
+                                        dragDepthRef.current += 1;
+                                        if (event.dataTransfer.types.includes("Files")) setIsReferenceDragActive(true);
+                                    }}
+                                    onDragOver={(event) => {
+                                        event.preventDefault();
+                                        event.dataTransfer.dropEffect = "copy";
+                                    }}
+                                    onDragLeave={(event) => {
+                                        event.preventDefault();
+                                        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+                                        if (!dragDepthRef.current) setIsReferenceDragActive(false);
+                                    }}
+                                    onDrop={(event) => {
+                                        event.preventDefault();
+                                        dragDepthRef.current = 0;
+                                        setIsReferenceDragActive(false);
+                                        void transferReference(() => addReferences(event.dataTransfer.files)).catch(reportMediaError);
+                                    }}
+                                    onWheel={(event) => {
+                                        if (event.currentTarget.scrollWidth <= event.currentTarget.clientWidth) return;
+                                        event.preventDefault();
+                                        event.currentTarget.scrollLeft += event.deltaY;
+                                    }}
+                                >
+                                    {references.map((item, index) => (
+                                        <div key={item.id} className={`group relative size-20 shrink-0 overflow-hidden rounded-md border ${item.storageKey ? "border-amber-500" : "border-border"}`} title={item.storageKey ? t("common.localOnlyHint") : undefined}>
+                                            <Thumbnail src={previewUrlFor(item.storageKey) || item.dataUrl} alt={item.name} label={item.name} className="size-full" />
+                                            <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{imageReferenceLabel(index)}</span>
+                                            {item.storageKey && !item.uploading && !item.queued ? <button type="button" className="absolute left-1 top-7 z-30 rounded bg-amber-600/90 px-1.5 py-0.5 text-[9px] font-medium text-white" onClick={(event) => { event.stopPropagation(); void transferReference(() => retryReference(item)); }} title={t("common.retryUpload")}>{t("common.retryUpload")}</button> : null}
+                                            {!item.uploading && !item.queued && !item.error ? <ReferenceOrderButtons index={index} total={references.length} onMove={(offset) => setReferences((value) => moveListItem(value, index, offset))} /> : null}
+                                            <button
+                                                type="button"
+                                                className="absolute right-1 top-1 z-30 flex size-7 items-center justify-center rounded-full bg-black/70 text-white shadow-sm"
+                                                onClick={() => setReferences((value) => value.filter((ref) => ref.id !== item.id))}
+                                                aria-label={t("imageWorkbench.removeReference")}
+                                            >
+                                                <Trash2 className="size-3.5" />
+                                            </button>
+                                            {item.uploading || item.queued || item.error ? (
+                                                <div className="absolute inset-x-0 bottom-0 z-20 bg-black/70 px-1.5 py-1" title={item.error}>
+                                                    {item.error ? <div className="text-center text-[9px] font-medium text-red-300">{t("common.uploadFailedStatus")}</div> : <>
+                                                        <div className="h-1 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full bg-[#D8FF3E] transition-[width]" style={{ width: `${item.queued ? 0 : item.progress ?? 0}%` }} /></div>
+                                                        <div className="mt-0.5 text-center text-[9px] text-white">{item.queued ? t("common.waitingStatus") : `${t("common.uploadingStatus")} ${item.progress ?? 0}%`}</div>
+                                                    </>}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    ))}
+                                    {!references.length ? <div className="flex min-w-full items-center justify-center text-sm text-muted-foreground">{isReferenceDragActive ? t("imageWorkbench.dropReferences") : t("imageWorkbench.noReferences")}</div> : null}
+                                </div>
+                            </div>
+                                )}
+                            </div>}
+                            footerActions={<div className="creation-actions w-full min-w-0"><CreationToolbar mode="image" onChat={openChat} busy={isTransferring || running} referencesOpen={referenceOpen} onSettings={() => setSettingsOpen(true)} onUpload={() => fileInputRef.current?.click()} onReferences={() => setReferenceOpen(value => !value)} onPrompts={() => setPromptDialogOpen(true)} onAssets={() => setAssetPickerOpen(true)} modelPicker={<ModelPicker config={config} value={model} capability="image" placeholder="选择图片模型" onChange={(value) => updateConfig("imageModel", value)} />} /></div>}
+                            sendActions={<div className="creation-costs"><PromptOptimizationEstimate mode="image" /><CreditEstimate mode="image" /></div>}
+                            sendButton={<ActionButton variant="primary" size="lg" label={running ? "生成中" : continuation ? "生成新版本" : "开始生成"} icon={<Sparkles className="size-4" />} isLoading={running} isDisabled={!canGenerate || running || isTransferring} onClick={() => void generate()} />}
+
+                        />
+                    </div>
+                }>
+                    <div className="mx-auto w-full max-w-[960px] px-2 pb-8 pt-6">
+                        {(visibleHistory.hasEarlier || historyHasMore || otherHistory.more) && <Button type="text" className="creation-load-earlier" loading={loadingEarlier} onClick={() => void showEarlierRecords()}>加载更早记录</Button>}
+                        {otherHistory.error && <p className="mb-4 text-sm text-muted-foreground">{otherHistory.error}</p>}
+                        {mixedRecords.map((entry) => entry.kind === "other" ? <OtherCreationRecord disabled={isTransferring} key={entry.log.id} log={entry.log} mode="video" /> : ((log: GenerationLog) => (
+                        <article id={`creation-record-${log.id}`} key={log.id} className="astryx-chat-message mb-12 max-w-[620px]">
+                            <CreationRequest prompt={log.prompt} />
+                            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">图片生成</span><span>{modelOptionLabel(effectiveConfig, log.model)}</span><span>{log.time}</span><span>{log.reconciliationRequired ? "待核对" : creationStatus(log.status)}</span></div>
+                            {log.images.length > 0 && <div className={`grid gap-3 ${log.images.length > 1 ? "sm:grid-cols-2" : ""}`}>{log.images.map((image, index) => <ResultImageCard key={image.id} image={image} gallery={log.images} index={index} onEdit={(item, i) => void transferReference(() => addResultToReferences(item, i)).catch(reportMediaError)} onDownload={downloadImage} onSaveAsset={(item, i) => void saveResultToAssets(item, i).catch(reportMediaError)} onVideo={useImageForVideo} onContinue={(item, i) => void transferReference(() => continueImage(item, i)).catch(reportMediaError)} />)}</div>}
+                            {log.failCount > 0 && <div className="mt-2 text-sm text-muted-foreground">失败 {log.failCount} 张</div>}
+                            <RecordActions secondary={{ key: "details", label: "生成详情", run: () => setDetailsLog(log) }} label="更多生成记录操作" more={[
+                                { key: "edit", label: "编辑原描述与参数", disabled: isTransferring, run: () => { void previewGenerationLog(log); } },
+                                { key: "again", label: "按原参数再次生成", disabled: isTransferring, run: () => { void previewGenerationLog(log).then(missing => { if (missing === false) message.info("已回填原参数，请核对当前积分后点击开始生成"); }); } },
+                            ]} />
+                        </article>
+                    ))(entry.log))}
+                        {(running || (!logs.length && !otherHistory.logs.length) || (!previewLog && results.some((result) => result.status === "failed" || (result.image && !logs.some((log) => log.images.some((image) => image.id === result.image?.id)))))) && (<div className={!running && !results.length ? "creation-empty-wrap" : "max-w-[620px]"}>
+                        {running && submittedPrompt && !logs.some(log => log.prompt === submittedPrompt) && <CreationRequest prompt={submittedPrompt} />}
+                        <div className={running || results.length ? "mb-4 flex items-center justify-between gap-3" : "hidden"}>
+                            <div>
+                                <h2 className="text-sm text-muted-foreground">{running ? "正在生成图片…" : "生成结果"}</h2>
+                            </div>
+                            {running ? <Tag className="m-0 px-2 py-1">{t("workbench.waiting", { time: formatDuration(elapsedMs) })}</Tag> : null}
+                        </div>
+                        {results.length ? (
+                            <div className={`grid gap-4 ${results.length > 1 ? "sm:grid-cols-2" : ""}`}>
+                                {results.map((result, index) =>
+                                    result.status === "success" && result.image ? (
+                                        <ResultImageCard key={result.id} image={result.image} index={index} onEdit={(image, index) => void transferReference(() => addResultToReferences(image, index)).catch(reportMediaError)} onDownload={downloadImage} onSaveAsset={(image, index) => void saveResultToAssets(image, index).catch(reportMediaError)} onVideo={useImageForVideo} onContinue={(item, i) => void transferReference(() => continueImage(item, i)).catch(reportMediaError)} />
+                                    ) : result.status === "failed" ? (
+                                        <FailedImageCard key={result.id} error={result.error || t("workbench.generationFailed")} onRetry={() => retryResult(index)} />
+                                    ) : (
+                                        <PendingImageCard key={result.id} />
+                                    ),
+                                )}
+                            </div>
+                        ) : (
+                            <div className="flex min-h-32 flex-col items-center justify-center text-center">
+                                <div className="creation-empty"><span className="creation-empty-icon"><Sparkles /></span><h2>从一个画面开始</h2><p>描述你的想法，或添加参考图片。<br />每一次创作，都从这里展开。</p></div>
+                            </div>
+                        )}
+                    </div>)}
+                    </div>
+                </CreationStream>
+                </div>
+                {/* 宽屏：生成记录停靠右侧，不再盖住合成器 */}
+                <CreationRecordsRail open={recordsRailOpen} count={logs.length} onToggle={() => setRecordsRailOpen((value) => !value)}>
+                    <LogPanel
+                        logs={logs}
+                        selectedLogIds={selectedLogIds}
+                        activeLogId={previewLog?.id}
+                        onSelectedLogIdsChange={setSelectedLogIds}
+                        onCreateSession={createSession}
+                        onDeleteSelected={() => setDeleteConfirmOpen(true)}
+                        onPreviewLog={(log) => void previewGenerationLog(log)}
+                    />
+                </CreationRecordsRail>
+            </div>
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                    void transferReference(() => addReferences(event.target.files)).catch(reportMediaError);
+                    event.target.value = "";
+                }}
+            />
+            <Drawer title={t("workbench.logs")} placement="bottom" size="large" open={logsOpen} onClose={() => setLogsOpen(false)}>
+                <LogPanel
+                    logs={logs}
+                    selectedLogIds={selectedLogIds}
+                    activeLogId={previewLog?.id}
+                    onSelectedLogIdsChange={setSelectedLogIds}
+                    onCreateSession={createSession}
+                    onDeleteSelected={() => setDeleteConfirmOpen(true)}
+                    onPreviewLog={(log) => void previewGenerationLog(log)}
+                />
+            </Drawer>
+            <Drawer title={t("workbench.settings")} placement="bottom" height="82vh" rootClassName="creation-settings-drawer" open={settingsOpen} onClose={() => setSettingsOpen(false)}>
+                <div className="grid grid-cols-1 gap-3 pb-4 sm:grid-cols-2">
+                    <GenerationSettings config={effectiveConfig} model={model} updateConfig={updateConfig} openConfigDialog={openConfigDialog} />
+                </div>
+            </Drawer>
+            <Drawer title="生成详情" open={Boolean(detailsLog)} onClose={() => setDetailsLog(null)}>
+                {detailsLog && <div className="mb-4 space-y-2 text-sm"><p>背景：{detailsLog.config.background || "未记录"}</p>{detailsLog.referenceHistoryUnknown && <p className="text-muted-foreground">云端历史未保存参考素材信息</p>}</div>}
+                {detailsLog && <dl className="space-y-4 text-sm"><div><dt className="text-muted-foreground">提示词</dt><dd className="mt-1 whitespace-pre-wrap break-words">{detailsLog.prompt}</dd></div><div><dt className="text-muted-foreground">模型与参数</dt><dd className="mt-1">{modelOptionLabel(effectiveConfig, detailsLog.model)} · {detailsLog.size} · {detailsLog.quality} · {detailsLog.imageCount} 张</dd></div><div><dt className="text-muted-foreground">参考素材</dt><dd className="mt-1 break-words">{detailsLog.references.length ? detailsLog.references.map((item) => item.name).join("、") : "暂无可展示的参考素材"}</dd></div><div><dt className="text-muted-foreground">时间与状态</dt><dd className="mt-1">{detailsLog.time} · {detailsLog.reconciliationRequired ? "待核对" : creationStatus(detailsLog.status)}</dd></div><div><dt className="text-muted-foreground">实际积分</dt><dd className="mt-1">{detailsLog.creditsCharged == null ? "尚未结算或暂不可用" : `${detailsLog.creditsCharged} 积分`}</dd></div></dl>}
+            </Drawer>
+            <PromptSelectDialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen} onSelect={setPrompt} />
+            <AssetPickerModal open={assetPickerOpen} defaultTab="my-assets" onInsert={(payload) => void transferReference(() => insertPickedAsset(payload)).catch(reportMediaError)} onClose={() => setAssetPickerOpen(false)} />
+            <Modal title={t("workbench.deleteLogs")} open={deleteConfirmOpen} onCancel={() => setDeleteConfirmOpen(false)} onOk={deleteSelectedLogs} okText={t("common.delete")} okButtonProps={{ danger: true }} cancelText={t("common.cancel")}>
+                {t("workbench.deleteLogsConfirm", { count: selectedLogIds.length })}
+            </Modal>
+        </div>
+    );
+}
+
+function GenerationSettings({ config, model, updateConfig, openConfigDialog }: { config: AiConfig; model: string; updateConfig: UpdateAiConfig; openConfigDialog: (shouldPromptContinue?: boolean) => void }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const { t } = useTranslation();
+
+    return (
+        <>
+            <label className="col-span-2 block min-w-0 sm:col-span-1">
+                <span className="mb-1.5 block text-sm font-semibold sm:mb-2 sm:text-base">{t("workbench.model")}</span>
+                <ModelPicker config={config} value={model} onChange={(value) => updateConfig("imageModel", value)} capability="image" fullWidth onMissingConfig={() => openConfigDialog(false)} />
+            </label>
+            <div className="col-span-2">
+                <ImageSettingsPanel config={{ ...config, model }} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-4" maxCount={10} />
+            </div>
+        </>
+    );
+}
+
+function ResultImageCard({
+    image,
+    gallery,
+    index,
+    onEdit,
+    onDownload,
+    onSaveAsset,
+    onVideo,
+    onContinue,
+}: {
+    image: GeneratedImage;
+    gallery?: GeneratedImage[];
+    index: number;
+    onEdit: (image: GeneratedImage, index: number) => void;
+    onDownload: (image: GeneratedImage, index: number) => void;
+

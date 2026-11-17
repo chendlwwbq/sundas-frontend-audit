@@ -1,0 +1,2237 @@
+SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
+This is uncompressed source text, not a directory index or archive.
+Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
+Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+
+========================================================================
+FILE: web/src/i18n/locales/en-US.ts
+LINES: 739-789
+========================================================================
+        status: { failed: "Connection failed", connected: "Connected", connecting: "Connecting", disconnected: "Disconnected" },
+        state: { ready: "Ready", connectionRequired: "Enter the Local URL and Connect token", invalidUrl: "The Local URL is invalid", offline: "Offline", skillReadFailed: "Failed to read Skill", skillParseFailed: "Failed to parse Skill", requestFailed: "Local Agent request failed" },
+        siteTools: { canvasList: "Canvas list", generationStatus: "Generation task status", imageConfig: "Image configuration", imageGenerate: "Generate in Image Studio", videoConfig: "Video configuration", videoGenerate: "Generate in Video Studio", promptSearch: "Search prompts", assetList: "Asset list", assetAdd: "Add asset", unknownTool: "Unknown tool: {{name}}", canvasLoading: "The canvas is still loading. Try again shortly.", canvasHint: "Use site_navigate to open /canvas/{id}", assetsLoading: "Assets are still loading. Try again shortly.", assetTitleRequired: "Provide the asset title", textContentRequired: "content is required when kind=text", imageUrlRequired: "imageUrl is required when kind=image", imageReadFailed: "Could not read the image. Use a data URL or a cross-origin accessible image URL.", assetKindUnsupported: "assets_add supports only kind=text or kind=image", imageGenerationStarted: "Opened Image Studio and started generation. Use generation_get_status to query the task.", imageConfigApplied: "Opened Image Studio and applied the parameters without starting generation.", videoGenerationStarted: "Opened Video Studio and started generation. Use generation_get_status to query the task.", videoConfigApplied: "Opened Video Studio and applied the parameters without starting generation." },
+        history: { workspace: "Workspace", defaultWorkspace: "Default canvas directory", selected: "{{count}} selected", count: "{{count}} conversations", empty: "No history", deleteCount: "Delete {{count}}", refresh: "Refresh", newThread: "New chat", selectThread: "Select {{name}}", untitled: "Untitled conversation", current: "Current", noWorkspaceThreads: "No conversations in this workspace yet", connectHint: "Connect the local Agent to view conversation history" },
+        skills: { selectLocal: "Select local Skill", search: "Search Skills", loading: "Loading Skills…", noMatch: "No matching enabled Skills", none: "No Skills available", select: "Select Skill", connectHint: "Connect the Agent to use Skills" },
+        skillManager: {
+            codexBusy: "Codex is running. Finish the current task before extracting a Skill.", noConversation: "This conversation has no completed content to extract", noCanvas: "There is no canvas on this page to extract", connecting: "This page is still connecting to the Agent. Try again shortly.", syncFailed: "Failed to sync the current canvas. Check the Agent connection and try again.", noDraft: "No Skill draft was generated", draftCreated: "Draft generated. Review it on the Skills tab before creating it.", draftFailed: "Failed to generate Skill draft", contentMissing: "Skill content was not returned", readFailed: "Failed to read Skill", defaultPromptMention: "The default prompt must include ${{name}}", created: "Skill created", updated: "Skill updated", saveFailed: "Failed to save Skill", deleteTitle: "Delete {{name}}", deleteDescription: "The local files cannot be recovered after deletion. Continue?", delete: "Delete", deleted: "Skill deleted", deleteFailed: "Failed to delete Skill", statusFailed: "Failed to update Skill status",
+            fromConversation: "Generate draft from this conversation", availableAfterRun: "Available when Codex finishes running", conversationDescription: "Extract reusable workflows from this conversation", noCompletedContent: "This conversation has no completed content", startConversation: "Start a conversation first", fromCanvas: "Generate draft from this canvas", canvasDescription: "Extract nodes and generation workflows from this page", canvasUnavailable: "There is no available canvas on this page", blankCreate: "Create from scratch", blankDescription: "Start with an empty form", localSkills: "Local Skills", localDescription: "Installed locally and run directly by Codex", reload: "Reload", reloadSkill: "Reload Skills", createSkill: "Create Skill", filterBySource: "Filter Skills by source", scopes: { all: "All sources", repo: "Project", user: "Personal", system: "System", admin: "Admin" }, loadErrors: "{{count}} Skills could not be loaded", externalReadonly: "External Skills can only be used or enabled and disabled", noDescription: "No description", enabled: "Enabled", disabled: "Disabled", selected: "Selected", use: "Use", editNamed: "Edit {{name}}", deleteNamed: "Delete {{name}}", connectToView: "Connect the Agent to view Skills", noMatch: "No matching Skills", none: "No local Skills yet", connectDescription: "Installed local Skills will load after connection", tryAnotherFilter: "Try another keyword or source", createOrInstall: "Create one, or install one locally and refresh", saveChanges: "Save changes", saveLocation: "Save to the local Agent workspace", basicInfo: "Basic information",
+            identifier: "Skill identifier", identifierExtra: "Used as the folder name and for $skill-name invocation.", identifierRequired: "Enter a Skill identifier", identifierMax: "The Skill identifier cannot exceed 64 characters", identifierPattern: "Use lowercase letters, numbers, and hyphens only; hyphens cannot repeat or appear at either end", identifierPlaceholder: "For example, product-grid", displayName: "Display name", displayNameMax: "The display name cannot exceed 64 characters", displayNamePlaceholder: "For example, Product grid generator", whenToUse: "When to use", whenToUseExtra: "Describe the Skill's capabilities and use cases so Codex can decide when to invoke it.", whenToUseRequired: "Describe when to use this Skill", whenToUseMax: "The use-case description cannot exceed 1,024 characters", noAngleBrackets: "The use-case description cannot contain angle brackets", whenToUsePlaceholder: "For example: Use when planning and generating a set of product images from product information", instructions: "Instructions", instructionsExtra: "Describe the steps, constraints, and output requirements in execution order.", instructionsRequired: "Enter the instructions", instructionsPlaceholder: "Describe execution steps, required checks, and the final output", advanced: "Advanced settings", shortDescription: "Card summary", shortDescriptionExtra: "Use 25–64 characters for easy scanning.", shortDescriptionMin: "The card summary must contain at least 25 characters", shortDescriptionMax: "The card summary cannot exceed 64 characters", shortDescriptionPlaceholder: "Optional; shown in the list", defaultPrompt: "Default prompt", defaultPromptExtra: "Must include the exact $skill-name, such as $product-grid.", defaultPromptMax: "The default prompt cannot exceed 1,024 characters", defaultPromptPlaceholder: "Optional; prefilled when the Skill is selected",
+        },
+        composer: { removeImage: "Remove image", removeSkill: "Remove Skill", uploadImage: "Upload image", stop: "Stop", send: "Send", model: "Model: {{model}}", selectModel: "Select a Codex model. Current: {{model}}", reasoning: "Reasoning effort: {{effort}}", selectReasoning: "Select reasoning effort. Current: {{effort}}", permissionLabel: "Permissions: {{mode}}", selectPermission: "Select Codex permission mode. Current: {{mode}}", effort: { minimal: "Minimal", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Maximum", ultra: "Ultra" }, permission: { request: "Ask for approval", requestDescription: "Always ask before editing outside the workspace or accessing the network", automatic: "Automatic review", automaticDescription: "Codex reviews risky actions and asks only when needed", full: "Full access", fullShort: "Full access", fullDescription: "Unrestricted access to the network and local files" }, tools: { label: "Tool confirmation: {{mode}}", manual: "Manual", manualDescription: "Ask before the Agent writes to the canvas", automatic: "Automatic", automaticDescription: "Let the Agent perform canvas writes automatically", select: "Select tool confirmation mode. Current: {{mode}}" }, mentions: { selectSkill: "Select a Skill", selectResource: "Reference canvas assets", loadingSkills: "Loading Skills…", noSkills: "No enabled Skills match", noResources: "No matching canvas assets", previewUnavailable: "This asset cannot be previewed", referenceLabel: "Referenced {{kind}}: {{title}}", resourceMissing: "Canvas asset “{{title}}” no longer exists", imageReadFailed: "Could not read canvas image “{{title}}”", kind: { image: "Image", video: "Video", audio: "Audio", text: "Text" } } },
+        panel: { connectionSettings: "Connection settings · {{status}}", connectionSettingsLabel: "Connection settings. Current status: {{status}}", chat: "Chat", history: "History", skills: "Skills", logs: "Logs", collapse: "Collapse chat", collapseLabel: "Collapse Agent panel", resize: "Resize right panel", content: "Agent content", mcpInitializing: "MCP is initializing. You can send messages when it is ready.", initFailed: "Codex conversation initialization failed. Start or resume a conversation.", placeholder: "Ask Codex, type / for Skills, or @ to reference canvas assets" },
+        chat: { latestMessages: "View latest messages", latestCall: "Latest call", input: "Input", cached: "Cached", output: "Output" },
+        logs: { copied: "Logs copied", selectedManual: "Logs selected; copy them manually", copyFailed: "Copy failed. Switch to raw JSON and copy manually.", title: "Runtime logs", diagnostics: "Diagnostics", rawJson: "Raw JSON", messages: "{{count}} messages", tool: "Tool: {{tool}}", noPendingTool: "No pending tool", all: "All {{count}}", errors: "Errors {{count}}", warnings: "Warnings {{count}}", info: "Info {{count}}", list: "Diagnostics log list", noFiltered: "No logs match this filter", empty: "No event logs", new: "{{count}} new logs", newLabel: "{{count}} new logs. View latest logs.", latest: "View latest logs", fullData: "Full diagnostics · {{count}} entries", copyAll: "Copy all logs", copyLastError: "Copy latest error", lastErrorCopied: "Latest error copied", clear: "Clear logs", repeated: "Repeated {{count}} times", details: "Details", skillLoading: "Skill loading", plugin: "Plugin", terminal: "Terminal", conversationStorage: "Conversation storage" },
+        message: { close: "Close", copied: "Copied", copyCode: "Copy code", copyLink: "Copy link", externalWarning: "You are about to open an external link. Make sure you trust it.", openExternal: "Open external link?", continueOpen: "Open", revealed: "Revealed in file manager", openLocalFailed: "Could not open the local file", openLocal: "Open local file?", localDescription: "This path will be revealed in your local file manager and will not be opened in the browser.", externalDescription: "You are about to open an external link. Make sure you trust it.", pathCopied: "Path copied", linkCopied: "Link copied", copyPath: "Copy path", showInFolder: "Show in file manager", toolCall: "Tool call", awaitingConfirmation: "Awaiting confirmation", reject: "Reject", approve: "Approve", networkApproval: "Network access request", fileApproval: "File edit request", permissionApproval: "Extended permission request", commandApproval: "Command execution request", decline: "Decline", allowOnce: "Allow once", allowSession: "Allow for session", thinking: "Thinking", commandsRunning: "Running {{count}} commands", commandRunning: "Running command", commandsCompleted: "Ran {{count}} commands{{failed}}", commandsFailed: " · {{count}} failed", failed: "Failed", running: "In progress", completed: "Completed", command: "Command", slowResponse: "The response is taking longer, but the task is still running. You can keep waiting or use the stop button beside the input to end this turn.", waitingSeconds: "Waited {{seconds}} seconds", waitingMinutes: "Waited {{minutes}}m {{seconds}}s", files: "Files", errorInfo: "Error", output: "Output", viewLarge: "View full image", attachmentPreview: "Image attachment preview", noEffect: "No effect", canceled: "Canceled", recorded: "Recorded", stopped: "Stopped", finished: "Finished", pending: "Pending" },
+        events: { analyzing: "Analyzing the task…", reasoning: "Reasoning summary", plan: "Execution plan", commandFailed: "Command failed", commandCompleted: "Command completed", executeCommand: "Run command", editFiles: "Edit files", searchWeb: "Search the web", viewImage: "View image", imageViewed: "Image viewed", viewingImage: "Viewing image", imageGeneration: "Generate image", imageFailed: "Image generation failed", imageCompleted: "Image generation completed", generatingImage: "Generating image…", compactContext: "Compact context", contextCompacted: "Conversation context compacted; continuing the task", compactingContext: "Compacting conversation context…", collaboration: "Collaborate", collaborationFailed: "Collaboration task failed", collaborationCompleted: "Collaboration task completed", collaborating: "Working with collaborators…", progress: "Task progress", progressCount: "{{completed}}/{{total}} completed", planning: "Preparing execution steps…", executingCommand: "Running command…", workingDirectory: "Working directory", exitStatus: "Exit status", duration: "Duration", seconds: "{{value}} seconds", filesCompleted: "File changes completed", preparingFiles: "Preparing file changes…", fileCompleted: "{{action}} completed: {{path}}", editingFile: "{{action}} in progress: {{path}}", filesEdited: "Edited {{count}} files: {{names}}{{more}}", editingFiles: "Editing {{count}} files: {{names}}{{more}}", andMore: " and more", openPage: "Open page: {{url}}", findInPage: "Find “{{pattern}}” on page", content: "content", search: "Search: {{query}}", relatedInfo: "related information", keyword: "Keyword", webpage: "Web page", add: "Add", delete: "Delete", edit: "Edit", diagnostics: "Infinite Canvas Agent diagnostics", address: "Address: {{endpoint}}", connection: "Connection: {{connection}} · Status: {{status}}", online: "Online", connecting: "Connecting", disabled: "Disabled", messageTool: "Messages: {{messages}} · Tool: {{tool}}", none: "None", noLogs: "No event logs", threadCreated: "Conversation created", turnStarted: "Processing started", progressUpdated: "Task progress updated", turnFailed: "Processing failed", turnStopped: "Processing stopped", turnCompleted: "Processing completed", toolCalled: "Tool called", toolFailed: "Tool failed", toolCompleted: "Tool completed", replyReceived: "Reply received", completed: "Completed", modelBusy: "Model temporarily busy", modelBusyDescription: "The selected model is receiving too many requests. Try again later or switch models.", taskFailed: "Task failed", taskFailedDescription: "Codex could not complete this task. Try again later." },
+        eventExtra: { toolNamed: "Call tool: {{name}}", toolOperation: "Tool operation", targetPage: "Target page", searchContent: "Search query", textContent: "Text content", operationContent: "Operations", imageCount: "Image count", tools: { generateImage: "Generate image", viewImage: "View image", executeCommand: "Run command", editFiles: "Edit files", searchWeb: "Search the web", canvasOps: "Canvas operations", readCanvas: "Read canvas", readSelection: "Read selection", exportSnapshot: "Export snapshot", createNode: "Create node", addAttachments: "Add attachment images", createText: "Create text", createTexts: "Create text nodes", createConfig: "Create generation config", createImageFlow: "Create image flow", createGenerationFlow: "Create generation flow", generateText: "Generate text", generateVideo: "Generate video", generateAudio: "Generate audio", updateNode: "Update node", updateText: "Update text", moveNodes: "Move nodes", resizeNode: "Resize node", deleteNodes: "Delete nodes", connectNodes: "Connect nodes", selectNodes: "Select nodes", setViewport: "Adjust viewport", runGeneration: "Run generation", openPage: "Open page" } },
+        eventMore: { toolRunning: "{{action}}…", openedRoute: "Opened {{route}}", canvasCount: "{{count}} canvases", promptCount: "Found {{count}} prompts", assetCount: "{{count}} assets", assetAdded: "Added to My Assets", generationStatus: "{{total}} tasks: {{queued}} queued, {{running}} running, {{succeeded}} succeeded, {{failed}} failed", workbenchExecuted: "Executed in the workbench", workbenchConfigRead: "Workbench configuration read", canvasRead: "Current canvas read", selectionRead: "Current selection read", textNodes: "{{count}} text nodes", imageNodes: "{{count}} images", configNodes: "{{count}} config nodes", videoNodes: "{{count}} videos", audioNodes: "{{count}} audio nodes", groupNodes: "{{count}} groups", otherNodes: "{{count}} other nodes", connections: "{{count}} connections", emptyCanvas: "The canvas is empty", executeTool: "Run {{tool}}", thinking: "Thinking...", operationRunning: "{{operation}} is running...", organizingCanvas: "Canvas read; Codex is organizing the result...", operationCompleted: "{{operation}} completed; Codex is continuing...", attachmentPrompt: "Please process the uploaded image attachments.", routes: { home: "Home", canvas: "Canvas", canvasProject: "Selected canvas", image: "Image Studio", video: "Video Studio", prompts: "Prompt Center", assets: "My Assets", config: "Settings" } },
+        runtime: {
+            mcpStarting: "Starting MCP: {{name}}", mcpConnecting: "Connecting tools and loading the available tool list", mcpReadyNamed: "MCP ready: {{name}}", toolsReady: "Tool list loaded. You can start chatting.", mcpFailedNamed: "MCP failed to start: {{name}}", mcpCanceledNamed: "MCP startup canceled: {{name}}", toolInitFailed: "The tool service could not finish initializing", mcpServicesStarting: "Starting MCP services", toolServicesPending: "{{count}} tool services are still initializing", checkingToolServices: "Checking tool service status", conversationInitializing: "Initializing the Codex conversation", conversationCreating: "Creating the conversation and starting canvas tools", someMcpFailed: "Some MCP services failed to initialize", remainingToolsReady: "The remaining tools are ready. You can start chatting.", conversationInitFailed: "Codex conversation initialization failed", conversationCreateFailed: "Could not create the Codex conversation", mcpServicesReady: "{{count}} MCP services initialized", toolInitCanceled: "Tool service initialization was canceled", mcpStatusComplete: "MCP status check completed", mcpListRead: "Loaded the complete tool service list returned by Codex",
+            historyReadFailed: "Failed to read history", conversationSyncFailed: "Failed to sync conversation", agentOutdated: "The local Agent is outdated. Restart Canvas Agent and reconnect.", restartRequired: "Agent restart required", versionMismatch: "Agent version mismatch", awaitingApproval: "Awaiting approval", codexRunning: "Codex is running", connected: "Connected", localAgentConnected: "Local Agent connected", processingFailed: "Processing failed", completed: "Completed", approvalGranted: "Permission approved", approvalCanceled: "Permission canceled", log: "Log", connectionLostDescription: "The local Agent connection failed or was interrupted", connectionFailedDescription: "Connection failed. Check the address and token.", connectionLost: "Connection lost", connectionFailed: "Connection failed", modelListFailed: "Failed to load model list",
+            imageTooLarge: "Image too large", imagePayloadTooLarge: "Image attachments exceed 30 MB. Remove some before sending.", imagesSent: "Sent {{count}} images", canvasReferencesSent: "Referenced {{count}} canvas assets", someCanvasReferencesMissing: "Some referenced canvas assets no longer exist", canvasReferencesMissing: "The referenced canvas assets no longer exist. Select them again.", readingCanvasImages: "Reading canvas images", canvasImageReadFailed: "Failed to read canvas images", tooManyImages: "Too many images", imageCountLimit: "Uploaded and referenced canvas images are limited to {{count}} in total.", sending: "Sending", defaultModel: "Default model", defaultEffort: "Default effort", sendTask: "Send task", attachmentCount: "{{count}} attachments", canvasReferenceCount: "{{count}} canvas assets", attachmentsOnly: "Attachments only", canvasReferencesOnly: "Canvas assets", startConversationFailed: "Failed to start conversation", attachmentHistoryFailed: "Failed to save attachment history", sendFailed: "Send failed", conversationSynced: "Conversation synced", taskStillRunning: "Task is still running", stopping: "Stopping", stopTask: "Stop task", taskStopped: "Task stopped", stopFailed: "Failed to stop", imageLimit: "Image attachments are limited to about 30 MB.", imageReadFailed: "Failed to read image", pendingCanvasTool: "Another canvas tool call is awaiting confirmation", awaitingConfirmation: "Awaiting confirmation", toolCompleted: "{{tool}} completed", toolExecutionFailed: "Tool execution failed", openCanvasFirst: "The canvas is not open. Use site_navigate to open it first.", canvasOperationFailed: "Canvas operation failed", canvasToolCanceled: "The user canceled the canvas tool call",
+            submittingApproval: "Submitting permission decision", waitingCodexApproval: "Waiting for Codex to confirm permission", approvalFailed: "Permission approval failed", enableFullAccess: "Enable full access", fullAccessDescription: "Codex will run without sandbox restrictions and can access the internet and any local files. Use this only when you trust the current task.", enableFullAccessAction: "Enable full access", offline: "Offline", addressRequired: "Enter the local Agent address", agentNotFound: "No local Agent was found. Use the Codex plugin or start Canvas Agent manually.", invalidAddress: "The local Agent address is invalid", connecting: "Connecting", creatingConversation: "Creating conversation", newConversation: "New conversation", newConversationFailed: "Failed to create conversation", conversationResumed: "Conversation resumed", resumeConversationFailed: "Failed to resume conversation", recordsDeleted: "Deleted {{count}} records", deleteConversationFailed: "Failed to delete conversation", deleteConversations: "Delete {{count}} conversations", deleteConversationsDescription: "This cannot be undone. Continue?", importGeneratedImages: "Import generated images", addedToSourceCanvas: "Added to the source canvas", imageGenerated: "Image generated", noImageAttachments: "No image attachments to add", invalidAttachmentNode: "Invalid image attachment node parameters", attachmentReadFailed: "Failed to read image attachment", referenceImage: "Reference image", generatedImageReadFailed: "Failed to read the image generated by Codex", generatedImageName: "Generated image {{index}}",
+        },
+    },
+    locale: {
+        zhCN: "简体中文",
+        enUS: "English",
+    },
+    footer: {
+        tagline: "Turn every idea into a hit. A new-generation creative platform powered by AI.",
+        product: "Product",
+        resources: "Resources",
+        company: "Company",
+        productImage: "Image Generation",
+        productVideo: "Video Generation",
+        productMore: "More Tools",
+        productOpen: "AI Creation Platform",
+        changelog: "Changelog",
+        tutorial: "Tutorials",
+        help: "Help Center",
+        contact: "Contact Us",
+        about: "About Us",
+        join: "Careers",
+        downloadApp: "Download App",
+        copyright: "© {{year}} sundas Inc. All rights reserved.",
+        terms: "Terms of Service",
+        privacy: "Privacy Policy",
+        disclaimer: "Disclaimer",
+    },
+};
+
+
+========================================================================
+FILE: web/src/i18n/locales/zh-CN.ts
+LINES: 1-741
+========================================================================
+export default {
+    meta: {
+        title: "sundas",
+        description: "AI 视频创作工作台",
+    },
+    theme: { toggle: "切换主题" },
+    common: {
+        cancel: "取消",
+        save: "保存",
+        edit: "编辑",
+        done: "完成",
+        delete: "删除",
+        copy: "复制",
+        copied: "已复制",
+        details: "详情",
+        addToAssets: "加入我的资产",
+        addedToAssets: "已加入我的资产",
+        copyPrompt: "复制提示词",
+        promptCopied: "提示词已复制",
+        created: "创建：{{date}}",
+        updated: "更新：{{date}}",
+        all: "全部",
+        view: "查看",
+        download: "下载",
+        upload: "上传",
+        requestCanceled: "请求已取消",
+        durationMinutes: "{{minutes}}分{{seconds}}秒",
+        durationSeconds: "{{seconds}}秒",
+        imageReadFailed: "读取图片失败",
+        appleImageConvertFailed: "当前浏览器无法转换 HEIC/HEIF 图片，请导出为 JPG 或 PNG 后重新上传",
+        unsupportedImageFormatTitle: "图片格式不支持",
+        unsupportedImageFormatDescription: "手机照片如果是 HEIC/HEIF/AVIF，请在相册中导出为 JPG 或 PNG 后再上传；也可以先截图保存为 PNG。",
+        mediaLocalOnlyTitle: "素材暂未上传云端",
+        mediaLocalOnlyDescription: "素材仅保存在当前浏览器，换设备或清除浏览器数据后可能无法访问。请检查网络或存储空间后重新上传。",
+        localOnly: "仅本地",
+        localOnlyHint: "这张素材尚未上传云端，换设备或清除浏览器数据后可能无法访问",
+        retryUpload: "重新上传",
+        uploadingStatus: "上传中",
+        waitingStatus: "等待中",
+        uploadFailedStatus: "上传失败",
+        optimizePrompt: "优化提示词",
+        optimizePromptHint: "优化提示词（按后台配置的优化模型正常消耗积分）",
+        optimizingPrompt: "正在优化提示词",
+        optimizePromptApplied: "提示词已优化，消耗 {{credits}} 积分",
+        optimizePromptFailed: "提示词优化失败，请稍后重试",
+        optimizePromptUnavailable: "提示词优化暂未配置，请联系管理员",
+        optimizePromptInsufficientCredits: "积分不足，请充值后重试",
+        optimizePromptRateLimited: "优化请求过于频繁，请稍后再试",
+        optimizePromptUndo: "撤销",
+        optimizePromptChanged: "提示词已修改，优化结果未覆盖",
+        optimizePromptTooLong: "提示词不能超过 4000 字符",
+        optimizePromptNoModel: "请先选择生成模型",
+    },
+    settingsPanels: {
+        common: { auto: "自动", low: "低", medium: "中", high: "高", xhigh: "极高", max: "最高" },
+        image: { title: "图像设置", quality: "质量", size: "尺寸", align16: "16 倍数对齐", align16Hint: "输入完成后自动向上补成 16 的倍数", resolution: "分辨率", aspectRatio: "宽高比", transparent: "透明背景", transparentHint: "开启后生成无背景的透明图像（仅部分模型可用）", count: "生成张数", images: "{{count}} 张" },
+        video: { title: "视频设置", quality: "清晰度", size: "尺寸", seconds: "秒数", mode: "模式", modes: { frames: "首尾帧模式", reference: "全能参考模式" }, resolution: "分辨率", ratio: "比例", duration: "时长", smart: "智能", output: "输出", generateAudio: "生成声音", watermark: "添加水印", adaptive: "自适应", sizes: { landscape: "横屏", portrait: "竖屏", square: "方形", widescreen: "宽屏", tall: "长图", auto: "自动" }, ratios: { landscape: "横屏", portrait: "竖屏", square: "方形", standardLandscape: "标准横屏", standardPortrait: "标准竖屏", cinematic: "宽银幕", adaptive: "自适应" } },
+        audio: { title: "音频设置", voice: "声音", format: "格式", speed: "语速", instructions: "声音指令", instructionsPlaceholder: "例如：自然、温暖、适合旁白。" },
+        text: { title: "文本设置", reasoning: "推理强度", count: "生成次数" },
+        model: { select: "选择模型", assign: "请先在渠道里为{{capability}}指定模型", noMatch: "暂无匹配的{{capability}}模型", addFirst: "请先到配置里添加渠道和模型", capabilities: { image: "生图", video: "视频", text: "文本", audio: "音频" } },
+    },
+    generation: { pending: ["正在创建图片", "马上就好了", "再等等", "正在整理细节"] },
+    imageReferences: { label: "图片{{index}}", separator: "、", promptPrefix: "参考图片编号：{{labels}}。请按这些编号理解提示词中的图片引用。\n\n{{prompt}}" },
+    modelPlugin: {
+        pollTimeout: "插件轮询超时，请检查调用脚本或稍后重试", executionFailed: "模型调用脚本执行失败：{{message}}", noImages: "模型调用脚本没有返回图片",
+        variables: { prompt: "用户输入的提示词（已拼接系统提示词）", images: "参考图，dataURL 数组（改图 / 图生视频时有值）", videos: "参考视频 File 数组，可直接 form.append；画布或工作台接入的参考视频，无则为空数组", audios: "参考音频 File 数组，可直接 form.append；画布或工作台接入的参考音频，无则为空数组", messages: "对话消息数组，含系统消息", params: "生成参数：生图 {size,resolution,quality,count,background}、视频 {mode,seconds,size,resolution,ratio,generateAudio,watermark}（mode 为 frames 首尾帧或 reference 全能参考；超过 2 张图时为 reference）、音频 {voice,format,speed,instructions}", model: "模型名称（不含渠道前缀）", baseUrl: "渠道接口地址（原样，未拼 /v1）", apiKey: "渠道 API Key，请求头里自己带上", systemPrompt: "系统提示词原文", reasoningEffort: "文本推理强度；auto 表示由脚本决定是否传递", http: "便捷请求：http.post(path, body, {headers,params,responseType})、http.get(path, opts)、http.url(path)；默认带 Authorization: Bearer apiKey，可用 headers 覆盖；path 相对时按 baseUrl 拼 /v1", request: "原始请求 request({ method, url, headers, params, data, responseType })，不加任何默认头，鉴权头自己写；url 相对时按 baseUrl 拼接（不加 /v1）", poll: "轮询 poll(request, extract, {intervalMs,timeoutMs})，extract 返回真值即结束", sleep: "sleep(ms) 延时", signal: "取消信号，可透传给 http/request", onDelta: "onDelta(text) 推送流式文本（文本模型）" },
+        returns: { image: "文生图（images 为空）和图生图（images 有参考图）接口不同，脚本需自行区分；返回图片 URL 或 dataURL 字符串，也可返回它们的数组，或 [{ dataUrl }] / [{ url }] / [{ b64_json }]", video: "脚本内部完成轮询，返回 { url } 或 { blob } 或视频 URL 字符串", audio: "返回 Blob，或 base64 / dataURL 字符串，或 { b64_json } / { data } / { url }", text: "用 onDelta(text) 推送流式，最终 return 完整文本字符串" },
+        templates: { openai: "OpenAI 规范", gemini: "Gemini 规范" },
+        authoring: {
+            intro: "请为 Infinite Canvas 编写一段模型调用脚本。能力类型：{{capability}}。目标模型：{{model}}。",
+            shape: "请写成一个 async function，把用到的变量写在参数列表里，并把 params 拆成 size、quality、count 等字段，方便对照。不要 import，不要 Markdown 代码围栏。函数内发请求并 return 结果；因为运行时会注入同名局部变量，最后需要 return await 函数名({ 同样的参数 })。",
+            returnTitle: "返回要求",
+            variablesTitle: "可用变量",
+            rulesTitle: "写法要求",
+            rules: "- 写成 async function，参数列表列出用到的变量；params 拆开写出 size、quality、count、seconds 等字段。函数上方用 /** */ 注释写清每个字段。\n- 用 request({ method, url, headers, params, data, responseType }) 发原始 HTTP 请求；需要自动带 Authorization: Bearer apiKey 时用 http.post / http.get。\n- 相对路径：request 按 baseUrl 拼接且不加 /v1；http 的相对 path 会按 baseUrl 拼 /v1。\n- 异步视频任务通常先创建再 poll(request, extract, { intervalMs, timeoutMs })，extract 返回真值即结束。\n- images 是参考图 dataURL 字符串数组。videos、audios 是参考视频/音频 File 数组，可直接 form.append(字段名, file)；没有参考时为空数组。\n- 使用 FormData 时不要手动设置 Content-Type，交给浏览器带 boundary。\n- 函数末尾 return 结果，并在文件最后 return await 函数名({ 同样的参数 })。只输出完整脚本，不要解释。",
+            examplesTitle: "完整示例（请按实际接口改写，不要原样照搬）",
+            draftTitle: "用户当前草稿（请在此基础上修改；若为空则从零编写）",
+            anyModel: "（当前选中的模型）",
+        },
+    },
+    apiErrors: { streamIncomplete: "文本响应未完成，请重试", requestFailed: "请求失败", requestCanceled: "请求已取消", baseUrlRequired: "请先配置 Base URL", apiKeyRequired: "请先配置 API Key", authenticationFailed: "鉴权失败，请检查 API Key、套餐权限或模型权限", rateLimited: "请求被限流或额度不足，请稍后重试", notFound: "接口地址不存在（404），请检查 Base URL 和模型选择", badGateway: "网关错误（502），接口服务暂时不可用，请稍后重试", serviceBusy: "服务繁忙（503），请稍后重试", httpFailed: "请求失败（HTTP {{status}}），请检查 Base URL 和 API Key 是否正确", htmlError: "服务返回了 HTML 错误页面（{{preview}}）", imageTimeout: "生图请求超时，接口长时间没有返回，请稍后重试或更换渠道", audioModelRequired: "请先配置音频模型", audioGenerationFailed: "音频生成失败", scriptNoAudio: "模型调用脚本没有返回音频", geminiAudioUnsupported: "Gemini 调用格式暂不支持音频生成，请使用 OpenAI 格式渠道", invalidImageSizeFormat: "图像尺寸格式不支持，请使用 auto、9:16 或 1024x1024", positiveImageRatio: "图像比例必须是正数，例如 9:16", imageRatioLimit: "图像宽高比不能超过 3:1，请调整尺寸", positiveImageDimensions: "图像尺寸必须是正整数，例如 1024x1024", imageDimensionStep: "图像尺寸的宽高必须是 16 的倍数，请调整尺寸", imageEdgeLimit: "图像尺寸最长边不能超过 3840px，请调整尺寸", imagePixelLimit: "图像总像素需在 655360 到 8294400 之间，请调整尺寸", unknownImageResponse: "接口返回了未知格式的数据（字段：{{fields}}），请检查模型或接口兼容性", upstreamHtmlError: "服务网关返回异常，请稍后重试。", sensitiveImageRejected: "参考图可能包含敏感内容，已被上游内容审核拦截。请更换参考图后重试。", sensitiveTextRejected: "提示词可能包含敏感内容，已被上游内容审核拦截。请修改提示词后重试。", sensitiveVideoRejected: "生成视频可能包含敏感内容，已被上游内容审核拦截。请修改提示词或参考图后重试。", sensitiveContentRejected: "内容可能包含敏感内容，已被上游内容审核拦截。请修改提示词或参考图后重试。", realPersonRejected: "参考图可能包含真人，已被上游内容审核拦截。请移除或更换含真人的参考图后重试。", contentModerationRejected: "内容审核未通过，请修改提示词或参考图后重试。", audioCopyrightRejected: "生成的音频被线路审核拦下，可能涉及音乐版权；请关闭生成音频，或移除提示词中的音乐、歌曲、歌词描述后重试。", upstreamServiceUnavailable: "上游服务暂时不可用，请稍后重试。", requestId: "（请求 ID：{{id}}）", noImageReturned: "接口没有返回图片，请检查提示词是否触发安全审核或模型是否支持该操作", geminiRejected: "Gemini 拒绝了本次请求：{{reason}}", geminiNoImage: "Gemini 接口没有返回图片", maskModelUnsupported: "蒙版编辑暂不支持该模型，请使用其他渠道", noContent: "没有返回内容", modelReadFailed: "读取模型失败", videoTimeout: "{{provider}}视频生成超时，请稍后重试", pluginVideoExpired: "插件视频任务已失效，请重新生成", scriptNoVideo: "模型调用脚本没有返回视频", noPlayableVideo: "视频接口没有返回可播放的视频", noVideoTaskId: "视频接口没有返回任务 ID", videoTaskCreateFailed: "视频任务创建失败", videoGenerationFailed: "视频生成失败", videoTaskQueryFailed: "视频任务查询失败", videoPromptRequired: "请输入视频提示词，或连接参考图片/视频/音频", referenceImageReadFailed: "参考图读取失败，请换一张图片或重新上传", invalidReferenceVideo: "参考视频必须是公网 URL、资产 ID，或本地已保存的视频", invalidReferenceAudio: "参考音频必须是公网 URL、资产 ID，或本地已保存的音频", videoModelRequired: "请先配置视频模型", geminiVideoUnsupported: "Gemini 调用格式暂不支持视频生成，请使用 OpenAI 格式渠道", noVideoTask: "接口没有返回视频任务", videoDownloadFailed: "视频下载失败", localAssetReadFailed: "读取本地资产失败" },
+    prompts: {
+        title: "提示词中心",
+        library: "提示词库",
+        total: "当前共 {{count}} 条提示词",
+        category: "分类",
+        tags: "标签",
+        search: "搜索标题、内容或标签",
+        searchTitle: "按标题查询",
+        loadFailed: "获取提示词失败",
+        sourceMissing: "提示词来源不存在",
+        use: "使用此提示词",
+        empty: "没有找到匹配的提示词",
+        loading: "加载中...",
+        loadMore: "继续向下滚动加载更多",
+        end: "已经到底了",
+    },
+    assets: {
+        title: "我的资产",
+        description: "收藏常用文本和图片，按类型、标题和标签快速查找。",
+        tabAssets: "资产库",
+        tabHistory: "历史文件",
+        historyTitle: "历史文件",
+        historyDescription: "这里是不在资产库中的历史上传和未归档文件，仍占用个人存储空间；确认不再使用后可以清理。",
+        historyLoadFailed: "历史文件加载失败",
+        historyCleaned: "已清理",
+        historyCleanupFailed: "清理失败",
+        historyInUse: "使用中",
+        historyCleanup: "清理",
+        historyCleanupConfirm: "确认删除这个文件？删除后不可恢复。",
+        historyCleanupAll: "一键清理",
+        historyCleanupAllConfirm: "将清理 {{count}} 个可清理文件，共 {{size}}，删除后不可恢复。",
+        historyCleanupAllDone: "已清理 {{count}} 个文件",
+        historyCleanupAllPartial: "已清理 {{count}} 个文件，{{failed}} 个清理失败",
+        historyEmpty: "暂无历史文件",
+        historyHint: "带“使用中”的文件仍被画布或其他内容引用，请先移除引用后再清理。",
+
+        search: "搜索标题、内容、标签或来源",
+        type: "类型",
+        export: "导出资产",
+        import: "导入资产",
+        add: "新增资产",
+        edit: "编辑资产",
+        empty: "没有找到资产",
+        emptyTitle: "还没有任何资产",
+        emptyHint: "把常用的提示词、参考图和成片存进来，之后可以按类型、标题或标签快速取用。",
+        noMatchHint: "换个关键词，或把类型筛选切回「全部」再试试。",
+        total: "共 {{count}} 个资产",
+        manual: "手动添加",
+        selectImage: "请选择图片文件",
+        updated: "资产已更新",
+        saved: "资产已保存",
+        textCopied: "文本已复制",
+        noneToExport: "暂无资产可导出",
+        imported: "已导入 {{count}} 个资产",
+        importFailed: "导入失败，请选择有效的资产压缩包",
+        deleted: "资产已删除",
+        packageName: "我的资产.zip",
+        kinds: { audio: "音频", text: "文本", image: "图片", video: "视频" },
+        fields: {
+            title: "标题",
+            titleRequired: "请输入标题",
+            titlePlaceholder: "给资产起一个容易检索的名字",
+            coverUrl: "封面 URL",
+            coverPlaceholder: "可粘贴图片 URL，也可以上传本地封面",
+            tags: "标签",
+            tagsPlaceholder: "输入标签后回车",
+            source: "来源",
+            sourcePlaceholder: "手动添加 / 画布 / 提示词库",
+            note: "备注",
+            optional: "可选",
+            textContent: "文本内容",
+            videoContent: "视频内容",
+            textRequired: "请输入文本内容",
+            textPlaceholder: "保存提示词、说明文案、参考描述等文本资产",
+            imageContent: "图片内容",
+        },
+        selectImageFile: "选择图片文件",
+        noImageSelected: "未选择图片",
+        preview: "预览",
+        noCover: "暂无封面",
+        untitled: "未命名资产",
+        noTags: "无标签",
+        untagged: "未打标签",
+        unknownSource: "未标注来源",
+        details: "资产详情",
+        deleteTitle: "删除资产",
+        deleteConfirm: "确定删除「{{name}}」吗？删除后会从我的资产中移除。",
+        copyText: "复制文本",
+        downloadImage: "下载图片",
+        downloadVideo: "下载视频",
+        downloadFailed: "下载失败，请稍后重试",
+    },
+    notFound: {
+        title: "页面不存在",
+        description: "这个地址没有对应的页面，可能已经移动或被合并到其他入口。",
+        home: "返回首页",
+    },
+    workbench: {
+        logs: "生成记录",
+        settings: "参数",
+        prompt: "提示词",
+        viewPrompts: "查看提示词库",
+        viewAssets: "查看我的资产",
+        clipboard: "剪切板",
+        upload: "上传",
+        adjust: "调整",
+        generate: "开始生成",
+        results: "生成结果",
+        waiting: "等待 {{time}}",
+        model: "模型",
+        generating: "生成中",
+        success: "成功",
+        failed: "生成失败",
+        retry: "重试",
+        new: "新建",
+        selectAll: "全选",
+        noLogs: "暂无生成记录",
+        deleteLogs: "删除生成记录",
+        deleteLogsConfirm: "确定删除选中的 {{count}} 条生成记录吗？",
+        successCount: "成功 {{count}}",
+        failCount: "失败 {{count}}",
+        itemCount: "{{count}} 张",
+        untitled: "未命名",
+        configFirst: "请先完成配置",
+        generationFailed: "生成失败",
+        retrySuccess: "重试成功",
+    },
+    imageWorkbench: {
+        title: "生图工作台",
+        promptPlaceholder: "描述画面主体、风格、构图、光线和用途",
+        references: "参考图",
+        removeReference: "移除参考图",
+        dropReferences: "松开即可添加参考图",
+        noReferences: "暂无参考图，可将图片拖到这里",
+        clipboardEmpty: "剪切板里没有可读取的图片",
+        clipboardAdded: "已读取 {{count}} 张参考图",
+        promptRequired: "请输入生图提示词",
+        configIncomplete: "生图配置不完整",
+        invalidParams: "生图参数无效",
+        busy: "生图工作台已有任务正在运行",
+        generated: "图片已生成",
+        addedReference: "已加入参考图",
+        resultTitle: "生成结果 {{count}}",
+        source: "生图工作台",
+        unsupportedAsset: "生图工作台只能使用文本或图片资产",
+        missingResult: "接口没有返回图片",
+        empty: "还没有生成图片",
+        resultAlt: "生成结果 {{count}}",
+        addReference: "加入参考图",
+        referenceAdded: "已添加 {{count}} 张参考图",
+        unsupportedFiles: "已忽略不支持的参考图，请使用 JPG、PNG、WebP、HEIC 等图片格式",
+    },
+    videoWorkbench: {
+        title: "视频创作台",
+        promptPlaceholder: "描述镜头运动、主体动作、场景氛围和画面风格",
+        references: "参考图",
+        videoReferences: "参考视频",
+        audioReferences: "参考音频",
+        removeImage: "移除参考图",
+        removeVideo: "移除参考视频",
+        removeAudio: "移除参考音频",
+        dropReferences: "松开即可上传参考资产",
+        noImages: "暂无参考素材，可拖入图片、视频或音频；图片最多 7 张",
+        noVideos: "暂无参考视频，可拖入文件，最多 3 个",
+        noAudio: "暂无参考音频，可拖入文件，最多 3 个，mp3/wav，单个 15MB 内",
+        unsupportedFiles: "已忽略不支持的参考资产，请使用图片、mp4/mov 视频或 mp3/wav 音频",
+        imageTooLarge: "已忽略超过 30MB 的参考图",
+        videoTooLarge: "已忽略超过 200MB 的参考视频",
+        audioTooLarge: "已忽略超过 15MB 的参考音频",
+        audioDurationInvalid: "已忽略不符合时长要求的参考音频：单个 2-15 秒，总时长不超过 15 秒",
+        clipboardEmpty: "剪切板里没有可读取的图片",
+        clipboardAdded: "已读取 {{count}} 张参考图",
+        promptRequired: "请输入视频提示词",
+        referenceError: "{{error}}。{{hint}}",
+        invalidParams: "视频生成参数无效",
+        busy: "视频工作台已有任务正在运行",
+        generated: "视频已生成",
+        timeout: "视频生成超时，请稍后重试",
+        submitUnconfirmed: "提交失败，没有创建任务，请检查网络后重试",
+        resultTitle: "生成视频",
+        source: "视频创作台",
+        empty: "还没有生成视频",
+    },
+    canvas: {
+        defaultTitle: "自定义画布 {{count}}",
+        library: "画布库",
+        title: "无限画布",
+        imported: "已导入 {{count}} 个画布",
+        importFailed: "导入失败，请选择有效的画布压缩包",
+        opening: "正在打开画布...",
+        loading: "正在加载画布...",
+        exportSelected: "导出选中",
+        deleteSelected: "删除选中",
+        deleteAll: "删除全部",
+        import: "导入画布",
+        create: "新建画布",
+        empty: "还没有画布",
+        emptyDescription: "新建一个画布后，就可以独立保存节点、连线和画布外观。",
+        collapsePanel: "收起面板",
+        back: "返回项目列表",
+        expandPanel: "展开面板",
+        home: "主页",
+        docs: "文档",
+        projects: "我的画布",
+        deleteCurrent: "删除当前画布",
+        importAsset: "导入资产",
+        exportCurrent: "导出当前画布",
+        undo: "撤销",
+        redo: "重做",
+        openMenu: "打开画布菜单",
+        renameHint: "双击修改画布名称",
+        shortcuts: "快捷键",
+        miniMapOpen: "打开小地图",
+        miniMapClose: "关闭小地图",
+        resetView: "重置视图",
+        zoom: "放大/缩小画布",
+        agentConnected: "Codex 已连接",
+        agentConnecting: "Codex {{activity}}",
+        agentDisconnected: "Codex 未连接",
+        connecting: "连接中",
+        dock: { add: "添加节点", selectTool: "选择工具", handTool: "抓手工具", assets: "资产管理", shortcuts: "画布快捷键", director: "导演台", storyboard: "一句话分镜" },
+        createPanel: {
+            title: "添加节点", search: "搜索节点", empty: "没有匹配的节点", close: "关闭", assets: "资产库",
+            hint: "回车创建首个结果，Esc 关闭",
+            textHint: "脚本、文案、分镜", imageHint: "文生图 / 图生图", videoHint: "文生视频 / 图生视频", audioHint: "配音与音效", configHint: "模型、尺寸、数量", groupHint: "把选中节点收纳成组",
+        },
+        blankMenu: { paste: "粘贴", selectAll: "全选节点", fitAll: "适应全部节点", actualSize: "实际大小 100%", background: "画布背景", clear: "清空画布" },
+        director: { defaultScene: "镜头 1", loading: "正在加载 3D 导演台…", applied: "导演台输出已回写画布" },
+        storyboard: {
+            title: "一句话生成分镜",
+            briefPlaceholder: "用一句话描述你想做的视频，例如：一只橘猫在阳光窗台上打盹，治愈系，15 秒",
+            needBrief: "请先描述你想做的视频",
+            needModel: "请先选择分镜模型",
+            generated: "已生成 {{count}} 个分镜，扣除 {{credits}} 积分",
+            failed: "分镜生成失败，请重试",
+            generating: "正在拆解分镜…",
+            generatingHint: "在线模型生成通常需要 10-40 秒，请不要关闭窗口",
+            generate: "生成分镜",
+            regenerate: "重新生成",
+            model: "分镜模型",
+            modelPlaceholder: "选择模型",
+            noModel: "后台还没有可用的文本模型，请联系管理员添加并启用线路。",
+            duration: "总时长",
+            shotCount: "镜头数",
+            aspect: "画幅",
+            style: "风格",
+            stylePlaceholder: "选填，如：温暖日系胶片",
+            selectedSummary: "已选 {{count}} 镜 / {{duration}} 秒",
+            shotLabel: "镜头 {{index}}",
+            promptPlaceholder: "生图提示词",
+            videoPromptPlaceholder: "图生视频运动描述",
+            withVideoNodes: "同时为每个镜头创建视频节点",
+            apply: "铺到画布（{{count}} 镜）",
+            applied: "已铺开 {{count}} 个分镜节点",
+            scriptTitle: "分镜脚本 · {{title}}",
+            shotTitle: "镜头 {{index}} · {{duration}}s",
+            videoSuffix: " · 视频",
+            examples: {
+                cat: "一只橘猫在阳光窗台上打盹，治愈系短片，15 秒",
+                coffee: "手冲咖啡从研磨到入口的特写，慢节奏质感广告，20 秒",
+                city: "雨夜城市霓虹街头，一个人撑伞走过，电影感，30 秒",
+            },
+        },
+        emptyHint: { title: "双击画布，添加节点", description: "也可以点底部 ＋ 或在空白处右键" },
+        nodeTypes: { image: "图片", text: "文本", config: "生成配置", video: "视频", audio: "音频", group: "组" },
+        toolbar: {
+            select: "选择", pan: "移动", focus: "居中聚焦", text: "文本", image: "图片", video: "视频", audio: "音频", config: "生成配置", group: "组", extensions: "扩展节点", upload: "上传资产", appearance: "画布外观", clear: "清空画布",
+            themeMode: "主题模式", light: "浅色", dark: "深色", gridStyle: "网格样式", dots: "点", lines: "线", blank: "空白", imageInfo: "图片信息",
+        },
+        project: {
+            untitled: "未命名画布", imported: "导入画布",
+            select: "选择 {{name}}", stats: "{{nodes}} 个节点 · {{connections}} 条连线", updated: "更新于 {{date}}", saveName: "保存名称", cancelRename: "取消重命名", export: "导出", rename: "重命名", delete: "删除", open: "打开画布 {{name}}",
+            deleteTitle: "删除画布？", deleteDescription: "将删除 {{count}} 个画布，里面的节点和连线也会一起移除。",
+        },
+        export: { defaultProjectName: "无限画布", defaultNodesName: "画布元素", item: "元素" },
+        createMenu: {
+            fromNode: "引用该节点生成", close: "关闭", text: "文本生成", textDescription: "脚本、广告词、品牌文案", image: "图片生成", video: "视频生成", audio: "音频参考", config: "配置节点", configDescription: "模型、尺寸、数量和输入顺序", select: "选择节点",
+        },
+        node: {
+            node: "节点",
+            untitled: "未命名节点", renameHint: "双击修改节点名称", group: "组", nodeCount: "{{count}} 个节点", generating: "生成中", failed: "生成失败", retry: "重试", missingPlugin: "缺少插件", missingPluginDescription: "节点类型“{{type}}”的插件未安装或未启用", generateImage: "用文本生图", generate: "生图", editText: "双击编辑文字", emptyImage: "空图片节点", emptyVideo: "空视频节点", emptyAudio: "空音频节点", audio: "音频", batchExpanded: "图片组已展开", batchCollapsed: "图片组已收起", textBatchExpanded: "备选文本已展开", textBatchCollapsed: "备选文本已收起", createCopy: "创建副本", setPrimary: "设为主图", setPrimaryText: "设为主文本",
+        },
+        videoFrames: { first: "截取首帧", last: "截取尾帧", current: "截取当前帧", firstTitle: "{{name}} 首帧", lastTitle: "{{name}} 尾帧", currentTitle: "{{name}} 当前帧", captured: "已生成图片节点", failed: "无法截取该画面，请重试" },
+        sidePanel: {
+            canvas: "画布", assets: "资产", prompts: "提示词库", resize: "调整左侧面板宽度", elements: "画布元素", select: "选择", searchNodes: "搜索节点", focusNode: "定位到节点", preview: "放大预览", viewList: "切换为列表", viewGrid: "切换为缩略图", noNodes: "画布暂无节点", clearAll: "取消全选", selected: "已选 {{count}}", exporting: "正在导出选中元素…", exportName: "画布元素-{{count}}个", exported: "已导出 {{count}} 个元素", exportFailed: "导出失败，请重试",
+            addingAssets: "正在添加资产…", addedAssets: "已添加 {{count}} 个资产", mediaOnly: "仅支持图片或视频文件", addFailed: "添加失败，请重试", searchAssets: "搜索资产", add: "添加", noAssets: "暂无资产", inserted: "插入画布", removeAssetTitle: "移除该资产？", remove: "移除", removeAsset: "移除资产", assetRemoved: "资产已移除",
+            searchPrompts: "搜索提示词", noPrompts: "暂无提示词", promptCopied: "已复制提示词", copyFailed: "复制失败", loadFailedRetry: "加载失败，点击重试", noMatchingPrompts: "无匹配提示词", sourceEmpty: "该来源暂无提示词", viewDetails: "查看详情",
+            filter: { image: "图片", video: "视频", text: "文本", audio: "音频", config: "配置", group: "分组" },
+        },
+        assetPicker: { title: "选择资产", insert: "插入", search: "搜索资产", empty: "没有资产" },
+        imageTools: { copyPrompt: "复制提示词", copyPromptTitle: "复制生成该图片的提示词", reversePrompt: "反推提示词", reversePromptTitle: "创建反推提示词的文本和配置节点", replace: "替换图片", locked: "锁比例", free: "自由比例", lockTitle: "切换为等比缩放", freeTitle: "切换为自由比例", mask: "局部编辑", maskTitle: "添加蒙版遮罩后局部修改", crop: "裁剪", cropTitle: "裁剪并生成新节点", split: "切图", splitTitle: "按行列切分图片", upscale: "放大", upscaleTitle: "放大图片分辨率", superResolve: "超分", superResolveTitle: "AI 超分", angle: "多角度", angleTitle: "生成角度", view: "查看大图", viewTitle: "查看图片详情", more: "更多", configure: "配置快捷工具", customize: "自定义工具栏", showLabels: "显示按钮文字", description: "选择你想在图片节点编辑栏中使用的快捷工具。", preview: "节点预览", imageNode: "图片节点", quickTools: "快捷工具" },
+        nodeToolbar: { noPrompt: "暂无可复制的提示词", infoTitle: "查看节点信息", info: "信息", removeTitle: "移除节点", retryTitle: "重新生成", queryVideoTask: "获取任务状态", queryVideoTaskTitle: "使用任务 ID 查询视频生成状态", videoTaskId: "任务 ID", saveAsset: "存资产", downloadAudio: "下载音频", downloadVideo: "下载视频", downloadImage: "下载图片", editTextTitle: "编辑文本", editText: "编辑文字", decreaseFont: "减小字号", increaseFont: "增大字号", zoomOut: "缩小", zoomIn: "放大", uploadImage: "上传图片", replaceVideo: "替换视频", uploadVideo: "上传视频", replaceAudio: "替换音频", uploadAudio: "上传音频", nodeInfo: "节点信息", name: "名称", type: "类型", size: "尺寸", position: "位置", status: "状态", imageGroup: "图片组", imageSize: "图片大小", group: "打组", groupTitle: "用组节点包住选中节点", ungroup: "解散组", ungroupTitle: "取消节点分组" },
+        configNode: { title: "生成配置", image: "生图", text: "文本", video: "视频", audio: "音频", prompt: "提示词", references: "参考图", videoReferences: "参考视频", audioReferences: "参考音频", items: "{{count}} 个", images: "{{count}} 张", compose: "组装提示词", stop: "停止", generate: "开始生成" },
+        projectPage: {
+            stopTitle: "停止生成？", stopDescription: "当前生成请求会被中断，已经生成完成的内容会保留。", stop: "停止", continue: "继续生成", configConnection: "配置节点之间不能连接", notFound: "未找到当前画布", exporting: "正在导出当前画布…", exported: "已导出当前画布", clipboardText: "剪切板文本", clipboardImageAdded: "已从剪切板添加图片", clipboardTextAdded: "已从剪切板添加文本", noTextToSave: "没有可保存的文本", canvasText: "画布文本", noVideoToSave: "没有可保存的视频", canvasVideo: "画布视频", noImageToSave: "没有可保存的图片", canvasImage: "画布图片", emptyReverse: "图片节点为空，无法反推提示词", reverseTitle: "反推提示词", reverseConfigTitle: "反推提示词配置", splitTitle: "{{name}} {{row}}-{{column}}", splitSuccess: "已切分为 {{count}} 个子节点", maskResult: "局部编辑结果", maskFailed: "局部修改失败", generationFailed: "生成失败", partialFailed: "部分图片生成失败", partialTextFailed: "部分文本生成失败", allFailed: "全部图片生成失败", retryPromptMissing: "找不到提示词，无法重试", referenceMissing: "参考图片已丢失，无法继续重试", emptyTextImage: "文本节点为空，无法生图", untitledCanvas: "未命名画布", superResolve: "AI 超分", notImplemented: "暂未实现", imageDetails: "图片详情", clearTitle: "清空画布？", clear: "清空", clearDescription: "这会删除当前画布上的所有节点和连线。", reversePreset: "请根据参考图片反推一段适合用于 AI 生图的提示词。\n\n要求：\n1. 只输出提示词正文，不要解释。\n2. 覆盖主体、构图、风格、光线、色彩、材质、镜头和氛围。\n3. 尽量写成可直接用于生图模型的完整提示词。", maskPrompt: "参考{{source}}为原图，{{mask}}是在原图上用蓝色半透明标注出的待修改区域。请只修改蓝色标注覆盖的区域，其余区域与原图保持完全一致，输出与原图相同尺寸的完整图片，并且结果中不要保留任何蓝色标注。修改要求：{{prompt}}", maskNodeTitle: "遮罩标注", editTextPrompt: "请根据要求修改以下文本。\n\n原文：\n{{source}}\n\n修改要求：\n{{prompt}}"
+        },
+        reverseComposer: "参考图片：@[node:{{imageId}}]\n任务说明：@[node:{{textId}}]",
+        editors: {
+            reset: "重置", zoomOut: "缩小", zoomIn: "放大", loading: "读取中", unknown: "未知", cancel: "取消",
+            angleTitle: "AI 多角度", angleDescription: "左侧只预览方向，结果会基于原图重新生成", horizontal: "左右角度", pitch: "俯仰角度", distance: "镜头距离", lens: "广角镜头", standard: "标准", wide: "广角", aiGenerate: "AI 生成",
+            upscaleTitle: "图片放大", source: "源图", targetPixels: "目标像素", maxReached: "图片已达到 4K，无需放大", targetReached: "图片已达到当前目标像素，无需放大", algorithm: "放大算法", outputSize: "输出尺寸", upscale: "生成放大图", high: "高清插值", highDescription: "适合照片和细节图", bilinear: "双线性", bilinearDescription: "平滑、速度快", nearest: "最近邻", nearestDescription: "适合像素风格",
+            cropTitle: "裁剪图片", adjustCrop: "调整裁剪框", cropHint: "滚轮缩放 · 中键或空格+左键拖动画面", cropSize: "裁剪尺寸 {{size}}", ratio: "比例 {{ratio}}", original: "原图 {{width}} x {{height}}", confirmCrop: "确认裁剪", free: "自由", fixed: "固定", originalMode: "原图",
+            maskTitle: "局部遮罩编辑", maskHint: "滚轮缩放 · 中键或空格+左键拖动画面 · Alt+左/右键横拖调笔刷 · Ctrl/Cmd+Z 撤回 · Ctrl/Cmd+Shift+Z 重做", brush: "画笔", erase: "擦除", undoMaskTitle: "撤回局部涂抹 (Ctrl/Cmd+Z)", undoMask: "撤回局部涂抹", redoMaskTitle: "重做局部涂抹 (Ctrl/Cmd+Shift+Z)", redoMask: "重做局部涂抹", brushSize: "笔刷大小", editInstructions: "修改要求", maskPlaceholder: "例如：把选中区域改成金属材质，保持原图光影", maskPromptRequired: "请输入修改要求", maskRequired: "请先涂抹局部区域", maskExport: "导出到画布", maskGenerate: "立刻生成",
+            splitTitle: "切分图片", splitDescription: "生成 {{count}} 个图片子节点，并按原图网格排列到画布右侧", splitHint: "滚轮缩放 · 中键或空格+左键拖动画面 · Delete 删除选中线 · Ctrl/Cmd+Z 撤回 · Ctrl/Cmd+Shift+Z 重做", undoSplitTitle: "撤回切图调整 (Ctrl/Cmd+Z)", undoSplit: "撤回切图调整", redoSplitTitle: "重做切图调整 (Ctrl/Cmd+Shift+Z)", redoSplit: "重做切图调整", rows: "行数", columns: "列数", horizontalLine: "横向线", verticalLine: "纵向线", deleteLine: "删除线", resetLines: "重置线", pieceCount: "切片数量", pieces: "{{count}} 个", averageSize: "平均约", generateChildren: "生成子节点",
+        },
+        promptPanel: { modes: { image: "图片生成", video: "视频生成", audio: "音频生成", text: "文本生成", editImage: "图片编辑", editText: "文本编辑" }, addReference: "参考", video: "描述要生成的视频内容", audio: "描述要生成的音频内容", image: "描述要生成的图片内容", text: "请输入你想要生成的文本内容", editImage: "请输入你想要把这张图修改成什么", editText: "请输入你想要将本段文本修改成什么", expandEditor: "放大编辑", editorTitle: "编辑提示词", stopGeneration: "停止生成", generate: "生成", stop: "停止", sendHint: "Ctrl / ⌘ + Enter 生成，Enter 换行" },
+        references: { title: "参考内容", select: "从画布选择参考节点", disconnect: "断开参考连接", empty: "暂无内容", selecting: "正在添加参考", choose: "选择", selectingHint: "从画布选择参考 · ESC 返回输入框" },
+        composer: { title: "组装提示词", description: "@ 引用已连接资产，发送前按当前连接重新编号", placeholder: "输入提示词，按 @ 引用连接的图片、文本或组", imagePreview: "引用图片预览", resources: { image: "图片{{index}}", video: "视频{{index}}", audio: "音频{{index}}", text: "文本{{index}}", group: "组{{index}}" } },
+        controls: { ratio: "比例", duplicate: "复制", delete: "删除", images: "{{count}} 张", texts: "{{count}} 条", generations: "{{count}} 次", reasoning: "推理" },
+        generation: { interrupted: "页面刷新后生成已中断，请重新生成。", front: "正面视角", rotateRight: "向右旋转 {{angle}} 度", rotateLeft: "向左旋转 {{angle}} 度", level: "水平视角", topDown: "俯视 {{angle}} 度", lowAngle: "仰视 {{angle}} 度", angleLabel: "AI 多角度：{{horizontal}}，{{pitch}}，镜头距离 {{distance}}，{{lens}}镜头", anglePrompt: "基于参考图重新生成同一主体的新视角，保持主体、颜色、材质和画面风格一致，不要只做透视变形。{{angle}}。" },
+        agentOps: { add_node: "新增节点", update_node: "更新节点", delete_node: "删除节点", delete_connections: "删除连线", connect_nodes: "连接", set_viewport: "调整视图", select_nodes: "选择节点", run_generation: "触发生成" },
+        shortcut: {
+            dragCanvas: "拖动画布",
+            pan: "平移视图",
+            toggleTool: "临时切换选择 / 移动",
+            wheel: "滚轮",
+            zoom: "缩放画布",
+            zoomSlider: "缩放滑杆",
+            preciseZoom: "精确调整缩放",
+            boxSelect: "框选多个节点",
+            addSelection: "追加选择节点",
+            selectAll: "全选节点",
+            copyPaste: "复制 / 粘贴节点，或粘贴剪切板文本/图片",
+            copyPasteNodes: "复制 / 粘贴节点",
+            delete: "删除选中",
+            group: "将选中节点打组",
+            ungroup: "解散选中的组",
+            escape: "取消选择并关闭浮层",
+            dropMedia: "拖入图片/视频/音频",
+            upload: "上传到画布",
+            drag: "拖动",
+            click: "点击",
+        },
+    },
+    navigation: {
+        create: "创作",
+        explore: "发现与灵感",
+        home: "首页",
+        canvas: "我的画布",
+        image: "生图工作台",
+        video: "视频创作台",
+        prompts: "提示词库",
+        assets: "素材库",
+        models: "模型广场",
+        config: "配置",
+        creation: "创作",
+        resources: "资源",
+        account: "账户",
+        accountCenter: "账户中心",
+        admin: "管理后台",
+        workspace: "工作区",
+        workspaceName: "AI 视频创作工作台",
+        contact: "联系我们",
+        communityTitle: "加入官方社区",
+        communitySubtitle: "扫码加入官方交流群",
+        communityFooter: "扫描二维码加入 · 点击二维码可放大",
+        viewQr: "点击放大",
+        contactAction: "联系",
+        contactFetchError: "获取联系方式失败",
+        noContacts: "暂无联系方式",
+        contactDialogHint: "扫码加入官方社区，获取最新玩法与支持",
+        closeMenu: "关闭菜单",
+        openMenu: "打开菜单",
+        close: "关闭",
+        contactChannels: {
+            wechat: "微信",
+            wechat_group: "微信群",
+            wecom: "企业微信",
+            qq: "QQ",
+            qq_group: "QQ群",
+            email: "邮箱",
+            phone: "电话",
+            telegram: "Telegram",
+            whatsapp: "WhatsApp",
+            link: "自定义链接",
+        },
+    },
+    topNav: {
+        openMenu: "打开导航菜单",
+        menu: "导航菜单",
+        navigation: "导航",
+        docs: "文档",
+        switchLanguage: "切换到 {{language}}",
+        shortcuts: "快捷键",
+        lightTheme: "切换到浅色主题",
+        darkTheme: "切换到深色主题",
+    },
+    home: {
+        promptError: "获取提示词失败",
+        description: "在 <canvas>无限画布</canvas> 中生成、连接和重组 <content>图片、文字与图形</content>，让创作从单次生成变成连续推演。",
+        start: "开始使用",
+        openCanvas: "打开画布",
+        showcaseTitle: "沉淀每一次好结果",
+        showcaseDescription: "收藏稳定出图的提示词、参考风格和结果图片，让下一次创作从已有经验开始。",
+        viewPrompts: "查看提示词库",
+        composerTitle: "从一个画面开始",
+        composerDescription: "输入镜头、角色或故事，选好方向，进入对应的工作台。",
+        heroKicker: "AI 视频创作工作台",
+        heroTitleLead: "从一个",
+        heroTitleAccent: "画面",
+        heroTitleTail: "开始。",
+        heroDescription: "输入镜头、角色或故事，图片与视频共用同一个入口，进入对应的工作台。",
+        heroVideoCta: "生成视频",
+        heroCanvasCta: "进入画布",
+        promptPlaceholder: "描述你想生成的画面、镜头运动或故事……",
+        estimateSelectModel: "选择模型后显示积分",
+        estimateLoading: "计算积分中…",
+        estimateUnavailable: "暂无法获取报价",
+        estimateCredits: "预计 {{credits}} 积分 / 次",
+        estimateNote: "进入工作台确认后生成，积分以实际参数和线路为准",
+        startCreating: "开始创作",
+        recentCanvases: "最近画布",
+        newCanvas: "新建画布",
+        viewAll: "查看全部",
+        inspirationTitle: "灵感大厅",
+        inspirationDescription: "从提示词库挑一个方向，继续你的创作。",
+        openPromptLibrary: "打开提示词库",
+        emptyPrompts: "暂无提示词",
+        usePrompt: "用这个提示词创作",
+        loginToCreate: "登录后开始创作",
+        imageMode: "图片",
+        videoMode: "视频",
+        shortcutHint: "⌘ / Ctrl + Enter 开始创作",
+        referenceImages: "参考图",
+        addMaterial: "添加素材",
+        materialHintVideo: "拖入或添加图片作首帧 / 尾帧，也可加入视频、MP3 参考",
+        materialHintImage: "拖入或添加参考图片",
+        materialUnsupported: "不支持该素材格式",
+        materialTooLarge: "素材文件过大",
+        materialUploadFailed: "素材上传失败",
+        appleImageConvertFailed: "苹果照片转换失败，请尝试将照片导出为 JPG 后上传",
+        imageMaterialsOnly: "图片模式只支持图片素材",
+        removeReference: "移除参考图",
+        referenceLogin: "登录后可添加参考图",
+        referenceImageOnly: "参考图只支持 JPG / PNG / WebP",
+        referenceImageTooLarge: "参考图不能超过 10MB",
+        referenceUploadFailed: "参考图上传失败",
+        recentCanvasesNote: "继续上一次的画面",
+        resolutionPanel: "输出分辨率",
+        resolutionPanelHint: "768P 按 720P 价格档计费。切换画质会切换对应的定价模型，并重新报价。",
+        ratioPanel: "画面比例",
+        ratioPanelHint: "选项来自当前模型，横屏、竖屏与方形构图随心切换。",
+        secondsPanel: "视频时长",
+        secondsPanelHint: "调整时长后会重新报价，确认后才开始生成。",
+        secondsRange: "{{min}}–{{max}} 秒",
+        secondsChoose: "仅选择当前模型支持的时长",
+        decreaseSeconds: "减少时长",
+        increaseSeconds: "增加时长",
+        imageQualityPanel: "图片质量",
+        imageQualityPanelHint: "质量越高细节越丰富，生成耗时和积分消耗也可能增加。",
+        statsTitle: "平台数据",
+        statsWorksValue: "3,200",
+        statsWorksUnit: "万+",
+        statsWorksLabel: "累计生成作品",
+        statsCreatorsValue: "180",
+        statsCreatorsUnit: "万",
+        statsCreatorsLabel: "活跃创作者",
+        statsDurationValue: "12",
+        statsDurationUnit: "s",
+        statsDurationLabel: "平均出片时长",
+        statsSuccessValue: "98",
+        statsSuccessUnit: "%",
+        statsSuccessLabel: "任务成功率",
+    },
+    version: {
+        viewUpdates: "查看版本更新",
+        title: "版本更新",
+        currentVersion: "当前版本",
+        latestVersion: "最新版本",
+        checking: "检查中...",
+        checkUpdates: "检查更新",
+        unreleased: "未发布",
+        latest: "最新",
+        current: "当前",
+        readFailed: "版本读取失败",
+        changelogFailed: "更新日志读取失败",
+        updated: "已获取最新版本信息",
+        updateFailed: "获取最新版本信息失败",
+        types: { added: "新增", fixed: "修复", changed: "调整", optimized: "优化", docs: "文档" },
+    },
+    config: {
+        title: "配置与用户偏好",
+        description: "默认模型与生成偏好",
+        modalDescription: "默认模型与生成偏好",
+        promptSources: {
+            add: "新增来源",
+            deleteTitle: "删除「{{name}}」？",
+            deleteDescription: "来源配置会被移除，已经加入我的资产的内容不受影响。",
+            refreshed: "「{{name}}」已更新 {{count}} 条",
+            refreshFailedCached: "更新失败，已保留旧缓存",
+            refreshPartial: "更新完成：{{success}} 个成功，{{failed}} 个失败，失败来源已保留旧缓存",
+            refreshAllSuccess: "已更新 {{sources}} 个来源，共 {{total}} 条",
+            refreshFailed: "更新失败",
+            builtIn: "内置",
+            itemCount: "{{count}} 条",
+            failed: "失败",
+            healthy: "正常",
+            unsynced: "未同步",
+            lastSuccess: "上次成功 {{time}}",
+            neverFetched: "尚未拉取",
+            view: "查看内容",
+            refresh: "立即拉取",
+            edit: "编辑来源",
+            schedule: "定时拉取",
+            interval: "拉取周期",
+            refreshAll: "全部立即拉取",
+            lastFetched: "上次拉取 {{time}}",
+            neverScheduled: "尚未定时拉取",
+            scheduleDescription: "开启周期后，页面打开期间会按周期自动拉取所有启用的来源。",
+            intervals: {
+                disabled: "关闭定时",
+                minutes30: "每 30 分钟",
+                hour1: "每 1 小时",
+                hours6: "每 6 小时",
+                hours24: "每 24 小时",
+            },
+            editor: {
+                addTitle: "新增提示词来源",
+                editTitle: "编辑提示词来源",
+                nameRequired: "请输入来源名称",
+                invalidUrl: "请输入有效的 JSON URL",
+                invalidHomepage: "请输入有效的主页地址",
+                name: "来源名称",
+                namePlaceholder: "用于分类展示",
+                homepage: "来源主页（可选）",
+                enabled: "启用来源",
+                jsonFormat: "JSON 格式",
+            },
+            content: {
+                loadFailed: "拉取提示词失败",
+                title: "{{name}} · 提示词内容",
+                count: "共 {{count}} 条",
+                refresh: "立即更新",
+                empty: "暂无提示词",
+                cover: "封面",
+                titleColumn: "标题",
+                tags: "标签",
+                actions: "操作",
+            },
+            runtime: { requestFailed: "请求失败（{{status}}）", urlRequired: "JSON URL 不能为空", fetchFailed: "「{{name}}」拉取失败：{{error}}", noPrompts: "「{{name}}」未解析到有效提示词", invalidRoot: "「{{name}}」格式错误：根节点必须是数组" },
+        },
+        importedDirectConfig: "已导入本地直连配置",
+        importedChannelCreated: "已新增渠道“{{name}}”，原有渠道未改动",
+        importedChannelUpdated: "已更新渠道“{{name}}”的连接配置",
+        importedChannelBaseUrlRequired: "导入链接缺少 Base URL，未修改任何渠道",
+        importedChannelBaseUrlInvalid: "导入链接中的 Base URL 无效，未修改任何渠道",
+        saved: "配置已保存",
+        savedContinue: "配置已保存，请继续刚才的请求",
+        channels: {
+            description: "每个渠道选择一个协议并拉取模型，为每个模型指定能力（生图/视频/文本/音频），并可自定义调用脚本。",
+            add: "新增渠道",
+            unnamed: "未命名渠道",
+            numberedName: "渠道 {{count}}",
+            modelCount: "{{count}} 个模型",
+            missingUrl: "未填写接口地址",
+            keepOne: "至少保留一个渠道",
+            defaultName: "默认渠道",
+            newName: "新渠道",
+            indexedName: "渠道 {{index}}",
+        },
+        preferences: {
+            interface: "界面偏好",
+            language: "界面语言",
+            languageDescription: "切换应用界面及组件语言。",
+            defaultModels: "默认模型",
+            defaultImageModel: "默认生图模型",
+            defaultVideoModel: "默认视频模型",
+            defaultTextModel: "默认文本模型",
+            defaultAudioModel: "默认音频模型",
+            generation: "生成偏好",
+            imageResolution: "默认生图分辨率",
+            videoResolution: "默认视频分辨率",
+            canvasImageCount: "画布默认生图张数",
+            canvasImageCountDescription: "新建画布生图和配置节点默认使用，单个节点仍可单独覆盖。",
+            regenerateBehavior: "已有内容的节点再次生成时",
+            regenerateBehaviorOverwrite: "原地重新生成（覆盖当前节点）",
+            regenerateBehaviorOverwriteDescription: "直接替换该节点的内容和参数，不新建节点。想保留旧结果时，先复制该节点。",
+            regenerateBehaviorNewNode: "新建节点（原行为）",
+            regenerateBehaviorNewNodeDescription: "保留当前节点，新建一个节点承接生成结果，适合做变体或分支。",
+            autoFocusOnSelect: "选中自动居中",
+            audioVoice: "默认音频声音",
+            audioFormat: "默认音频格式",
+            audioSpeed: "默认音频语速",
+            audioInstructions: "默认音频指令",
+            audioInstructionsPlaceholder: "例如：自然、温暖、适合旁白。",
+            systemPrompt: "系统提示词",
+            systemPromptPlaceholder: "例如：你是一位擅长电影感写实摄影的视觉导演。",
+        },
+        channelEditor: {
+            title: "编辑渠道",
+            name: "渠道名称",
+            protocol: "协议",
+            baseUrl: "接口地址",
+            models: "渠道模型",
+            modelDescription: "已选 {{count}} 个；为每个模型指定能力并可自定义调用脚本。",
+            selectModels: "选择模型",
+            scriptReady: "脚本已设",
+            script: "调用脚本",
+            empty: "点击「选择模型」拉取或手动增加模型。",
+            capabilities: {
+                image: "生图",
+                video: "视频",
+                text: "文本",
+                audio: "音频",
+            },
+        },
+        modelSelect: {
+            missingConfig: "请先填写接口地址和 API Key",
+            fetched: "已拉取 {{count}} 个模型",
+            fetchFailed: "拉取模型失败",
+            title: "选择渠道模型",
+            selected: "已选择 {{selected}} / {{total}}",
+            confirm: "确定",
+            search: "搜索模型",
+            modelName: "输入模型名称",
+            add: "增加模型",
+            fetch: "拉取模型列表",
+            description: "如果上游不提供 OpenAI /models 模型列表接口，请在这里手动增加模型名称。",
+            fetchedTab: "新获取的模型 ({{count}})",
+            existingTab: "已有的模型 ({{count}})",
+            visibleSelected: "当前列表已选择 {{selected}} / {{total}}",
+            selectVisible: "全选当前列表",
+            clearVisible: "取消当前列表",
+            fetchedEmpty: "点击「拉取模型列表」获取上游模型，或手动增加模型名称。",
+            existingEmpty: "暂无已选择的模型。",
+        },
+        scriptEditor: {
+            title: "{{capability}}调用脚本",
+            description: "按左侧三步配置：看懂规则、复制说明给外部 AI 写脚本，再粘贴到右侧保存。留空则使用系统默认调用。",
+            stepRule: "看懂规则",
+            stepRuleHint: "写成一个 async function，把 prompt、images、params 等写在参数里，params 再拆出 size、quality、count 等字段。函数里发请求并 return 结果，最后再调用一次该函数。",
+            stepAi: "让外部 AI 写",
+            stepAiCopy: "点击下方按钮，复制本页的变量、返回要求和写法说明。",
+            stepAiAsk: "打开 ChatGPT、Claude 或其他 AI，先粘贴说明，再附上你要对接的接口文档。",
+            stepAiPaste: "把 AI 返回的脚本粘贴到右侧编辑器，确认后保存。",
+            stepAiIncludes: "复制内容包含当前模型、返回要求、全部可用变量和写法约束，不会带上 API Key 原文。",
+            stepEdit: "粘贴保存",
+            editorTitle: "脚本编辑器",
+            editorHint: "把外部 AI 写好的脚本粘贴到这里，也可以先插入模板再改。",
+            editorEmpty: "当前使用系统默认调用",
+            editorFilled: "已填写自定义脚本",
+            startFromTemplate: "从模板开始",
+            insertTemplate: "插入{{name}}模板",
+            restoreDefault: "恢复默认调用",
+            returnRequirements: "返回要求",
+            variables: "可用变量",
+            variablesHint: "点击变量名插入到右侧编辑器。",
+            variablesHintVideo: "视频模型可使用 videos、audios 作为参考视频和参考音频。",
+            insert: "点击插入",
+            placeholder: "// 把外部 AI 写好的脚本粘贴到这里；留空则使用系统默认调用。",
+            copyBrief: "复制写脚本说明",
+            briefCopied: "写脚本说明已复制，请到你的 AI 里粘贴",
+        },
+        protocols: {
+        },
+    },
+    agent: {
+        status: { failed: "连接失败", connected: "已连接", connecting: "连接中", disconnected: "未连接" },
+        state: { ready: "就绪", connectionRequired: "请填写 Local URL 和 Connect token", invalidUrl: "Local URL 格式不正确", offline: "离线", skillReadFailed: "读取 Skill 失败", skillParseFailed: "Skill 解析失败", requestFailed: "本地 Agent 请求失败" },
+        siteTools: { canvasList: "画布列表", generationStatus: "生成任务状态", imageConfig: "生图配置", imageGenerate: "生图工作台生成", videoConfig: "视频配置", videoGenerate: "视频创作台生成", promptSearch: "搜索提示词", assetList: "资产列表", assetAdd: "添加资产", unknownTool: "未知工具：{{name}}", canvasLoading: "画布还在加载中，请稍后重试", canvasHint: "用 site_navigate 跳转 /canvas/{id} 打开对应画布", assetsLoading: "资产还在加载中，请稍后重试", assetTitleRequired: "请提供资产标题 title", textContentRequired: "kind=text 时需要提供 content 文本内容", imageUrlRequired: "kind=image 时需要提供 imageUrl（图片地址或 dataURL）", imageReadFailed: "无法读取该图片地址，请改用 dataURL 或可跨域访问的图片链接", assetKindUnsupported: "assets_add 仅支持 kind=text 或 kind=image", imageGenerationStarted: "已跳转生图工作台并触发生成，可用 generation_get_status 查询任务", imageConfigApplied: "已跳转生图工作台并填入参数，未触发生成", videoGenerationStarted: "已跳转视频创作台并触发生成，可用 generation_get_status 查询任务", videoConfigApplied: "已跳转视频创作台并填入参数，未触发生成" },
+
+
+========================================================================
+FILE: web/src/i18n/locales/zh-CN.ts
+LINES: 742-789
+========================================================================
+        history: { workspace: "工作空间", defaultWorkspace: "默认画布目录", selected: "已选 {{count}} 条", count: "{{count}} 条历史", empty: "暂无历史", deleteCount: "删除 {{count}} 条", refresh: "刷新", newThread: "新对话", selectThread: "选择{{name}}", untitled: "未命名对话", current: "当前", noWorkspaceThreads: "当前工作空间还没有对话记录", connectHint: "连接本地 Agent 后显示历史记录" },
+        skills: { selectLocal: "选择本地 Skill", search: "搜索 Skill", loading: "正在读取 Skill…", noMatch: "没有匹配的已启用 Skill", none: "还没有可用的 Skill", select: "选择 Skill", connectHint: "连接 Agent 后使用 Skill" },
+        skillManager: {
+            codexBusy: "Codex 正在运行，请完成当前任务后再提炼 Skill", noConversation: "当前对话还没有可提炼的已完成内容", noCanvas: "当前页面没有可提炼的画布", connecting: "当前页面仍在连接 Agent，请稍后再试", syncFailed: "同步当前画布失败，请检查 Agent 连接后重试", noDraft: "未生成 Skill 草稿", draftCreated: "草稿已生成，可在技能页确认后创建", draftFailed: "生成 Skill 草稿失败", contentMissing: "未读取到 Skill 内容", readFailed: "读取 Skill 失败", defaultPromptMention: "默认提示词需要包含 ${{name}}", created: "Skill 已创建", updated: "Skill 已更新", saveFailed: "保存 Skill 失败", deleteTitle: "删除 {{name}}", deleteDescription: "删除后本地文件无法恢复，确定继续吗？", delete: "删除", deleted: "Skill 已删除", deleteFailed: "删除 Skill 失败", statusFailed: "更新 Skill 状态失败",
+            fromConversation: "从当前对话生成草稿", availableAfterRun: "Codex 运行结束后可用", conversationDescription: "整理当前对话中的可复用流程", noCompletedContent: "当前对话还没有已完成内容", startConversation: "请先开始一段对话", fromCanvas: "从当前画布生成草稿", canvasDescription: "整理当前页面的节点与生成流程", canvasUnavailable: "当前页面没有可用画布", blankCreate: "空白创建", blankDescription: "从空白表单开始编写", localSkills: "本地 Skill", localDescription: "安装在本机，由 Codex 直接执行", reload: "重新读取", reloadSkill: "重新读取 Skill", createSkill: "创建 Skill", filterBySource: "按来源筛选 Skill", scopes: { all: "全部来源", repo: "项目", user: "个人", system: "系统", admin: "管理员" }, loadErrors: "{{count}} 个 Skill 未能加载", externalReadonly: "外部 Skill 只能使用或启停", noDescription: "暂无说明", enabled: "已启用", disabled: "已停用", selected: "已选择", use: "使用", editNamed: "编辑 {{name}}", deleteNamed: "删除 {{name}}", connectToView: "连接 Agent 后查看 Skill", noMatch: "没有匹配的 Skill", none: "还没有本地 Skill", connectDescription: "连接成功后会读取本机已安装的 Skill", tryAnotherFilter: "换个关键词或来源试试", createOrInstall: "创建一个，或在本机安装后刷新", saveChanges: "保存更改", saveLocation: "保存到本地 Agent 工作区", basicInfo: "基本信息",
+            identifier: "Skill 标识", identifierExtra: "用于文件夹名和 $skill-name 调用。", identifierRequired: "请输入 Skill 标识", identifierMax: "Skill 标识不能超过 64 个字符", identifierPattern: "仅支持小写字母、数字和连字符，连字符不能连续或位于首尾", identifierPlaceholder: "例如 product-grid", displayName: "显示名称", displayNameMax: "显示名称不能超过 64 个字符", displayNamePlaceholder: "例如 产品九宫格生成", whenToUse: "何时使用", whenToUseExtra: "说明这个 Skill 的能力和适用场景，Codex 会据此判断是否调用。", whenToUseRequired: "请输入使用场景", whenToUseMax: "使用场景不能超过 1024 个字符", noAngleBrackets: "使用场景不能包含尖括号", whenToUsePlaceholder: "例如：当用户需要基于商品信息规划并生成一组产品图时使用", instructions: "执行说明", instructionsExtra: "按实际执行顺序写清步骤、约束和输出要求。", instructionsRequired: "请输入执行说明", instructionsPlaceholder: "写清楚执行步骤、必要检查和最终输出", advanced: "高级设置", shortDescription: "卡片短说明", shortDescriptionExtra: "填写时控制在 25–64 个字符，便于快速浏览。", shortDescriptionMin: "卡片短说明不能少于 25 个字符", shortDescriptionMax: "卡片短说明不能超过 64 个字符", shortDescriptionPlaceholder: "可选，用于列表展示", defaultPrompt: "默认提示词", defaultPromptExtra: "填写时必须准确包含 $skill-name，例如 $product-grid。", defaultPromptMax: "默认提示词不能超过 1024 个字符", defaultPromptPlaceholder: "可选，选择 Skill 时预填到输入框",
+        },
+        composer: { removeImage: "移除图片", removeSkill: "移除 Skill", uploadImage: "上传图片", stop: "停止", send: "发送", model: "模型：{{model}}", selectModel: "选择 Codex 模型，当前为 {{model}}", reasoning: "思考程度：{{effort}}", selectReasoning: "选择思考程度，当前为 {{effort}}", permissionLabel: "权限：{{mode}}", selectPermission: "选择 Codex 权限模式，当前为 {{mode}}", effort: { minimal: "最低", low: "轻度", medium: "中", high: "高", xhigh: "极高", max: "最高", ultra: "Ultra" }, permission: { request: "请求批准", requestDescription: "编辑工作区外文件或联网时始终询问", automatic: "自动审查", automaticDescription: "由 Codex 审查风险操作，必要时再询问", full: "完全访问权限", fullShort: "完全访问", fullDescription: "不受限制地访问网络和本机文件" }, tools: { label: "工具确认：{{mode}}", manual: "手动确认", manualDescription: "Agent 执行画布写入前会请求确认", automatic: "自动确认", automaticDescription: "Agent 会自动执行画布写入操作", select: "选择工具确认模式，当前为 {{mode}}" }, mentions: { selectSkill: "选择 Skill", selectResource: "引用画布素材", loadingSkills: "正在读取 Skill…", noSkills: "没有匹配的已启用 Skill", noResources: "当前画布没有匹配的可引用素材", previewUnavailable: "当前无法预览该素材", referenceLabel: "引用{{kind}}：{{title}}", resourceMissing: "画布素材“{{title}}”已不存在", imageReadFailed: "无法读取画布图片“{{title}}”", kind: { image: "图片", video: "视频", audio: "音频", text: "文本" } } },
+        panel: { connectionSettings: "连接设置 · {{status}}", connectionSettingsLabel: "连接设置，当前{{status}}", chat: "对话", history: "历史", skills: "技能", logs: "日志", collapse: "收起对话", collapseLabel: "收起 Agent 面板", resize: "调整右侧面板宽度", content: "Agent 内容", mcpInitializing: "MCP 初始化中，完成后即可发送", initFailed: "Codex 对话初始化失败，请新建或恢复对话", placeholder: "询问 Codex，输入 / 使用技能，@ 引用画布素材" },
+        chat: { latestMessages: "查看最新消息", latestCall: "最新调用", input: "输入", cached: "缓存", output: "输出" },
+        logs: { copied: "日志已复制", selectedManual: "已选中日志，请手动复制", copyFailed: "复制失败，请切换到原始 JSON 后手动复制", title: "运行日志", diagnostics: "排查日志", rawJson: "原始 JSON", messages: "{{count}} 条消息", tool: "工具：{{tool}}", noPendingTool: "无待处理工具", all: "全部 {{count}}", errors: "错误 {{count}}", warnings: "警告 {{count}}", info: "信息 {{count}}", list: "排查日志列表", noFiltered: "当前筛选下没有日志", empty: "暂无事件日志", new: "{{count}} 条新日志", newLabel: "{{count}} 条新日志，查看最新日志", latest: "查看最新日志", fullData: "完整诊断数据 · {{count}} 条", copyAll: "复制全部日志", copyLastError: "复制最近错误", lastErrorCopied: "最近错误已复制", clear: "清空日志", repeated: "重复 {{count}} 次", details: "详细信息", skillLoading: "技能加载", plugin: "插件", terminal: "终端", conversationStorage: "会话存储" },
+        message: { close: "关闭", copied: "已复制", copyCode: "复制代码", copyLink: "复制链接", externalWarning: "即将打开以下外部链接，请确认链接可信。", openExternal: "打开外部链接？", continueOpen: "继续打开", revealed: "已在文件管理器中定位", openLocalFailed: "无法打开本地文件", openLocal: "打开本地文件？", localDescription: "将在本机文件管理器中定位该路径，不会通过浏览器打开。", externalDescription: "即将打开以下外部链接，请确认链接可信。", pathCopied: "路径已复制", linkCopied: "链接已复制", copyPath: "复制路径", showInFolder: "在文件管理器中显示", toolCall: "工具调用", awaitingConfirmation: "等待确认", reject: "拒绝执行", approve: "批准执行", networkApproval: "请求网络访问", fileApproval: "请求编辑文件", permissionApproval: "请求扩展权限", commandApproval: "请求执行命令", decline: "拒绝", allowOnce: "允许一次", allowSession: "本会话允许", thinking: "正在思考", commandsRunning: "正在执行 {{count}} 条命令", commandRunning: "正在执行命令", commandsCompleted: "已执行 {{count}} 条命令{{failed}}", commandsFailed: " · {{count}} 条失败", failed: "执行失败", running: "进行中", completed: "已完成", command: "命令", slowResponse: "响应时间较长，但任务仍在运行。可以继续等待，或点击输入框右侧的停止按钮结束本轮。", waitingSeconds: "已等待 {{seconds}} 秒", waitingMinutes: "已等待 {{minutes}} 分 {{seconds}} 秒", files: "涉及文件", errorInfo: "错误信息", output: "运行输出", viewLarge: "点击查看大图", attachmentPreview: "图片附件预览", noEffect: "未生效", canceled: "已取消", recorded: "已记录", stopped: "已停止", finished: "已结束", pending: "待处理" },
+        events: { analyzing: "正在分析任务…", reasoning: "思考摘要", plan: "执行计划", commandFailed: "命令执行失败", commandCompleted: "命令已完成", executeCommand: "执行命令", editFiles: "修改文件", searchWeb: "搜索资料", viewImage: "查看图片", imageViewed: "已查看图片", viewingImage: "正在查看图片", imageGeneration: "内置生图", imageFailed: "图片生成失败", imageCompleted: "图片生成完成", generatingImage: "正在生成图片…", compactContext: "整理上下文", contextCompacted: "已整理当前对话，继续处理任务", compactingContext: "正在整理当前对话…", collaboration: "协作处理", collaborationFailed: "协作任务失败", collaborationCompleted: "已完成协作任务", collaborating: "正在协作处理任务…", progress: "任务进度", progressCount: "已完成 {{completed}}/{{total}} 项", planning: "正在整理执行步骤…", executingCommand: "正在执行命令…", workingDirectory: "工作目录", exitStatus: "退出状态", duration: "耗时", seconds: "{{value}} 秒", filesCompleted: "已完成文件修改", preparingFiles: "正在准备文件修改…", fileCompleted: "已{{action}} {{path}}", editingFile: "正在{{action}} {{path}}", filesEdited: "已修改 {{count}} 个文件：{{names}}{{more}}", editingFiles: "正在修改 {{count}} 个文件：{{names}}{{more}}", andMore: " 等", openPage: "打开网页：{{url}}", findInPage: "在网页中查找“{{pattern}}”", content: "内容", search: "搜索：{{query}}", relatedInfo: "相关资料", keyword: "关键词", webpage: "网页", add: "新增", delete: "删除", edit: "修改", diagnostics: "Infinite Canvas Agent 诊断", address: "地址：{{endpoint}}", connection: "连接：{{connection}} · 状态：{{status}}", online: "在线", connecting: "连接中", disabled: "未启用", messageTool: "消息：{{messages}} · 工具：{{tool}}", none: "无", noLogs: "暂无事件日志", threadCreated: "创建会话", turnStarted: "开始处理", progressUpdated: "更新任务进度", turnFailed: "处理失败", turnStopped: "处理已停止", turnCompleted: "处理完成", toolCalled: "调用工具", toolFailed: "工具失败", toolCompleted: "工具完成", replyReceived: "收到回复", completed: "完成", modelBusy: "模型暂时繁忙", modelBusyDescription: "当前选择的模型请求量过大，暂时无法处理。请稍后重试，或切换其他模型后再试。", taskFailed: "任务失败", taskFailedDescription: "Codex 未能完成本次任务，请稍后重试。" },
+        eventExtra: { toolNamed: "调用工具：{{name}}", toolOperation: "工具操作", targetPage: "目标页面", searchContent: "搜索内容", textContent: "文本内容", operationContent: "操作内容", imageCount: "图片数量", tools: { generateImage: "生成图片", viewImage: "查看图片", executeCommand: "执行命令", editFiles: "修改文件", searchWeb: "搜索资料", canvasOps: "画布操作", readCanvas: "读取画布", readSelection: "读取选区", exportSnapshot: "导出快照", createNode: "创建节点", addAttachments: "添加附件图片", createText: "创建文本", createTexts: "批量创建文本", createConfig: "创建生成配置", createImageFlow: "创建生图流程", createGenerationFlow: "创建生成流程", generateText: "生成文本", generateVideo: "生成视频", generateAudio: "生成音频", updateNode: "更新节点", updateText: "更新文本", moveNodes: "移动节点", resizeNode: "调整节点尺寸", deleteNodes: "删除节点", connectNodes: "连接节点", selectNodes: "选择节点", setViewport: "调整视口", runGeneration: "触发生成", openPage: "打开页面" } },
+        eventMore: { toolRunning: "{{action}}中…", openedRoute: "已打开{{route}}", canvasCount: "共 {{count}} 个画布", promptCount: "找到 {{count}} 条提示词", assetCount: "共 {{count}} 个资产", assetAdded: "已加入我的素材", generationStatus: "共 {{total}} 个任务，排队 {{queued}}，运行中 {{running}}，成功 {{succeeded}}，失败 {{failed}}", workbenchExecuted: "已在工作台执行", workbenchConfigRead: "已读取工作台配置", canvasRead: "已读取当前画布内容", selectionRead: "已读取当前选中内容", textNodes: "{{count}} 个文本", imageNodes: "{{count}} 张图片", configNodes: "{{count}} 个配置", videoNodes: "{{count}} 个视频", audioNodes: "{{count}} 个音频", groupNodes: "{{count}} 个分组", otherNodes: "{{count}} 个其他节点", connections: "{{count}} 条连线", emptyCanvas: "当前画布为空", executeTool: "执行{{tool}}", thinking: "正在思考...", operationRunning: "{{operation}}正在进行...", organizingCanvas: "画布已读取，Codex 正在整理结果...", operationCompleted: "{{operation}}已完成，Codex 正在继续处理...", attachmentPrompt: "请处理上传的图片附件。", routes: { home: "首页", canvas: "画布页面", canvasProject: "指定画布", image: "生图工作台", video: "视频工作台", prompts: "提示词中心", assets: "我的素材", config: "配置页面" } },
+        runtime: {
+            mcpStarting: "正在启动 MCP：{{name}}", mcpConnecting: "正在建立工具连接并读取可用工具列表", mcpReadyNamed: "MCP 已就绪：{{name}}", toolsReady: "工具列表加载完成，可以开始对话", mcpFailedNamed: "MCP 启动失败：{{name}}", mcpCanceledNamed: "MCP 启动已取消：{{name}}", toolInitFailed: "工具服务未能完成初始化", mcpServicesStarting: "正在启动 MCP 服务", toolServicesPending: "还有 {{count}} 个工具服务正在初始化", checkingToolServices: "正在确认工具服务状态", conversationInitializing: "正在初始化 Codex 对话", conversationCreating: "正在创建会话并启动画布工具服务", someMcpFailed: "部分 MCP 服务初始化失败", remainingToolsReady: "其余工具已就绪，可以开始对话", conversationInitFailed: "Codex 对话初始化失败", conversationCreateFailed: "无法创建 Codex 会话", mcpServicesReady: "{{count}} 个 MCP 服务已完成初始化", toolInitCanceled: "工具服务初始化已取消", mcpStatusComplete: "MCP 状态确认完成", mcpListRead: "已读取 Codex 返回的完整工具服务清单",
+            historyReadFailed: "读取历史失败", conversationSyncFailed: "同步会话失败", agentOutdated: "本地 Agent 版本过旧，请重启 Canvas Agent 后重新连接", restartRequired: "需要重启 Agent", versionMismatch: "Agent 版本不匹配", awaitingApproval: "等待权限确认", codexRunning: "Codex 正在运行", connected: "已连接", localAgentConnected: "本地 Agent 已连接", processingFailed: "处理失败", completed: "完成", approvalGranted: "已批准权限", approvalCanceled: "已取消权限", log: "日志", connectionLostDescription: "本地 Agent 连接失败或已断开", connectionFailedDescription: "连接失败，请检查地址和 token", connectionLost: "连接断开", connectionFailed: "连接失败", modelListFailed: "读取模型列表失败",
+            imageTooLarge: "图片过大", imagePayloadTooLarge: "图片附件超过 30MB，请删减后再发送。", imagesSent: "发送了 {{count}} 张图片", canvasReferencesSent: "引用了 {{count}} 个画布素材", someCanvasReferencesMissing: "部分引用的画布素材已不存在", canvasReferencesMissing: "引用的画布素材已不存在，请重新选择", readingCanvasImages: "正在读取画布图片", canvasImageReadFailed: "画布图片读取失败", tooManyImages: "图片数量过多", imageCountLimit: "上传图片和引用的画布图片合计最多 {{count}} 张。", sending: "发送中", defaultModel: "默认模型", defaultEffort: "默认强度", sendTask: "发送任务", attachmentCount: "附件 {{count}}", canvasReferenceCount: "画布素材 {{count}}", attachmentsOnly: "仅附件", canvasReferencesOnly: "画布素材", startConversationFailed: "启动对话失败", attachmentHistoryFailed: "保存附件历史失败", sendFailed: "发送失败", conversationSynced: "会话已同步", taskStillRunning: "任务仍在运行", stopping: "停止中", stopTask: "停止任务", taskStopped: "任务已停止", stopFailed: "停止失败", imageLimit: "图片附件最多约 30MB。", imageReadFailed: "图片读取失败", pendingCanvasTool: "仍有待确认的画布工具调用", awaitingConfirmation: "等待确认", toolCompleted: "{{tool}}完成", toolExecutionFailed: "工具执行失败", openCanvasFirst: "当前不在画布页，请先用 site_navigate 打开画布", canvasOperationFailed: "画布操作失败", canvasToolCanceled: "用户取消了画布工具调用",
+            submittingApproval: "正在提交权限决定", waitingCodexApproval: "等待 Codex 确认权限", approvalFailed: "权限审批失败", enableFullAccess: "启用完全访问权限", fullAccessDescription: "Codex 将不受沙箱限制，可访问互联网及本机任意文件。请仅在信任当前任务时使用。", enableFullAccessAction: "启用完全访问", offline: "离线", addressRequired: "请填写本地 Agent 地址", agentNotFound: "没有发现本地 Agent，请先在 Codex 使用插件或手动启动 Canvas Agent", invalidAddress: "本地 Agent 地址格式不正确", connecting: "连接中", creatingConversation: "正在新建对话", newConversation: "新对话", newConversationFailed: "新建对话失败", conversationResumed: "已恢复会话", resumeConversationFailed: "恢复对话失败", recordsDeleted: "已删除 {{count}} 条记录", deleteConversationFailed: "删除对话失败", deleteConversations: "删除 {{count}} 条对话记录", deleteConversationsDescription: "删除后无法恢复，确定继续吗？", importGeneratedImages: "导入生成图片", addedToSourceCanvas: "已添加到发起任务的画布", imageGenerated: "图片已生成", noImageAttachments: "没有可添加的图片附件", invalidAttachmentNode: "图片附件节点参数无效", attachmentReadFailed: "读取图片附件失败", referenceImage: "参考图", generatedImageReadFailed: "读取 Codex 生成图片失败", generatedImageName: "生成图片 {{index}}",
+        },
+    },
+    locale: {
+        zhCN: "简体中文",
+        enUS: "English",
+    },
+    footer: {
+        tagline: "让每一个创意，都能成为爆款。AI 驱动的新型创意工具平台。",
+        product: "产品",
+        resources: "资源",
+        company: "公司",
+        productImage: "图片生成",
+        productVideo: "视频生成",
+        productMore: "更多功能",
+        productOpen: "AI 创作开放平台",
+        changelog: "更新日志",
+        tutorial: "使用教程",
+        help: "帮助中心",
+        contact: "联系我们",
+        about: "关于我们",
+        join: "加入我们",
+        downloadApp: "下载 App",
+        copyright: "© {{year}} sundas Inc. 保留所有权利。",
+        terms: "用户协议",
+        privacy: "隐私政策",
+        disclaimer: "免责声明",
+    },
+};
+
+
+========================================================================
+FILE: web/src/layouts/user-layout.tsx
+LINES: 1-76
+========================================================================
+import { creationSystemCss } from "@/components/creation/creation-system";
+import "@/components/creation/creation-controls.css";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
+
+import { AppConfigModalHost } from "@/components/layout/lazy-overlays";
+import { AppTopNav } from "@/components/layout/app-top-nav";
+import { DotField } from "@/components/background/dot-field";
+import { CreationSidebar } from "@/components/layout/creation-sidebar";
+import { PageTransition } from "@/components/layout/page-transition";
+import { PromoContactDialog } from "@/components/promo/promo-contact-dialog";
+import { PromoCorner } from "@/components/promo/promo-corner";
+import { PromoTopBar } from "@/components/promo/promo-top-bar";
+import { loadPromoConfig, type PromoItem } from "@/services/api/promo";
+import { useThemeStore } from "@/stores/use-theme-store";
+
+export default function UserLayout({ children }: { children: ReactNode }) {
+    const { pathname, search } = useLocation();
+    const theme = useThemeStore(state => state.theme);
+    const [mobileOpen, setMobileOpen] = useState(false);
+    const [topbar, setTopbar] = useState<PromoItem | null>(null);
+    const [corner, setCorner] = useState<PromoItem | null>(null);
+    const bare = /^\/canvas\/[^/]+/.test(pathname) || /^\/(login|register|forgot-password)\/?$/.test(pathname);
+    const canvas = /^\/canvas(?:\/|$)/.test(pathname);
+    // 我的画布 / 创作 / 发现灵感 / 素材库 / 提示词库 / 账号中心 统一铺点阵底纹
+    const dots = !bare && /^\/(canvas|create|explore|assets|prompts|account)(?:\/|$)/.test(pathname);
+    const content = canvas ? children : (
+        <Suspense fallback={<div role="status" className="p-6 text-sm text-muted-foreground">页面加载中…</div>}>
+            <PageTransition>{children}</PageTransition>
+        </Suspense>
+    );
+
+    useEffect(() => {
+        // 右下角卡片全站展示，顶部活动条只在首页展示，两者共用同一份宣发配置（已带缓存合流）。
+        void loadPromoConfig()
+            .then((data) => {
+                setCorner(data.corner ?? null);
+                if (pathname === "/" || pathname === "/explore") setTopbar(data.topbar);
+            })
+            .catch(() => {
+                setCorner(null);
+                setTopbar(null);
+            });
+    }, [pathname]);
+
+    useEffect(() => {
+        setMobileOpen(false);
+    }, [pathname, search]);
+
+    if (bare) {
+        return (
+            <div className="h-dvh overflow-hidden">
+                {content}
+                <AppConfigModalHost />
+            </div>
+        );
+    }
+
+    const creation = ["/create", "/image", "/video"].includes(pathname);
+    return (
+        <div className="creation-shell flex h-dvh flex-col overflow-hidden bg-background text-foreground" data-astryx-theme="neutral" style={{ colorScheme: theme }}>
+            <style>{creationSystemCss}</style>
+            {pathname === "/" || pathname === "/explore" ? <PromoTopBar item={topbar} /> : null}
+            <AppTopNav mobileOpen={mobileOpen} onMobileOpen={() => setMobileOpen(true)} onMobileClose={() => setMobileOpen(false)} />
+            <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+                {creation && <CreationSidebar />}
+                <main className={dots ? "jm-dot-host relative isolate min-h-0 min-w-0 flex-1 overflow-hidden" : "min-h-0 min-w-0 flex-1 overflow-hidden"}>
+                    {dots ? <DotField /> : null}
+                    {content}
+                </main>
+            </div>
+            <PromoContactDialog />
+            <PromoCorner item={corner} workbench={creation} />
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/lib/account-session.ts
+LINES: 1-10
+========================================================================
+import { useAuthStore } from "@/stores/use-auth-store";
+import { matchesCanvasSession } from "@/lib/canvas/canvas-session";
+
+export function captureAccountSession() {
+    const current = useAuthStore.getState();
+    const owner = current.user?.id ?? null, epoch = current.sessionEpoch;
+    const check = () => { if (!matchesCanvasSession(owner, epoch, useAuthStore.getState())) throw new Error("登录会话已变化，请重试"); };
+    check();
+    return { owner, check };
+}
+
+
+========================================================================
+FILE: web/src/lib/agent/agent-url-bootstrap.ts
+LINES: 1-15
+========================================================================
+export function hasAgentUrlBootstrap(hash: string) {
+    const params = new URLSearchParams(hash.replace(/^#/, ""));
+    return params.has("agentUrl") || params.has("agentToken");
+}
+
+export function readAgentUrlBootstrap(hash: string) {
+    const params = new URLSearchParams(hash.replace(/^#/, ""));
+    if (!params.has("agentUrl") && !params.has("agentToken")) return null;
+    const url = params.get("agentUrl")?.trim() || "";
+    const token = params.get("agentToken")?.trim() || "";
+    params.delete("agentUrl");
+    params.delete("agentToken");
+    const remaining = params.toString();
+    return { url, token, remainingHash: remaining ? `#${remaining}` : "" };
+}
+
+
+========================================================================
+FILE: web/src/lib/analytics.ts
+LINES: 1-84
+========================================================================
+// Analytics loader: disabled by default, with support for enabling multiple providers.
+// Only GA4 and Baidu are supported. Both accept IDs only, and their script URLs are assembled here.
+// Arbitrary script URLs and inline JavaScript are intentionally rejected to prevent configuration from executing code in visitors' browsers.
+// When no IDs are configured, no scripts are injected and no external requests are sent.
+// Forks and self-hosted deployments therefore have no analytics by default; the official site provides its IDs through environment variables.
+
+import { ANALYTICS_BAIDU_ID, ANALYTICS_GA4_ID } from "@/constant/runtime-config";
+
+type GtagFn = (...args: unknown[]) => void;
+
+declare global {
+    interface Window {
+        dataLayer?: unknown[];
+        gtag?: GtagFn;
+        _hmt?: unknown[][];
+    }
+}
+
+let initialized = false;
+// Track enabled providers so route events are dispatched only where needed.
+const active = { ga4: false, baidu: false };
+
+function appendScript(src: string, attrs: Record<string, string> = {}) {
+    const el = document.createElement("script");
+    el.async = true;
+    el.src = src;
+    for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, value);
+    document.head.appendChild(el);
+    return el;
+}
+
+function initGa4(id: string) {
+    window.dataLayer = window.dataLayer || [];
+    const gtag: GtagFn = (...args) => {
+        window.dataLayer!.push(args);
+    };
+    window.gtag = gtag;
+    appendScript(`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`);
+    gtag("js", new Date());
+    // Disable GA4's automatic page view because SPA route reporting is handled by trackPageview.
+    gtag("config", id, { send_page_view: false });
+    active.ga4 = true;
+}
+
+function initBaidu(id: string) {
+    window._hmt = window._hmt || [];
+    appendScript(`https://hm.baidu.com/hm.js?${encodeURIComponent(id)}`);
+    active.baidu = true;
+}
+
+export function initAnalytics() {
+    if (initialized || typeof window === "undefined") return;
+    initialized = true;
+
+    // Initialize providers independently so one failure does not affect the others or the application.
+    if (ANALYTICS_GA4_ID) {
+        try {
+            initGa4(ANALYTICS_GA4_ID);
+        } catch {
+            /* Ignore analytics initialization errors. */
+        }
+    }
+    if (ANALYTICS_BAIDU_ID) {
+        try {
+            initBaidu(ANALYTICS_BAIDU_ID);
+        } catch {
+            /* Ignore analytics initialization errors. */
+        }
+    }
+}
+
+// Report SPA route changes to every enabled analytics provider.
+export function trackPageview(path: string) {
+    try {
+        if (active.ga4 && window.gtag) {
+            window.gtag("event", "page_view", { page_path: path, page_location: window.location.href });
+        }
+        if (active.baidu && window._hmt) {
+            window._hmt.push(["_trackPageview", path]);
+        }
+    } catch {
+        /* Ignore analytics reporting errors. */
+    }
+}
+
+
+========================================================================
+FILE: web/src/lib/app-theme.ts
+LINES: 1-152
+========================================================================
+import type { ThemeConfig } from "antd";
+import { theme as antdTheme } from "antd";
+
+// sundas brand: lime #D8FF3E accent on near-black (dark) / warm white (light).
+const brand = {
+    primary: "#D8FF3E",
+    primaryInk: "#11130A",
+    primaryHover: "#E3FF6B",
+    primaryActive: "#B8E81C",
+    link: { light: "#4D7C0F", dark: "#D8FF3E" },
+};
+
+const neutral = {
+    light: {
+        elevatedBg: "#FFFFFF",
+        itemHoverBg: "rgba(29, 33, 41, 0.06)",
+        itemSelectedBg: "rgba(216, 255, 62, 0.12)",
+        itemSelectedHoverBg: "rgba(216, 255, 62, 0.18)",
+        itemText: "#1D2129",
+        tableSelectedBg: "rgba(216, 255, 62, 0.08)",
+        tableSelectedHoverBg: "rgba(216, 255, 62, 0.14)",
+    },
+    dark: {
+        elevatedBg: "#1F1F1F",
+        itemHoverBg: "rgba(255, 255, 255, 0.08)",
+        itemSelectedBg: "rgba(255, 255, 255, 0.08)",
+        itemSelectedHoverBg: "rgba(255, 255, 255, 0.12)",
+        itemText: "rgba(255, 255, 255, 0.88)",
+        tableSelectedBg: "rgba(216, 255, 62, 0.08)",
+        tableSelectedHoverBg: "rgba(216, 255, 62, 0.14)",
+    },
+};
+
+const fontFamily =
+    "'CapCut Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif";
+
+export function getAntThemeConfig(dark: boolean): ThemeConfig {
+    const color = dark ? neutral.dark : neutral.light;
+
+    return {
+        algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+        cssVar: { key: dark ? "sundas-dark" : "sundas-light" },
+        token: {
+            colorPrimary: brand.primary,
+            colorInfo: brand.primary,
+            colorLink: dark ? brand.link.dark : brand.link.light,
+            colorLinkHover: dark ? brand.primaryHover : "#3F6212",
+            colorLinkActive: dark ? brand.primary : brand.link.light,
+            colorTextLightSolid: brand.primaryInk,
+            colorBgElevated: color.elevatedBg,
+            colorBgContainer: dark ? "#1A1A1A" : "#FFFFFF",
+            colorBgBase: dark ? "#121212" : "#F7F8FA",
+            colorText: dark ? "rgba(255, 255, 255, 0.88)" : "#1D2129",
+            colorTextSecondary: dark ? "rgba(255, 255, 255, 0.70)" : "#4E5969",
+            colorTextTertiary: dark ? "rgba(255, 255, 255, 0.60)" : "#86909C",
+            colorTextQuaternary: dark ? "rgba(255, 255, 255, 0.40)" : "#C9CDD4",
+            colorBorder: dark ? "rgba(255, 255, 255, 0.12)" : "#C9CDD4",
+            colorBorderSecondary: dark ? "rgba(255, 255, 255, 0.08)" : "#E5E6EB",
+            borderRadius: 8,
+            fontFamily,
+            controlItemBgHover: color.itemHoverBg,
+            controlItemBgActive: color.itemSelectedBg,
+            controlItemBgActiveHover: color.itemSelectedHoverBg,
+            // 聚焦反馈：即梦式 3px 浅蓝光圈由组件样式提供，关闭 antd 默认实心外框
+            controlOutline: "transparent",
+            boxShadowSecondary: dark ? "0 12px 40px rgba(0, 0, 0, 0.5)" : "0 12px 40px rgba(0, 0, 0, 0.12)",
+        },
+        components: {
+            Input: {
+                activeShadow: "none",
+                colorBorder: dark ? "rgba(255, 255, 255, 0.12)" : "#C9CDD4",
+            },
+            InputNumber: {
+                activeShadow: "none",
+            },
+            Button: {
+                primaryShadow: "none",
+                fontWeight: 500,
+            },
+            Checkbox: {
+                colorPrimary: brand.primary,
+                colorPrimaryHover: brand.primaryHover,
+            },
+            Radio: {
+                colorPrimary: brand.primary,
+            },
+            Switch: {
+                colorPrimary: brand.primary,
+                colorPrimaryHover: brand.primaryHover,
+            },
+            Slider: {
+                colorPrimary: brand.primary,
+                colorPrimaryBorder: brand.primary,
+                colorPrimaryBorderHover: brand.primaryHover,
+            },
+            Tabs: {
+                // 选中态统一走品牌青柠（青柠文字 + 青柠下划线），不再用白字胶囊
+                inkBarColor: brand.primary,
+                itemColor: dark ? "rgba(255, 255, 255, 0.60)" : "#4E5969",
+                itemHoverColor: dark ? "rgba(255, 255, 255, 0.92)" : "#1D2129",
+                itemSelectedColor: dark ? brand.primary : "#3F6212",
+                titleFontSize: 14,
+            },
+            Segmented: {
+                trackBg: dark ? "rgba(255, 255, 255, 0.06)" : "#F2F3F5",
+                itemColor: dark ? "rgba(255, 255, 255, 0.60)" : "#4E5969",
+                itemHoverColor: dark ? "rgba(255, 255, 255, 0.92)" : "#1D2129",
+                itemHoverBg: dark ? "rgba(255, 255, 255, 0.06)" : "rgba(29, 33, 41, 0.04)",
+                // 激活态：青柠淡底 + 青柠字（与素材库/提示词库的筛选胶囊同一套语言）
+                itemSelectedBg: dark ? "rgba(216, 255, 62, 0.16)" : "#EAFFB4",
+                itemSelectedColor: dark ? brand.primary : "#3F6212",
+            },
+            Dropdown: {
+                colorBgElevated: color.elevatedBg,
+                colorText: color.itemText,
+                controlItemBgHover: color.itemHoverBg,
+                controlItemBgActive: color.itemSelectedBg,
+                controlItemBgActiveHover: color.itemSelectedHoverBg,
+            },
+            Menu: {
+                popupBg: color.elevatedBg,
+                itemActiveBg: color.itemSelectedBg,
+                itemHoverBg: color.itemHoverBg,
+                itemSelectedBg: color.itemSelectedBg,
+                itemSelectedColor: color.itemText,
+                darkPopupBg: neutral.dark.elevatedBg,
+                darkItemHoverBg: neutral.dark.itemHoverBg,
+                darkItemSelectedBg: neutral.dark.itemSelectedBg,
+                darkItemSelectedColor: neutral.dark.itemText,
+            },
+            Select: {
+                activeOutlineColor: "transparent",
+                optionActiveBg: color.itemHoverBg,
+                optionSelectedBg: color.itemSelectedBg,
+                optionSelectedColor: color.itemText,
+            },
+            Table: {
+                rowSelectedBg: color.tableSelectedBg,
+                rowSelectedHoverBg: color.tableSelectedHoverBg,
+            },
+            Modal: {
+                contentBg: dark ? "#1A1A1A" : "#FFFFFF",
+                headerBg: dark ? "#1A1A1A" : "#FFFFFF",
+            },
+            Tooltip: {
+                // 即梦暗色 tooltip：深灰底 + 白字（rgba(28,28,28,.96)）
+                colorBgSpotlight: dark ? "rgba(28, 28, 28, 0.96)" : "#1D2129",
+                colorTextLightSolid: dark ? "rgba(255, 255, 255, 0.88)" : "#FFFFFF",
+            },
+        },
+    };
+}
+
+
+========================================================================
+FILE: web/src/lib/asset-pagination.ts
+LINES: 1-24
+========================================================================
+export type AssetPage<T> = { assets: T[]; nextCursor: string | null; hasMore: boolean };
+
+// No store or baseline mutations until the entire traversal succeeds.
+export async function readAllAssetPages<T extends { id: string; version: number }>(read: (cursor?: string) => Promise<AssetPage<T>>, active: () => boolean): Promise<T[]> {
+    const assets = new Map<string,T>();
+    const cursors = new Set<string>();
+    let cursor: string | undefined;
+    do {
+        if (!active()) throw new Error('素材读取会话已变化');
+        const page = await read(cursor);
+        if (!active()) throw new Error('素材读取会话已变化');
+        if (!Array.isArray(page.assets) || typeof page.hasMore !== 'boolean'
+            || (page.hasMore ? typeof page.nextCursor !== 'string' || !page.nextCursor || !page.assets.length : page.nextCursor !== null)) throw new Error('素材分页响应不完整，请重新读取');
+        for (const asset of page.assets) {
+            const previous = assets.get(asset.id);
+            if (!previous || asset.version >= previous.version) assets.set(asset.id,asset);
+        }
+        if (!page.hasMore) break;
+        if (cursors.has(page.nextCursor!)) throw new Error('素材分页游标未推进，请重新读取');
+        cursor = page.nextCursor!;
+        cursors.add(cursor);
+    } while (true);
+    return [...assets.values()];
+}
+
+
+========================================================================
+FILE: web/src/lib/audio-generation.ts
+LINES: 1-61
+========================================================================
+export const audioVoiceOptions = [
+    { value: "alloy", label: "Alloy" },
+    { value: "ash", label: "Ash" },
+    { value: "ballad", label: "Ballad" },
+    { value: "coral", label: "Coral" },
+    { value: "echo", label: "Echo" },
+    { value: "fable", label: "Fable" },
+    { value: "nova", label: "Nova" },
+    { value: "onyx", label: "Onyx" },
+    { value: "sage", label: "Sage" },
+    { value: "shimmer", label: "Shimmer" },
+    { value: "verse", label: "Verse" },
+    { value: "marin", label: "Marin" },
+    { value: "cedar", label: "Cedar" },
+];
+
+export const audioFormatOptions = [
+    { value: "mp3", label: "MP3" },
+    { value: "wav", label: "WAV" },
+    { value: "opus", label: "Opus" },
+    { value: "aac", label: "AAC" },
+    { value: "flac", label: "FLAC" },
+    { value: "pcm", label: "PCM" },
+];
+
+export function normalizeAudioVoiceValue(value: string) {
+    return audioVoiceOptions.some((item) => item.value === value) ? value : "alloy";
+}
+
+export function normalizeAudioFormatValue(value: string) {
+    return audioFormatOptions.some((item) => item.value === value) ? value : "mp3";
+}
+
+export function normalizeAudioSpeedValue(value: string) {
+    const speed = Number(value);
+    if (!Number.isFinite(speed)) return "1";
+    return String(Math.max(0.25, Math.min(4, Number(speed.toFixed(2)))));
+}
+
+export function audioVoiceLabel(value: string) {
+    const voice = normalizeAudioVoiceValue(value);
+    return audioVoiceOptions.find((item) => item.value === voice)?.label || voice;
+}
+
+export function audioFormatLabel(value: string) {
+    const format = normalizeAudioFormatValue(value);
+    return audioFormatOptions.find((item) => item.value === format)?.label || format;
+}
+
+export function audioSpeedLabel(value: string) {
+    return `${normalizeAudioSpeedValue(value)}x`;
+}
+
+export function audioMimeType(format: string) {
+    if (format === "wav") return "audio/wav";
+    if (format === "opus") return "audio/opus";
+    if (format === "aac") return "audio/aac";
+    if (format === "flac") return "audio/flac";
+    if (format === "pcm") return "audio/pcm";
+    return "audio/mpeg";
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas-theme.ts
+LINES: 1-151
+========================================================================
+export type CanvasColorTheme = "light" | "dark";
+export type CanvasBackgroundMode = "dots" | "lines" | "blank";
+
+/**
+ * 画布视觉令牌：迁移自 BeefTV 的画布主题合同。
+ * - 画布底色取 #141414（不是纯黑），点阵保持低对比；
+ * - 节点是内容容器，常态不描边、只用柔和投影区分层级，选中才出现 1px 亮描边；
+ * - 工具栏是半透明玻璃层（rgba 面板 + backdrop-blur），层级靠明度组织，不靠重阴影。
+ */
+export const canvasThemes = {
+    light: {
+        canvas: {
+            background: "#f0f0f0",
+            // 网格/点阵令牌自带最终透明度（不再由 CanvasGrid 二次叠 opacity），
+            // 直接换算成"落在 #f0f0f0 上的实际灰度"，方便调对比度。
+            dot: "rgba(0,0,0,.27)",
+            line: "rgba(0,0,0,.37)",
+            selectionStroke: "#111827",
+            selectionFill: "rgba(17,17,17,.10)",
+        },
+        node: {
+            label: "#4b5563",
+            fill: "#ffffff",
+            panel: "#ffffff",
+            stroke: "#e2e4e8",
+            edge: "rgba(15,23,42,.16)",
+            shadow: "0 6px 18px rgba(15,23,42,.08)",
+            hoverShadow: "0 10px 24px rgba(15,23,42,.12)",
+            activeStroke: "#111827",
+            placeholder: "#9ca3af",
+            text: "#111827",
+            muted: "#6b7280",
+            faint: "#9ca3af",
+        },
+        // 浮动菜单（双击画布 / 连线落点）：必须是实色面板，避免与画布内容视觉叠字。
+        menu: {
+            panel: "#ffffff",
+            border: "rgba(17,24,39,.12)",
+            shadow: "0 24px 60px rgba(15,23,42,.16), 0 2px 10px rgba(15,23,42,.08)",
+            divider: "rgba(17,24,39,.07)",
+            itemHover: "rgba(17,24,39,.05)",
+            iconBg: "rgba(17,24,39,.045)",
+            iconColor: "#4b5563",
+            header: "#4b5563",
+            title: "#111827",
+            subtitle: "#6b7280",
+        },
+        toolbar: {
+            panel: "rgba(255,255,255,.94)",
+            border: "rgba(17,24,39,.10)",
+            item: "#4b5563",
+            itemHover: "rgba(17,24,39,.06)",
+            activeBg: "rgba(17,24,39,.10)",
+            activeText: "#111827",
+        },
+        composer: {
+            surface: "rgba(255,255,255,.98)",
+            border: "rgba(17,24,39,.10)",
+            borderFocus: "rgba(17,24,39,.30)",
+            shadow: "0 1px 2px rgba(15,23,42,.06), 0 16px 40px rgba(15,23,42,.12)",
+            chip: "rgba(17,24,39,.05)",
+            chipHover: "rgba(17,24,39,.09)",
+            chipText: "#1f2937",
+            muted: "#6b7280",
+            divider: "rgba(17,24,39,.08)",
+            slot: "rgba(17,24,39,.035)",
+            slotBorder: "rgba(17,24,39,.18)",
+            sendDisabledBg: "rgba(17,24,39,.07)",
+            sendDisabledText: "#9ca3af",
+        },
+        accent: {
+            primary: "#111827",
+            primarySoft: "rgba(17,17,17,.10)",
+            onPrimary: "#ffffff",
+            danger: "#e11d48",
+        },
+        // 品牌青柠：浅底上换成深橄榄，保证文字对比度
+        brand: "#4D7C0F",
+    },
+    dark: {
+        canvas: {
+            background: "#141414",
+            // 点阵/格子不用元素级 opacity 衰减：软边圆点叠上 0.34 的 opacity 后，
+            // 峰值只剩 #212121（相对 #141414 只差 13 级灰），肉眼基本看不见，
+            // 这就是"点"看起来不生效的原因。令牌直接给最终透明度。
+            dot: "rgba(255,255,255,.2)",
+            line: "rgba(255,255,255,.07)",
+            selectionStroke: "#f1f1f1",
+            selectionFill: "rgba(255,255,255,.12)",
+        },
+        node: {
+            label: "#a3a3a3",
+            fill: "#262626",
+            panel: "#222222",
+            stroke: "rgba(255,255,255,.18)",
+            edge: "rgba(255,255,255,.18)",
+            shadow: "0 8px 24px rgba(0,0,0,.34)",
+            hoverShadow: "0 12px 30px rgba(0,0,0,.46)",
+            activeStroke: "#f1f1f1",
+            placeholder: "#737373",
+            text: "#ededed",
+            muted: "#a3a3a3",
+            faint: "#666666",
+        },
+        menu: {
+            panel: "#242424",
+            border: "rgba(255,255,255,.15)",
+            shadow: "0 28px 70px rgba(0,0,0,.62), 0 4px 14px rgba(0,0,0,.44)",
+            divider: "rgba(255,255,255,.08)",
+            itemHover: "rgba(255,255,255,.07)",
+            iconBg: "rgba(255,255,255,.055)",
+            iconColor: "#b4b4b4",
+            header: "#c8c8c8",
+            title: "#ededed",
+            subtitle: "#9a9a9a",
+        },
+        toolbar: {
+            panel: "rgba(20,20,20,.97)",
+            border: "rgba(255,255,255,.1)",
+            item: "#d4d4d4",
+            itemHover: "rgba(255,255,255,.07)",
+            activeBg: "rgba(255,255,255,.10)",
+            activeText: "#f5f6f8",
+        },
+        composer: {
+            surface: "rgba(28,28,30,.97)",
+            border: "rgba(255,255,255,.10)",
+            borderFocus: "rgba(255,255,255,.28)",
+            shadow: "0 1px 2px rgba(0,0,0,.30), 0 20px 48px rgba(0,0,0,.50)",
+            chip: "rgba(255,255,255,.06)",
+            chipHover: "rgba(255,255,255,.11)",
+            chipText: "#e7e7e7",
+            muted: "#9a9a9a",
+            divider: "rgba(255,255,255,.08)",
+            slot: "rgba(255,255,255,.04)",
+            slotBorder: "rgba(255,255,255,.20)",
+            sendDisabledBg: "rgba(255,255,255,.08)",
+            sendDisabledText: "#6f6f6f",
+        },
+        accent: {
+            primary: "#f5f5f5",
+            primarySoft: "rgba(255,255,255,.11)",
+            onPrimary: "#131313",
+            danger: "#fb7185",
+        },
+        // 品牌青柠：深色画布上用原色
+        brand: "#D8FF3E",
+    },
+} as const;
+
+export type CanvasTheme = (typeof canvasThemes)[CanvasColorTheme];
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-agent-ops.ts
+LINES: 1-89
+========================================================================
+import { nanoid } from "nanoid";
+
+import i18n from "@/i18n";
+import { getNodeSpec, isRegisteredNodeType } from "@/lib/canvas/node-registry";
+import { CanvasNodeType, type CanvasConnection, type CanvasNodeData, type CanvasNodeMetadata, type CanvasNodeTypeId, type ViewportTransform } from "@/types/canvas";
+
+export type CanvasAgentOp =
+    | { type: "add_node"; id?: string; nodeType?: CanvasNodeTypeId; title?: string; position?: { x: number; y: number }; x?: number; y?: number; width?: number; height?: number; metadata?: CanvasNodeMetadata }
+    | { type: "update_node"; id: string; patch?: Partial<CanvasNodeData>; metadata?: CanvasNodeMetadata }
+    | { type: "delete_node"; id?: string; ids?: string[]; nodeType?: CanvasNodeTypeId }
+    | { type: "delete_connections"; id?: string; ids?: string[]; all?: boolean }
+    | { type: "connect_nodes"; id?: string; fromNodeId: string; toNodeId: string }
+    | { type: "set_viewport"; viewport: ViewportTransform }
+    | { type: "select_nodes"; ids: string[] }
+    | { type: "run_generation"; nodeId: string; mode?: "text" | "image" | "video" | "audio"; prompt?: string };
+
+export type CanvasAgentSnapshot = {
+    projectId: string;
+    title: string;
+    nodes: CanvasNodeData[];
+    connections: CanvasConnection[];
+    selectedNodeIds: string[];
+    viewport: ViewportTransform;
+};
+
+export function summarizeCanvasAgentOps(ops?: CanvasAgentOp[]) {
+    const counts = (Array.isArray(ops) ? ops : []).reduce<Record<string, number>>((acc, op) => {
+        if (!op?.type) return acc;
+        acc[op.type] = (acc[op.type] || 0) + 1;
+        return acc;
+    }, {});
+    return Object.entries(counts)
+        .map(([type, count]) => `${opLabel(type)} ${count}`)
+        .join("，");
+}
+
+export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasAgentOp[]) {
+    let nodes = snapshot.nodes;
+    let connections = snapshot.connections;
+    let selectedNodeIds = snapshot.selectedNodeIds;
+    let viewport = snapshot.viewport;
+
+    (Array.isArray(ops) ? ops : []).forEach((op, index) => {
+        if (!op?.type) return;
+        if (op.type === "add_node") {
+            const nodeType = op.nodeType && isRegisteredNodeType(op.nodeType) ? op.nodeType : CanvasNodeType.Text;
+            const spec = getNodeSpec(nodeType);
+            const node: CanvasNodeData = {
+                id: op.id || `${nodeType}-${Date.now()}-${index}`,
+                type: nodeType,
+                title: op.title || spec.title,
+                position: op.position || { x: op.x ?? index * 36, y: op.y ?? index * 36 },
+                width: op.width || spec.width,
+                height: op.height || spec.height,
+                metadata: { ...spec.metadata, ...op.metadata },
+            };
+            nodes = [...nodes, node];
+            selectedNodeIds = [node.id];
+        }
+        if (op.type === "update_node") {
+            if (!op.id) return;
+            nodes = nodes.map((node) => (node.id === op.id ? { ...node, ...op.patch, metadata: { ...node.metadata, ...op.patch?.metadata, ...op.metadata } } : node));
+        }
+        if (op.type === "delete_node") {
+            const ids = new Set(op.ids || (op.id ? [op.id] : op.nodeType ? nodes.filter((node) => node.type === op.nodeType).map((node) => node.id) : []));
+            nodes = nodes.filter((node) => !ids.has(node.id));
+            connections = connections.filter((conn) => !ids.has(conn.fromNodeId) && !ids.has(conn.toNodeId));
+            selectedNodeIds = selectedNodeIds.filter((id) => !ids.has(id));
+        }
+        if (op.type === "delete_connections") {
+            const ids = new Set(op.ids || (op.id ? [op.id] : []));
+            connections = op.all ? [] : connections.filter((conn) => !ids.has(conn.id));
+        }
+        if (op.type === "connect_nodes") {
+            if (!op.fromNodeId || !op.toNodeId) return;
+            const exists = connections.some((conn) => conn.fromNodeId === op.fromNodeId && conn.toNodeId === op.toNodeId);
+            const hasNodes = nodes.some((node) => node.id === op.fromNodeId) && nodes.some((node) => node.id === op.toNodeId);
+            if (!exists && hasNodes) connections = [...connections, { id: op.id || nanoid(), fromNodeId: op.fromNodeId, toNodeId: op.toNodeId }];
+        }
+        if (op.type === "set_viewport" && op.viewport) viewport = op.viewport;
+        if (op.type === "select_nodes") selectedNodeIds = (op.ids || []).filter((id) => nodes.some((node) => node.id === id));
+    });
+
+    return { ...snapshot, nodes, connections, selectedNodeIds, viewport };
+}
+
+function opLabel(type: string) {
+    return i18n.t(`canvas.agentOps.${type}`, { defaultValue: type });
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-export.ts
+LINES: 1-115
+========================================================================
+import { saveAs } from "file-saver";
+
+import i18n from "@/i18n";
+import { createZip } from "@/lib/zip";
+import { getMediaBlob } from "@/services/file-storage";
+import { getImageBlob } from "@/services/image-storage";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { matchesCanvasSession } from "@/lib/canvas/canvas-session";
+import type { CanvasExportAsset, CanvasExportFile } from "@/types/canvas-export";
+import type { CanvasProject } from "@/stores/canvas/use-canvas-store";
+import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
+import { collectCanvasPackageMedia } from './canvas-package';
+import { parseProduction } from '../../../../shared/production';
+
+export async function exportCanvasProjects(projects: CanvasProject[], fileName = i18n.t("canvas.export.defaultProjectName")) {
+    const checkSession = captureExportSession();
+    const zipFiles: { name: string; data: BlobPart }[] = [];
+    const exportedProjects = await Promise.all(
+        projects.map(async (project) => {
+            if (project.production) parseProduction(project.production);
+            const files: CanvasExportAsset[] = [];
+            await Promise.all(
+                collectCanvasPackageMedia(project).map(async (storageKey, index) => {
+                    checkSession();
+                    const blob = storageKey.startsWith('/media/') ? await downloadPackageMedia(storageKey, checkSession) : storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
+                    if (!blob) throw new Error("画布引用的本地素材缺失，无法完整导出；请先恢复素材后重试。");
+                    const path = `projects/${project.id}/files/${index}.${fileExtension(blob.type, storageKey)}`;
+                    files.push({ storageKey, path, mimeType: blob.type || "application/octet-stream", bytes: blob.size });
+                    zipFiles.push({ name: path, data: blob });
+                }),
+            );
+            return { project, files };
+        }),
+    );
+
+    const data: CanvasExportFile = { app: "sundas", version: 4, exportedAt: new Date().toISOString(), projects: exportedProjects };
+    checkSession();
+    const zip = await createZip([{ name: "projects.json", data: JSON.stringify(data, null, 2) }, ...zipFiles]);
+    checkSession();
+    saveAs(zip, `${safeFileName(fileName)}.zip`);
+}
+
+export async function exportCanvasNodes(nodes: CanvasNodeData[], fileName = i18n.t("canvas.export.defaultNodesName")) {
+    const checkSession = captureExportSession();
+    const zipFiles: { name: string; data: BlobPart }[] = [];
+    const used = new Set<string>();
+    const uniqueName = (base: string, ext: string) => {
+        const safe = safeFileName(base) || i18n.t("canvas.export.item");
+        let name = `${safe}.${ext}`;
+        for (let i = 1; used.has(name); i += 1) name = `${safe}-${i}.${ext}`;
+        used.add(name);
+        return name;
+    };
+
+    await Promise.all(
+        nodes.map(async (node) => {
+            const title = node.title || node.type;
+            const storageKey = node.metadata?.storageKey || "";
+            if (storageKey) {
+                const blob = storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
+                if (blob) return void zipFiles.push({ name: uniqueName(title, fileExtension(blob.type, storageKey)), data: blob });
+            }
+            if (node.type === CanvasNodeType.Text) return void zipFiles.push({ name: uniqueName(title, "txt"), data: node.metadata?.content || node.metadata?.prompt || "" });
+            const content = node.metadata?.content;
+            if (content && content.startsWith("data:")) {
+                const blob = await (await fetch(content)).blob();
+                return void zipFiles.push({ name: uniqueName(title, fileExtension(blob.type, storageKey)), data: blob });
+            }
+            if (storageKey) throw new Error("节点引用的本地素材缺失，无法完整导出；请先恢复素材后重试。");
+            zipFiles.push({ name: uniqueName(title, "json"), data: JSON.stringify(node, null, 2) });
+        }),
+    );
+
+    checkSession();
+    const zip = await createZip(zipFiles);
+    checkSession();
+    saveAs(zip, `${safeFileName(fileName)}.zip`);
+}
+
+function captureExportSession() {
+    const current = useAuthStore.getState();
+    const owner = current.user?.id ?? null, epoch = current.sessionEpoch;
+    const check = () => { if (!matchesCanvasSession(owner, epoch, useAuthStore.getState())) throw new Error("账户会话已变化，请重新导出"); };
+    check();
+    return check;
+}
+
+async function downloadPackageMedia(url: string, checkSession: () => void) {
+    checkSession();
+    const owner = useAuthStore.getState().user?.id;
+    if (!owner) throw new Error('请先登录后导出媒体');
+    const response = await fetch(url, { credentials: 'same-origin', headers: { 'X-Sundas-User': owner } });
+    checkSession();
+    if (!response.ok) throw new Error('无法读取工程引用的媒体，请检查归属或文件状态');
+    const blob = await response.blob();
+    checkSession();
+    return blob;
+}
+
+function safeFileName(value: string) {
+    return value.replace(/[\\/:*?"<>|]/g, "_");
+}
+
+function fileExtension(mimeType: string, storageKey: string) {
+    if (mimeType.includes("png")) return "png";
+    if (mimeType.includes("jpeg")) return "jpg";
+    if (mimeType.includes("webp")) return "webp";
+    if (mimeType.includes("gif")) return "gif";
+    if (mimeType.includes("mp4")) return "mp4";
+    if (mimeType.includes("webm")) return "webm";
+    if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
+    if (mimeType.includes("wav")) return "wav";
+    if (mimeType.includes("ogg")) return "ogg";
+    return storageKey.startsWith("image:") ? "png" : "bin";
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-generation-helpers.ts
+LINES: 1-205
+========================================================================
+import { defaultConfig, modelOptionName, resolveModelForCapability, useConfigStore, type AiConfig } from "@/stores/use-config-store";
+import { clampVideoSecondsToRange, parseVideoResolution, videoSecondsRangeForDurations } from "@/lib/media-size";
+import i18n from "@/i18n";
+import { resolveImageUrl, uploadImage } from "@/services/image-storage";
+import { resolveMediaUrl } from "@/services/file-storage";
+import { imageMetadata, referenceUrl } from "@/lib/canvas/canvas-node-factory";
+import type { NodeGenerationInput } from "@/components/canvas/canvas-node-generation";
+import type { CanvasNodeGenerationMode } from "@/components/canvas/canvas-node-prompt-panel";
+import type { CanvasImageAngleParams } from "@/components/canvas/canvas-node-angle-dialog";
+import type { ReferenceImage } from "@/types/image";
+import { CanvasNodeType, type CanvasAssistantSession, type CanvasConnection, type CanvasNodeData, type CanvasNodeMetadata } from "@/types/canvas";
+
+export function imageExtension(dataUrl: string) {
+    return dataUrl.match(/^data:image[/]([^;]+)/)?.[1] || dataUrl.match(/image[/]([^;]+)/)?.[1] || "png";
+}
+
+export function audioExtension(mimeType?: string) {
+    if (mimeType?.includes("wav")) return "wav";
+    if (mimeType?.includes("opus")) return "opus";
+    if (mimeType?.includes("aac")) return "aac";
+    if (mimeType?.includes("flac")) return "flac";
+    if (mimeType?.includes("pcm")) return "pcm";
+    return "mp3";
+}
+
+export function generationReferenceUrls(context: { referenceImages: ReferenceImage[]; referenceVideos: Array<{ storageKey?: string; url?: string }>; referenceAudios?: Array<{ storageKey?: string; url?: string }> }) {
+    return [
+        ...context.referenceImages.map(referenceUrl).filter((url): url is string => Boolean(url)),
+        ...context.referenceVideos.map((video) => video.storageKey || video.url).filter((url): url is string => Boolean(url)),
+        ...(context.referenceAudios || []).map((audio) => audio.storageKey || audio.url).filter((url): url is string => Boolean(url)),
+    ];
+}
+
+export async function resolveMetadataReferences(metadata: CanvasNodeMetadata) {
+    if (metadata.generationType !== "edit") return [];
+    if (!metadata.references?.length) return null;
+    const references = await Promise.all(
+        metadata.references.map(async (url, index) => {
+            const dataUrl = url.startsWith("image:") ? await resolveImageUrl(url, "") : url;
+            return dataUrl ? { id: `${index}`, name: `reference-${index}.png`, type: "image/png", dataUrl, storageKey: url.startsWith("image:") ? url : undefined } : null;
+        }),
+    );
+    return references.every(Boolean) ? (references as ReferenceImage[]) : null;
+}
+
+export async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
+    return Promise.all(
+        nodes.map(async (node) => {
+            const metadata = node.metadata;
+            const content = metadata?.content;
+            if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && metadata?.storageKey) return { ...node, metadata: { ...metadata, content: await resolveMediaUrl(metadata.storageKey, content) } };
+            if (node.type !== CanvasNodeType.Image || !metadata || !content) return node;
+            const images = await Promise.all(
+                (metadata.images || []).map(async (image) => {
+                    if (!image.content) return image;
+                    return { ...image, content: await resolveImageUrl(image.storageKey, image.content) };
+                }),
+            );
+            if (metadata.storageKey) {
+                return { ...node, metadata: { ...metadata, content: await resolveImageUrl(metadata.storageKey, content), images } };
+            }
+            if (!content.startsWith("data:image/")) return node;
+            return { ...node, metadata: { ...metadata, ...imageMetadata(await uploadImage(content)) } };
+        }),
+    );
+}
+
+export async function hydrateAssistantImages(sessions: CanvasAssistantSession[]) {
+    const hydrateItem = async <T extends { dataUrl?: string; storageKey?: string }>(item: T) => {
+        if (item.storageKey) return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
+        if (item.dataUrl?.startsWith("data:image/")) {
+            const image = await uploadImage(item.dataUrl);
+            return { ...item, dataUrl: image.url, storageKey: image.storageKey };
+        }
+        return item;
+    };
+    return Promise.all(
+        sessions.map(async (session) => ({
+            ...session,
+            messages: await Promise.all(
+                session.messages.map(async (message) => ({
+                    ...message,
+                    references: await Promise.all((message.references || []).map(hydrateItem)),
+                })),
+            ),
+        })),
+    );
+}
+
+export function getGenerationCount(count: string) {
+    return Math.max(1, Math.min(15, Math.floor(Math.abs(Number(count)) || 1)));
+}
+
+export function getInputSummary(inputs: NodeGenerationInput[]) {
+    const resources = [...new Map(inputs.flatMap((input) => (input.type === "group" ? input.children : [input])).map((input) => [input.nodeId, input])).values()];
+    return {
+        textCount: resources.filter((input) => input.type === "text").length,
+        imageCount: resources.filter((input) => input.type === "image").length,
+        videoCount: resources.filter((input) => input.type === "video").length,
+        audioCount: resources.filter((input) => input.type === "audio").length,
+    };
+}
+
+export function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefined, mode: CanvasNodeGenerationMode): AiConfig {
+    const resolved = resolveModelForCapability(config, node?.metadata?.model, mode);
+    const serverModels = useConfigStore.getState().serverModels;
+    const fallbackModel = mode === "image" ? config.imageModel : mode === "video" ? config.videoModel : mode === "audio" ? config.audioModel : config.textModel;
+    const model = serverModels.length && !serverModels.some((item) => item.id === modelOptionName(resolved) && item.capability === mode)
+        ? fallbackModel || resolved
+        : resolved;
+    const serverModel = mode === "video" ? serverModels.find((item) => item.id === modelOptionName(model)) : undefined;
+    const durations = (serverModel?.metadata as { durations?: { min?: number; max?: number } } | undefined)?.durations;
+    const secondsRange = videoSecondsRangeForDurations(durations);
+    const currentQuality = parseVideoResolution(node?.metadata?.vquality || config.vquality || defaultConfig.vquality);
+    const selectedRouteId = mode === 'video' ? node?.metadata?.videoRouteId ?? '' : '';
+    const resolutions = Object.keys((selectedRouteId ? serverModel?.routes.find((route) => route.id === selectedRouteId)?.resolutionMultipliers : undefined) ?? serverModel?.resolutionMultipliers ?? {});
+    const vquality = mode === "video" ? resolutions.length && !resolutions.includes(currentQuality) ? resolutions[0] : currentQuality : node?.metadata?.vquality || config.vquality || defaultConfig.vquality;
+    return {
+        ...config,
+        model,
+        reasoningEffort: node?.metadata?.reasoningEffort || config.reasoningEffort || defaultConfig.reasoningEffort,
+        quality: node?.metadata?.quality || config.quality || defaultConfig.quality,
+        size: node?.metadata?.size || config.size || defaultConfig.size,
+        background: node?.metadata?.background ?? config.background ?? defaultConfig.background,
+        videoSeconds: clampVideoSecondsToRange(node?.metadata?.seconds || config.videoSeconds || defaultConfig.videoSeconds, secondsRange.min, secondsRange.max),
+        vquality,
+        videoGenerateAudio: node?.metadata?.generateAudio || config.videoGenerateAudio || defaultConfig.videoGenerateAudio,
+        videoWatermark: node?.metadata?.watermark || config.videoWatermark || defaultConfig.videoWatermark,
+        videoMode: node?.metadata?.videoMode || config.videoMode || defaultConfig.videoMode,
+        videoRouteId: selectedRouteId,
+        audioVoice: node?.metadata?.audioVoice || config.audioVoice || defaultConfig.audioVoice,
+        audioFormat: node?.metadata?.audioFormat || config.audioFormat || defaultConfig.audioFormat,
+        audioSpeed: node?.metadata?.audioSpeed || config.audioSpeed || defaultConfig.audioSpeed,
+        audioInstructions: node?.metadata?.audioInstructions || config.audioInstructions || defaultConfig.audioInstructions,
+        count: String(node?.metadata?.count || (mode === "image" ? config.canvasImageCount || config.count : config.count) || defaultConfig.count),
+    };
+}
+
+export function hasResumableVideoTask(node: CanvasNodeData) {
+    return node.type === CanvasNodeType.Video && Boolean(node.metadata?.videoTaskId) && !node.metadata?.content;
+}
+
+export function resetInterruptedGeneration(nodes: CanvasNodeData[]) {
+    return nodes.map((node) =>
+        node.metadata?.status === "loading"
+            ? hasResumableVideoTask(node)
+                ? node
+                : {
+                      ...node,
+                      metadata: {
+                          ...node.metadata,
+                          status: "error" as const,
+                          errorDetails: i18n.t("canvas.generation.interrupted"),
+                          images: node.metadata.images?.map((image) => (image.status === "loading" ? { ...image, status: "error" as const, errorDetails: i18n.t("canvas.generation.interrupted") } : image)),
+                          texts: node.metadata.texts?.map((text) => (text.status === "loading" ? { ...text, status: "error" as const, errorDetails: i18n.t("canvas.generation.interrupted") } : text)),
+                      },
+                  }
+            : node,
+    );
+}
+
+export function isGenerationCanceled(error: unknown) {
+    return error instanceof Error && (error.message === i18n.t("common.requestCanceled") || error.name === "AbortError");
+}
+
+export function findRetrySourceNode(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
+    const queue = connections.filter((connection) => connection.toNodeId === nodeId).map((connection) => connection.fromNodeId);
+    const visited = new Set<string>();
+    while (queue.length) {
+        const id = queue.shift()!;
+        if (visited.has(id)) continue;
+        visited.add(id);
+        const node = nodes.find((item) => item.id === id);
+        if (node?.type === CanvasNodeType.Config) return node;
+        connections.filter((connection) => connection.toNodeId === id).forEach((connection) => queue.push(connection.fromNodeId));
+    }
+    return null;
+}
+
+export function sourceNodeReferenceImages(node: CanvasNodeData | null) {
+    if (!node || node.type !== CanvasNodeType.Image || !node.metadata?.content) return [];
+    return [
+        {
+            id: node.id,
+            name: `${node.title || node.id}.png`,
+            type: node.metadata.mimeType || "image/png",
+            dataUrl: node.metadata.content,
+            storageKey: node.metadata.storageKey,
+        },
+    ];
+}
+
+export function isAudioFile(file: File) {
+    return file.type.startsWith("audio/") || /\.(mp3|wav)$/i.test(file.name);
+}
+
+export function buildAngleLabel(params: CanvasImageAngleParams) {
+    const horizontal = params.horizontalAngle === 0 ? i18n.t("canvas.generation.front") : params.horizontalAngle > 0 ? i18n.t("canvas.generation.rotateRight", { angle: params.horizontalAngle }) : i18n.t("canvas.generation.rotateLeft", { angle: Math.abs(params.horizontalAngle) });
+    const pitch = params.pitchAngle === 0 ? i18n.t("canvas.generation.level") : params.pitchAngle > 0 ? i18n.t("canvas.generation.topDown", { angle: params.pitchAngle }) : i18n.t("canvas.generation.lowAngle", { angle: Math.abs(params.pitchAngle) });
+    return i18n.t("canvas.generation.angleLabel", { horizontal, pitch, distance: params.cameraDistance.toFixed(1), lens: i18n.t(params.wideAngle ? "canvas.editors.wide" : "canvas.editors.standard") });
+}
+
+export function buildAnglePrompt(params: CanvasImageAngleParams) {
+    return i18n.t("canvas.generation.anglePrompt", { angle: buildAngleLabel(params) });
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-image-data.ts
+LINES: 1-176
+========================================================================
+export type ImageCropRect = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
+export type ImageAngleTransform = {
+    horizontalAngle: number;
+    pitchAngle: number;
+    cameraDistance: number;
+    wideAngle: boolean;
+};
+
+export type ImageUpscaleAlgorithm = "nearest" | "bilinear" | "high";
+
+export const MAX_UPSCALE_LONG_EDGE = 4096;
+
+export type ImageUpscaleParams = {
+    targetLongEdge: number;
+    algorithm: ImageUpscaleAlgorithm;
+};
+
+export type ImageSplitParams = {
+    rows: number;
+    columns: number;
+    horizontalLines?: number[];
+    verticalLines?: number[];
+};
+
+export type ImageSplitPiece = {
+    row: number;
+    column: number;
+    dataUrl: string;
+};
+
+export async function cropDataUrl(dataUrl: string, crop?: ImageCropRect) {
+    const image = await loadImage(dataUrl);
+    if (crop) {
+        return drawCrop(image, Math.floor(crop.x * image.width), Math.floor(crop.y * image.height), Math.ceil(crop.width * image.width), Math.ceil(crop.height * image.height));
+    }
+    const size = Math.min(image.width, image.height);
+    const sx = Math.max(0, Math.floor((image.width - size) / 2));
+    const sy = Math.max(0, Math.floor((image.height - size) / 2));
+    return drawCrop(image, sx, sy, size, size);
+}
+
+export async function splitDataUrl(dataUrl: string, params: ImageSplitParams): Promise<ImageSplitPiece[]> {
+    const image = await loadImage(dataUrl);
+    const xCuts = buildSplitCuts(params.verticalLines, image.width, Math.max(1, Math.floor(params.columns)));
+    const yCuts = buildSplitCuts(params.horizontalLines, image.height, Math.max(1, Math.floor(params.rows)));
+    const pieces: ImageSplitPiece[] = [];
+
+    for (let row = 0; row < yCuts.length - 1; row += 1) {
+        const sy = yCuts[row];
+        const sh = yCuts[row + 1] - sy;
+        for (let column = 0; column < xCuts.length - 1; column += 1) {
+            const sx = xCuts[column];
+            const sw = xCuts[column + 1] - sx;
+            pieces.push({ row, column, dataUrl: drawCrop(image, sx, sy, sw, sh) });
+        }
+    }
+
+    return pieces;
+}
+
+function buildSplitCuts(lines: number[] | undefined, size: number, count: number) {
+    if (!lines?.length) return Array.from({ length: count + 1 }, (_, index) => Math.floor((index * size) / count));
+    return [0, ...lines.map((line) => Math.round(line * size)).filter((line) => line > 0 && line < size).sort((a, b) => a - b), size];
+}
+
+export async function transformAngleDataUrl(dataUrl: string, params: ImageAngleTransform) {
+    const image = await loadImage(dataUrl);
+    const canvas = document.createElement("canvas");
+    const padding = Math.round(Math.max(image.width, image.height) * 0.18);
+    canvas.width = image.width + padding * 2;
+    canvas.height = image.height + padding * 2;
+    const context = canvas.getContext("2d");
+    if (!context) return dataUrl;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    const horizontal = params.horizontalAngle / 60;
+    const pitch = params.pitchAngle / 45;
+    const distanceScale = 1.12 - params.cameraDistance * 0.035;
+    const wideScale = params.wideAngle ? 0.88 : 1;
+    const scale = Math.max(0.64, Math.min(1.1, distanceScale * wideScale));
+    const width = image.width * scale * (1 - Math.abs(horizontal) * 0.28);
+    const height = image.height * scale * (1 - Math.abs(pitch) * 0.18);
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const skewX = horizontal * image.width * 0.18;
+    const skewY = pitch * image.height * 0.12;
+    const x = cx - width / 2 + horizontal * padding * 0.5;
+    const y = cy - height / 2 + pitch * padding * 0.45;
+
+    context.save();
+    context.setTransform(1, pitch * 0.08, horizontal * -0.1, 1, 0, 0);
+    context.drawImage(image, x + skewX, y + skewY, width, height);
+    context.restore();
+
+    if (params.wideAngle) {
+        const gradient = context.createRadialGradient(cx, cy, Math.min(canvas.width, canvas.height) * 0.2, cx, cy, Math.max(canvas.width, canvas.height) * 0.62);
+        gradient.addColorStop(0, "rgba(255,255,255,0)");
+        gradient.addColorStop(1, "rgba(0,0,0,0.18)");
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    return canvas.toDataURL("image/png");
+}
+
+export async function upscaleDataUrl(dataUrl: string, params: ImageUpscaleParams) {
+    const image = await loadImage(dataUrl);
+    const { width, height } = resolveUpscaleSize(image.width, image.height, params.targetLongEdge);
+    return params.algorithm === "high" ? drawStepUpscale(image, width, height) : drawResize(image, image.width, image.height, width, height, params.algorithm);
+}
+
+export function resolveUpscaleSize(width: number, height: number, targetLongEdge: number) {
+    const longEdge = Math.max(1, width, height);
+    const target = Math.min(MAX_UPSCALE_LONG_EDGE, Math.max(1, Math.round(targetLongEdge)));
+    const scale = target / longEdge;
+    return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
+function drawCrop(image: HTMLImageElement, sx: number, sy: number, sw: number, sh: number) {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, sw);
+    canvas.height = Math.max(1, sh);
+    const context = canvas.getContext("2d");
+    if (!context) return image.src;
+    context.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/png");
+}
+
+function drawStepUpscale(image: HTMLImageElement, width: number, height: number) {
+    let source: CanvasImageSource = image;
+    let sourceWidth = image.width;
+    let sourceHeight = image.height;
+
+    while (sourceWidth * 2 < width && sourceHeight * 2 < height) {
+        const nextWidth = sourceWidth * 2;
+        const nextHeight = sourceHeight * 2;
+        const next = drawResizeCanvas(source, sourceWidth, sourceHeight, nextWidth, nextHeight, "high");
+        source = next;
+        sourceWidth = nextWidth;
+        sourceHeight = nextHeight;
+    }
+
+    return drawResize(source, sourceWidth, sourceHeight, width, height, "high");
+}
+
+function drawResize(source: CanvasImageSource, sourceWidth: number, sourceHeight: number, width: number, height: number, algorithm: ImageUpscaleAlgorithm) {
+    return drawResizeCanvas(source, sourceWidth, sourceHeight, width, height, algorithm).toDataURL("image/png");
+}
+
+function drawResizeCanvas(source: CanvasImageSource, sourceWidth: number, sourceHeight: number, width: number, height: number, algorithm: ImageUpscaleAlgorithm) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return canvas;
+    context.imageSmoothingEnabled = algorithm !== "nearest";
+    context.imageSmoothingQuality = algorithm === "bilinear" ? "medium" : "high";
+    context.drawImage(source, 0, 0, sourceWidth, sourceHeight, 0, 0, width, height);
+    return canvas;
+}
+
+function loadImage(dataUrl: string) {
+    return new Promise<HTMLImageElement>((resolve) => {
+        const image = new Image();
+        // 私有媒体会重定向至 OSS，画布读取像素必须按 CORS 方式加载。
+        if (dataUrl.startsWith('/media/') || dataUrl.startsWith(`${window.location.origin}/media/`)) image.crossOrigin = 'anonymous';
+        image.onload = () => resolve(image);
+        image.src = dataUrl;
+    });
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-import.ts
+LINES: 1-35
+========================================================================
+import { readZip } from "@/lib/zip";
+import { importMediaFiles } from "@/lib/imported-media";
+import { collectCanvasPackageMedia, remapCanvasPackageIdentities, remapCanvasPackageMedia } from './canvas-package';
+import { parseProduction } from '../../../../shared/production';
+import { currentMediaOwner } from "@/services/cloud-media";
+import { captureAccountSession } from "@/lib/account-session";
+import type { CanvasExportFile } from "@/types/canvas-export";
+
+export async function readCanvasPackage(file: Blob) {
+    const session = captureAccountSession();
+    const owner = session.owner;
+    if (!owner) throw new Error("请先登录");
+    const zip = await readZip(file);
+    session.check();
+    const projectFile = zip.get("projects.json");
+    if (!projectFile) throw new Error("missing projects.json");
+    const data = JSON.parse(await projectFile.text()) as CanvasExportFile;
+    session.check();
+    if (data.app !== "sundas" || ![3, 4].includes(data.version) || !Array.isArray(data.projects)) throw new Error("不支持的画布文件");
+    for (const item of data.projects) {
+        if (!item?.project || !Array.isArray(item.files) || !Array.isArray(item.project.nodes) || !Array.isArray(item.project.connections)) throw new Error('工程结构不完整');
+        const ids = new Set(item.project.nodes.map(node => node.id));
+        if (ids.size !== item.project.nodes.length || item.project.nodes.some(node => typeof node.id !== 'string' || !node.id) || item.project.connections.some(edge => !ids.has(edge.fromNodeId) || !ids.has(edge.toNodeId))) throw new Error('工程节点或连线身份无效');
+        if (item.project.production) parseProduction(item.project.production);
+        if (item.project.production?.shots.some(shot => shot.nodeId && !ids.has(shot.nodeId))) throw new Error('制作镜头绑定的节点缺失');
+        if (item.files.some(file => typeof file.storageKey !== 'string' || typeof file.path !== 'string' || typeof file.mimeType !== 'string' || !zip.has(file.path))) throw new Error('工程素材清单或文件不完整');
+        const files = new Set(item.files.map(file => file.storageKey));
+        if (collectCanvasPackageMedia(item.project).some(key => !files.has(key))) throw new Error('工程备份缺少引用素材，请重新完整导出');
+    }
+    const media = await importMediaFiles(zip, data.projects.flatMap((project) => project.files), owner, session.check);
+    const projects = data.projects.map((item) => remapCanvasPackageIdentities(remapCanvasPackageMedia(item.project, media), () => crypto.randomUUID()));
+    session.check();
+    if (currentMediaOwner() !== owner) throw new Error("登录账户已变化，请重新导入");
+    return projects;
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-media-playback.ts
+LINES: 1-20
+========================================================================
+let playingIds: ReadonlySet<string> = new Set();
+const listeners = new Set<() => void>();
+
+export function getPlayingCanvasNodeIds() { return playingIds; }
+export function subscribeCanvasPlayback(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
+
+/** Active playback remains mounted when panned offscreen; paused offscreen players can be released. */
+export function setCanvasNodePlaying(id: string, playing: boolean) {
+    if (playingIds.has(id) === playing) return;
+    const next = new Set(playingIds);
+    if (playing) next.add(id); else next.delete(id);
+    playingIds = next;
+    listeners.forEach((listener) => listener());
+}
+
+export function releaseCanvasMedia(media: HTMLMediaElement) {
+    media.pause();
+    media.removeAttribute("src");
+    media.load();
+}
+
+
+========================================================================
+FILE: web/src/lib/canvas/canvas-node-factory.ts
+LINES: 1-71
+========================================================================
+import { getNodeSpec, NODE_DEFAULT_SIZE } from "@/constant/canvas";
+import { nodeSizeFromRatio } from "@/lib/canvas/canvas-node-size";
+import type { AiConfig } from "@/stores/use-config-store";
+import type { UploadedImage } from "@/services/image-storage";
+import type { UploadedFile } from "@/services/file-storage";
+import type { ReferenceImage } from "@/types/image";
+import { CanvasNodeType, type CanvasImageGenerationType, type CanvasNodeData, type CanvasNodeMetadata, type CanvasNodeTypeId, type Position } from "@/types/canvas";
+
+export function createCanvasNode(type: CanvasNodeTypeId, position: Position, metadata?: CanvasNodeMetadata): CanvasNodeData {
+    const spec = getNodeSpec(type);
+    const id = `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    return {
+        id,
+        type,
+        title: spec.title,
+        position: {
+            x: position.x - spec.width / 2,
+            y: position.y - spec.height / 2,
+        },
+        width: spec.width,
+        height: spec.height,
+        metadata: { ...spec.metadata, ...metadata },
+    };
+}
+
+export function imageMetadata(image: UploadedImage): CanvasNodeMetadata {
+    return { content: image.url, storageKey: image.storageKey, status: "success", naturalWidth: image.width, naturalHeight: image.height, bytes: image.bytes, mimeType: image.mimeType };
+}
+
+export function videoMetadata(video: UploadedFile): CanvasNodeMetadata {
+    return { content: video.url, storageKey: video.storageKey, status: "success", naturalWidth: video.width, naturalHeight: video.height, bytes: video.bytes, mimeType: video.mimeType || "video/mp4", durationMs: video.durationMs };
+}
+
+export function audioMetadata(audio: UploadedFile): CanvasNodeMetadata {
+    return { audioMediaId: audio.mediaId, audioTaskId: audio.taskId, content: audio.url, storageKey: audio.storageKey, status: "success", bytes: audio.bytes, mimeType: audio.mimeType || "audio/mpeg", durationMs: audio.durationMs };
+}
+
+export function referenceUrl(image: ReferenceImage) {
+    return image.storageKey || image.url || (!image.dataUrl.startsWith("data:") ? image.dataUrl : undefined);
+}
+
+export function buildImageGenerationMetadata(type: CanvasImageGenerationType, config: AiConfig, count: number, references: ReferenceImage[]): CanvasNodeMetadata {
+    return {
+        generationType: type,
+        model: config.model,
+        size: config.size,
+        quality: config.quality,
+        ...(config.background ? { background: config.background } : {}),
+        count,
+        references: references.map(referenceUrl).filter((url): url is string => Boolean(url)),
+    };
+}
+
+export function buildAudioGenerationMetadata(config: AiConfig): CanvasNodeMetadata {
+    return {
+        model: config.model,
+        audioVoice: config.audioVoice,
+        audioFormat: config.audioFormat,
+        audioSpeed: config.audioSpeed,
+        audioInstructions: config.audioInstructions,
+    };
+}
+
+export function applyNodeConfigPatch(node: CanvasNodeData, patch: Partial<CanvasNodeData["metadata"]>) {
+    const safePatch = patch || {};
+    const next = { ...node, metadata: { ...node.metadata, ...safePatch } };
+    const spec = node.type === CanvasNodeType.Video ? NODE_DEFAULT_SIZE[CanvasNodeType.Video] : NODE_DEFAULT_SIZE[CanvasNodeType.Image];
+    const size = typeof safePatch.size === "string" && !node.metadata?.content ? nodeSizeFromRatio(safePatch.size, spec.width, spec.height) : null;
+    return size && (node.type === CanvasNodeType.Image || node.type === CanvasNodeType.Video) ? { ...next, ...size, position: { x: node.position.x + node.width / 2 - size.width / 2, y: node.position.y + node.height / 2 - size.height / 2 } } : next;
+}
+

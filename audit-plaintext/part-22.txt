@@ -1,0 +1,3342 @@
+SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
+This is uncompressed source text, not a directory index or archive.
+Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
+Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+
+========================================================================
+FILE: web/src/pages/image/index.tsx
+LINES: 867-1187
+========================================================================
+    onSaveAsset: (image: GeneratedImage, index: number) => void;
+    onVideo: (image: GeneratedImage, index: number) => void; onContinue: (image: GeneratedImage, index: number) => void;
+}) {
+    const { t } = useTranslation();
+    useSyncExternalStore(subscribeImagePreviews, getImagePreviewRevision);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    return (
+        <div className="creation-result-card overflow-hidden rounded-2xl border border-border bg-background dark:border-border">
+            <button type="button" className="block w-full" onClick={() => setPreviewOpen(true)} aria-label={t("imageWorkbench.resultAlt", { count: index + 1 })}>
+                <img loading="lazy" width={image.width || undefined} height={image.height || undefined} src={previewUrlFor(image.storageKey) || image.dataUrl} alt={t("imageWorkbench.resultAlt", { count: index + 1 })} className="h-auto max-h-[65vh] w-full object-contain" />
+            </button>
+            {previewOpen && <Lightbox isOpen={previewOpen} onOpenChange={setPreviewOpen} media={(gallery || [image]).map((item, i) => ({ src: item.dataUrl, alt: t("imageWorkbench.resultAlt", { count: i + 1 }) }))} defaultIndex={gallery ? index : 0} hasZoom />}
+            <div className="space-y-2 border-t border-border px-3 py-2.5 dark:border-border">
+                <div className="flex min-w-0 gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    {image.width > 0 && image.height > 0 && <span>{image.width}x{image.height}</span>}
+                    {image.bytes > 0 && <span>{formatBytes(image.bytes)}</span>}
+                    <span>{formatDuration(image.durationMs)}</span>
+                </div>
+                <RecordActions primary={{ key: "edit", label: "继续改图", icon: <PenLine className="size-3.5" />, run: () => onContinue(image, index) }} secondary={{ key: "video", label: "生成视频", run: () => onVideo(image, index) }} more={[
+                    { key: "download", label: "下载图片", icon: <Download className="size-4" />, run: () => onDownload(image, index) },
+                    { key: "asset", label: "加入素材库", icon: <FolderPlus className="size-4" />, run: () => onSaveAsset(image, index) },
+                    { key: "reference", label: "添加为参考图", icon: <PenLine className="size-4" />, run: () => onEdit(image, index) },
+                ]} />
+            </div>
+        </div>
+    );
+}
+
+function PendingImageCard() {
+    const { t } = useTranslation();
+    return (
+        <div className="relative aspect-square overflow-hidden rounded-lg border border-dashed border-border bg-muted dark:border-border dark:bg-muted">
+            <div
+                className="absolute inset-0 opacity-60"
+                style={{
+                    backgroundImage: "radial-gradient(circle, rgba(120,113,108,0.35) 1.4px, transparent 1.6px)",
+                    backgroundSize: "16px 16px",
+                }}
+            />
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                <LoaderCircle className="size-6 animate-spin" />
+                <span>{t("workbench.generating")}</span>
+            </div>
+        </div>
+    );
+}
+
+function FailedImageCard({ error, onRetry }: { error: string; onRetry: () => void }) {
+    const { t } = useTranslation();
+    return (
+        <div className="overflow-hidden rounded-2xl border border-red-200 bg-red-50 dark:border-red-950 dark:bg-red-950/20">
+            <div className="flex aspect-square flex-col items-center justify-center gap-3 p-5 text-center">
+                <div className="text-sm font-medium text-red-600 dark:text-red-300">{t("workbench.failed")}</div>
+                <Typography.Paragraph ellipsis={{ rows: 4 }} className="!mb-0 !text-xs !text-red-500 dark:!text-red-300">
+                    {error}
+                </Typography.Paragraph>
+            </div>
+            <div className="flex justify-end border-t border-red-200 p-3 dark:border-red-950">
+                <Button size="small" danger onClick={onRetry}>
+                    {t("workbench.retry")}
+                </Button>
+            </div>
+        </div>
+    );
+}
+
+function updateResultAt(results: GenerationResult[], index: number, next: Partial<GenerationResult>) {
+    return results.map((item, itemIndex) => (itemIndex === index ? { ...item, ...next } : item));
+}
+
+function LogPanel({
+    logs,
+    selectedLogIds,
+    activeLogId,
+    onSelectedLogIdsChange,
+    onCreateSession,
+    onDeleteSelected,
+    onPreviewLog,
+}: {
+    logs: GenerationLog[];
+    selectedLogIds: string[];
+    activeLogId?: string;
+    onSelectedLogIdsChange: (ids: string[]) => void;
+    onCreateSession: () => void;
+    onDeleteSelected: () => void;
+    onPreviewLog: (log: GenerationLog) => void;
+}) {
+    const { t } = useTranslation();
+    const allSelected = Boolean(logs.length) && selectedLogIds.length === logs.length;
+    const toggleAll = () => onSelectedLogIdsChange(allSelected ? [] : logs.map((log) => log.id));
+
+    return (
+        <>
+            {/* 标题/计数已移到停靠面板头部，这里只留吸顶工具栏 */}
+            <div className="crec-toolbar">
+                <Button size="small" icon={<Plus className="size-3.5" />} onClick={onCreateSession}>
+                    {t("workbench.new")}
+                </Button>
+                <Button size="small" icon={<CheckSquare className="size-3.5" />} disabled={!logs.length} onClick={toggleAll}>
+                    {allSelected ? t("common.cancel") : t("workbench.selectAll")}
+                </Button>
+                <Button size="small" danger icon={<Trash2 className="size-3.5" />} disabled={!selectedLogIds.length} onClick={onDeleteSelected}>
+                    {t("common.delete")}
+                </Button>
+            </div>
+            <div className="space-y-3">
+                {logs.map((log) => (
+                    <LogCard
+                        key={log.id}
+                        log={log}
+                        selected={selectedLogIds.includes(log.id)}
+                        active={activeLogId === log.id}
+                        onSelectedChange={(checked) => onSelectedLogIdsChange(checked ? [...selectedLogIds, log.id] : selectedLogIds.filter((id) => id !== log.id))}
+                        onClick={() => onPreviewLog(log)}
+                    />
+                ))}
+                {!logs.length ? <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-border text-center text-sm text-muted-foreground dark:border-border">{t("workbench.noLogs")}</div> : null}
+            </div>
+        </>
+    );
+}
+
+function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: GenerationLog; selected: boolean; active: boolean; onSelectedChange: (checked: boolean) => void; onClick: () => void }) {
+    const { t } = useTranslation();
+    useSyncExternalStore(subscribeImagePreviews, getImagePreviewRevision);
+    const thumbnails = log.images.filter((image) => image.dataUrl).slice(0, 4);
+
+    return (
+        <button
+            type="button"
+            className={`block w-full rounded-lg border p-2 text-left transition ${active ? "border-foreground bg-brand-soft dark:bg-brand-soft" : "border-border bg-background hover:bg-muted dark:border-border dark:hover:bg-accent"}`}
+            onClick={onClick}
+        >
+            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
+                <Checkbox className="mt-0.5" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />
+                <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold leading-5">{log.title}</div>
+                    {thumbnails.length ? (
+                        <div className="mt-2 flex gap-1 overflow-hidden">
+                            {thumbnails.map((image) => (
+                                <img key={image.id} src={previewUrlFor(image.storageKey) || image.dataUrl} alt="" className="size-8 shrink-0 rounded-md object-cover" />
+                            ))}
+                        </div>
+                    ) : null}
+                    <div className="mt-2 flex flex-wrap gap-1">
+                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{t("workbench.itemCount", { count: log.imageCount })}</Tag>
+                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{log.time}</Tag>
+                    </div>
+                </div>
+                <div className="grid max-w-[150px] min-w-0 justify-items-end gap-1">
+                    <div className="flex min-w-0 flex-wrap justify-end gap-1">
+                        {log.status === 'pending' ? <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="processing">{t('workbench.generating')}</Tag> : log.status === 'unavailable' ? <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="warning">结果不可用</Tag> : null}
+                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="blue">
+                            {t("workbench.successCount", { count: log.successCount ?? log.imageCount })}
+                        </Tag>
+                        {log.failCount ? (
+                            <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="red">
+                                {t("workbench.failCount", { count: log.failCount })}
+                            </Tag>
+                        ) : null}
+                    </div>
+                    <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="green">
+                        {formatDuration(log.durationMs)}
+                    </Tag>
+                </div>
+            </div>
+        </button>
+    );
+}
+
+function isCurrentUser(owner: string, sessionEpoch: number) {
+    const auth = useAuthStore.getState();
+    return auth.ready && auth.user?.id === owner && auth.sessionEpoch === sessionEpoch;
+}
+
+async function readStoredLogs(owner: string, pager: GenerationHistoryPager, loadMore = false) {
+    if (typeof window === "undefined") return { items: [] as GenerationLog[], hasMore: false };
+    const local = await imageLogStorage.list<GenerationLog>(owner).catch(() => [] as GenerationLog[]);
+    try {
+        const cloud = loadMore ? await pager.loadMore() : await pager.refresh();
+        const remote = cloud.logs as unknown as GenerationLog[];
+        return { items: await Promise.all(mergeGenerationHistory(local, remote, cloud.hiddenTaskIds).map(normalizeLog)), hasMore: cloud.hasMore };
+    } catch {
+        if (loadMore) throw new Error("加载更早记录失败，请重试");
+        return { items: (await Promise.all(local.map(normalizeLog))).sort((a,b)=>b.createdAt-a.createdAt), hasMore: false };
+    }
+}
+
+async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {
+    const references = await Promise.all(
+        (log.references || []).map(async (item) => {
+            void ensureImagePreview(item.storageKey);
+            return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
+        }),
+    );
+    const images = await Promise.all(
+        (log.images || []).map(async (item) => {
+            void ensureImagePreview(item.storageKey);
+            return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
+        }),
+    );
+    const config = normalizeLogConfig(log);
+    return {
+        serverTaskIds: log.serverTaskIds,
+        creditsCharged: log.creditsCharged,
+        reconciliationRequired: log.reconciliationRequired,
+        referenceHistoryUnknown: log.referenceHistoryUnknown,
+        id: log.id || nanoid(),
+        createdAt: log.createdAt || Date.now(),
+        title: log.title || log.model || i18n.t("workbench.untitled"),
+        prompt: log.prompt || log.title || "",
+        time: log.time || new Date().toLocaleString(i18n.resolvedLanguage, { hour12: false }),
+        model: log.model || config.imageModel || "",
+        config,
+        references,
+        durationMs: log.durationMs || 0,
+        successCount: log.successCount ?? log.imageCount ?? 0,
+        failCount: log.failCount || 0,
+        imageCount: log.imageCount || log.successCount || 0,
+        size: log.size || config.size || "",
+        quality: log.quality || config.quality || "",
+        status: log.status || "success",
+        images,
+    };
+}
+
+function serializeLog(log: GenerationLog): GenerationLog {
+    return {
+        ...log,
+        references: log.references.map((item) => ({ ...item, dataUrl: item.storageKey ? "" : item.dataUrl })),
+        images: log.images.map((image) => ({ ...image, dataUrl: image.storageKey ? "" : image.dataUrl })),
+    };
+}
+
+function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
+    return {
+        model: log.config?.model || log.model || "",
+        imageModel: log.config?.imageModel || log.model || "",
+        quality: log.config?.quality || log.quality || "",
+        size: log.config?.size || log.size || "",
+        background: log.config?.background,
+        count: log.config?.count || String(log.imageCount || log.successCount || 1),
+    };
+}
+
+function imageHistoryGaps(log: GenerationLog) {
+    const missing: string[] = [];
+    if (!log.config.size || !log.config.quality || !log.config.background) missing.push("部分历史参数未保存");
+    if (log.referenceHistoryUnknown) missing.push("云端历史未保存参考素材信息");
+    return missing;
+}
+
+function moveListItem<T>(items: T[], index: number, offset: number) {
+    const targetIndex = index + offset;
+    if (targetIndex < 0 || targetIndex >= items.length) return items;
+    const next = [...items];
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    return next;
+}
+
+function ReferenceOrderButtons({ index, total, onMove }: { index: number; total: number; onMove: (offset: number) => void }) {
+    if (total <= 1) return null;
+    return (
+        <div className="absolute inset-x-1 bottom-1 flex justify-between">
+            <Button size="small" className="!h-6 !w-6 !min-w-6 !rounded-full !bg-white/85 !p-0 !shadow-sm" icon={<ArrowLeft className="size-3" />} disabled={index <= 0} onClick={() => onMove(-1)} />
+            <Button size="small" className="!h-6 !w-6 !min-w-6 !rounded-full !bg-white/85 !p-0 !shadow-sm" icon={<ArrowRight className="size-3" />} disabled={index >= total - 1} onClick={() => onMove(1)} />
+        </div>
+    );
+}
+
+function buildLog({
+    prompt,
+    model,
+    config,
+    references,
+    durationMs,
+    successCount,
+    failCount,
+    status,
+    images,
+    taskIds = [],
+}: {
+    prompt: string;
+    model: string;
+    config: GenerationLogConfig;
+    references: ReferenceImage[];
+    durationMs: number;
+    successCount: number;
+    failCount: number;
+    status: GenerationLog["status"];
+    images: GeneratedImage[];
+    taskIds?: string[];
+}): GenerationLog {
+    const logConfig = {
+        model: config.model,
+        imageModel: config.imageModel,
+        quality: config.quality,
+        size: config.size,
+        background: config.background,
+        count: config.count,
+    };
+    return {
+        id: nanoid(),
+        createdAt: Date.now(),
+        title: prompt.slice(0, 12) || i18n.t("workbench.untitled"),
+        prompt,
+        time: new Date().toLocaleString(i18n.resolvedLanguage, { hour12: false }),
+        model,
+        config: logConfig,
+        references,
+        durationMs,
+        successCount,
+        failCount,
+        serverTaskIds: [...new Set([...taskIds, ...images.flatMap(image => image.taskId ? [image.taskId] : [])])],
+        imageCount: Number(logConfig.count) || successCount,
+        size: logConfig.size,
+        quality: logConfig.quality,
+        status,
+        images,
+    };
+}
+
+
+========================================================================
+FILE: web/src/pages/models/index.tsx
+LINES: 1-387
+========================================================================
+import { useState, useMemo } from "react";
+import { Search, SlidersHorizontal, CheckCircle2, AlertCircle, Clock, XCircle, ImageIcon, Clapperboard, FileText, Music } from "lucide-react";
+
+import { SiteFooter } from "@/components/layout/site-footer";
+import { useConfigStore, type ServerModelInfo } from "@/stores/use-config-store";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useUrlState } from "@/hooks/use-url-state";
+import "./models.css";
+
+type ChannelStatus = "available" | "limited" | "unknown" | "coming-soon" | "offline";
+
+const CAPABILITY_OPTIONS = [
+    { value: "image", label: "图像生成", icon: ImageIcon },
+    { value: "video", label: "视频生成", icon: Clapperboard },
+    { value: "text", label: "文本生成", icon: FileText },
+    { value: "audio", label: "音频生成", icon: Music },
+];
+
+const STATUS_OPTIONS: { value: ChannelStatus; label: string; color: string }[] = [
+    { value: "available", label: "可用", color: "green" },
+    { value: "limited", label: "受限", color: "orange" },
+    { value: "unknown", label: "待检测", color: "blue" },
+    { value: "coming-soon", label: "即将上线", color: "blue" },
+    { value: "offline", label: "离线", color: "red" },
+];
+
+function getModelStatus(model: ServerModelInfo): ChannelStatus {
+    if (model.routeCount === 0) return "coming-soon";
+    if (model.health === "healthy") return "available";
+    if (model.health === "degraded") return "limited";
+    if (model.routes.length && model.routes.every(route => route.health === "down")) return "offline";
+    return "unknown";
+}
+
+function getProviderLogo(vendor: string): string {
+    const name = vendor.toLowerCase();
+    if (name.includes("anthropic") || name.includes("claude")) return "/icons/claude.svg";
+    if (name.includes("openai") || name.includes("gpt")) return "/icons/openai.svg";
+    if (name.includes("google") || name.includes("gemini")) return "/icons/gemini.svg";
+    if (name.includes("deepseek")) return "/icons/deepseek.svg";
+    if (name.includes("zhipu") || name.includes("glm")) return "/icons/glm.svg";
+    if (name.includes("xai") || name.includes("grok")) return "/icons/grok.svg";
+    return "";
+}
+
+function StatusBadge({ status }: { status: ChannelStatus }) {
+    const config = STATUS_OPTIONS.find(s => s.value === status);
+    if (!config) return null;
+
+    const icons = {
+        available: CheckCircle2,
+        limited: AlertCircle,
+        unknown: Clock,
+        "coming-soon": Clock,
+        offline: XCircle,
+    };
+    const Icon = icons[status];
+
+    return (
+        <span className={`model-status-badge status-${config.color}`}>
+            <Icon className="size-3" />
+            {config.label}
+        </span>
+    );
+}
+
+export default function ModelsPage() {
+    const serverModels = useConfigStore((state) => state.serverModels);
+
+    const [urlFilters, setUrlFilters] = useUrlState({
+        providers: [] as string[],
+        capabilities: [] as string[],
+        status: [] as string[],
+    });
+
+    const [searchInput, setSearchInput] = useState("");
+    const [showFilters, setShowFilters] = useState(false);
+    const debouncedSearch = useDebouncedValue(searchInput, 300);
+
+    // 提取所有厂商
+    const allProviders = useMemo(() => {
+        const providers = new Set<string>();
+        serverModels.forEach(model => {
+            if (model.familyVendor) providers.add(model.familyVendor);
+        });
+        return Array.from(providers).sort();
+    }, [serverModels]);
+
+    // 筛选模型
+    const filteredModels = useMemo(() => {
+        return serverModels.filter(model => {
+            // 搜索过滤
+            if (debouncedSearch) {
+                const search = debouncedSearch.toLowerCase();
+                const matchName = model.name.toLowerCase().includes(search);
+                const matchVendor = model.familyVendor?.toLowerCase().includes(search);
+                const matchFamily = model.familyName?.toLowerCase().includes(search);
+                if (!matchName && !matchVendor && !matchFamily) return false;
+            }
+
+            // 厂商过滤
+            if (urlFilters.providers.length > 0) {
+                if (!model.familyVendor || !urlFilters.providers.includes(model.familyVendor)) {
+                    return false;
+                }
+            }
+
+            // 能力过滤
+            if (urlFilters.capabilities.length > 0) {
+                if (!urlFilters.capabilities.includes(model.capability)) return false;
+            }
+
+            // 状态过滤
+            if (urlFilters.status.length > 0) {
+                const modelStatus = getModelStatus(model);
+                if (!urlFilters.status.includes(modelStatus)) return false;
+            }
+
+            return true;
+        });
+    }, [serverModels, debouncedSearch, urlFilters]);
+
+    // 按厂商分组
+    const groupedModels = useMemo(() => {
+        const groups = new Map<string, ServerModelInfo[]>();
+        filteredModels.forEach(model => {
+            const vendor = model.familyVendor || "其他";
+            if (!groups.has(vendor)) {
+                groups.set(vendor, []);
+            }
+            groups.get(vendor)!.push(model);
+        });
+        return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    }, [filteredModels]);
+
+    const toggleFilter = (type: keyof typeof urlFilters, value: string) => {
+        const current = urlFilters[type] as string[];
+        const next = current.includes(value)
+            ? current.filter(v => v !== value)
+            : [...current, value];
+        setUrlFilters({ [type]: next });
+    };
+
+    return (
+        <div className="models-page">
+            <div className="models-content">
+                {/* 头部 */}
+                <header className="models-header">
+                    <div className="models-header-content">
+                        <div>
+                            <h1 className="models-title">模型广场</h1>
+                            <p className="models-subtitle">
+                                探索 {serverModels.length} 个 AI 模型，涵盖图像、视频、文本和音频生成
+                            </p>
+                        </div>
+                        <div className="models-stats">
+                            <div className="models-stat-item">
+                                <span className="models-stat-value">{allProviders.length}</span>
+                                <span className="models-stat-label">厂商</span>
+                            </div>
+                            <div className="models-stat-item">
+                                <span className="models-stat-value">{serverModels.length}</span>
+                                <span className="models-stat-label">模型</span>
+                            </div>
+                            <div className="models-stat-item">
+                                <span className="models-stat-value">
+                                    {serverModels.filter(m => getModelStatus(m) === "available").length}
+                                </span>
+                                <span className="models-stat-label">可用</span>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                {/* 筛选栏 */}
+                <div className="models-filters-bar">
+                    <div className="models-search-wrapper">
+                        <Search className="models-search-icon" />
+                        <input
+                            type="text"
+                            className="models-search-input"
+                            placeholder="搜索模型、厂商..."
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        className={`models-filter-toggle ${showFilters ? "is-active" : ""}`}
+                        onClick={() => setShowFilters(!showFilters)}
+                    >
+                        <SlidersHorizontal className="size-4" />
+                        筛选
+                        {(urlFilters.providers.length + urlFilters.capabilities.length + urlFilters.status.length) > 0 && (
+                            <span className="models-filter-count">
+                                {urlFilters.providers.length + urlFilters.capabilities.length + urlFilters.status.length}
+                            </span>
+                        )}
+                    </button>
+                </div>
+
+                {/* 筛选面板 */}
+                {showFilters && (
+                    <div className="models-filters-panel">
+                        {/* 厂商筛选 */}
+                        <div className="models-filter-group">
+                            <h3 className="models-filter-title">厂商</h3>
+                            <div className="models-filter-options">
+                                {allProviders.map(provider => (
+                                    <button
+                                        key={provider}
+                                        type="button"
+                                        className={`models-filter-chip ${
+                                            urlFilters.providers.includes(provider) ? "is-selected" : ""
+                                        }`}
+                                        onClick={() => toggleFilter("providers", provider)}
+                                    >
+                                        {getProviderLogo(provider) && (
+                                            <img
+                                                src={getProviderLogo(provider)}
+                                                alt={provider}
+                                                className="models-filter-chip-logo"
+                                            />
+                                        )}
+                                        {provider}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 能力筛选 */}
+                        <div className="models-filter-group">
+                            <h3 className="models-filter-title">能力</h3>
+                            <div className="models-filter-options">
+                                {CAPABILITY_OPTIONS.map(cap => (
+                                    <button
+                                        key={cap.value}
+                                        type="button"
+                                        className={`models-filter-chip ${
+                                            urlFilters.capabilities.includes(cap.value) ? "is-selected" : ""
+                                        }`}
+                                        onClick={() => toggleFilter("capabilities", cap.value)}
+                                    >
+                                        <cap.icon className="size-3.5" aria-hidden="true" />
+                                        {cap.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 状态筛选 */}
+                        <div className="models-filter-group">
+                            <h3 className="models-filter-title">渠道状态</h3>
+                            <div className="models-filter-options">
+                                {STATUS_OPTIONS.map(status => (
+                                    <button
+                                        key={status.value}
+                                        type="button"
+                                        className={`models-filter-chip ${
+                                            urlFilters.status.includes(status.value) ? "is-selected" : ""
+                                        }`}
+                                        onClick={() => toggleFilter("status", status.value)}
+                                    >
+                                        {status.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 重置按钮 */}
+                        {(urlFilters.providers.length + urlFilters.capabilities.length + urlFilters.status.length) > 0 && (
+                            <button
+                                type="button"
+                                className="models-filter-reset"
+                                onClick={() => setUrlFilters({ providers: [], capabilities: [], status: [] })}
+                            >
+                                重置筛选
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* 模型列表 */}
+                <div className="models-list">
+                    {groupedModels.length > 0 ? (
+                        groupedModels.map(([vendor, models]) => (
+                            <div key={vendor} className="models-vendor-group">
+                                <div className="models-vendor-header">
+                                    {getProviderLogo(vendor) && (
+                                        <img
+                                            src={getProviderLogo(vendor)}
+                                            alt={vendor}
+                                            className="models-vendor-logo"
+                                        />
+                                    )}
+                                    <h2 className="models-vendor-name">{vendor}</h2>
+                                    <span className="models-vendor-count">{models.length} 个模型</span>
+                                </div>
+                                <div className="models-grid">
+                                    {models.map(model => {
+                                        const status = getModelStatus(model);
+                                        const capability = CAPABILITY_OPTIONS.find(option => option.value === model.capability);
+                                        const minCredits = Number.isInteger(model.minCredits)
+                                            ? model.minCredits
+                                            : Number(model.minCredits.toFixed(2));
+                                        const maxCredits = Number.isInteger(model.maxCredits)
+                                            ? model.maxCredits
+                                            : Number(model.maxCredits.toFixed(2));
+                                        const priceText = model.routeCount > 0 && model.minCredits > 0
+                                            ? `${minCredits === maxCredits ? minCredits : `${minCredits}-${maxCredits}`} 积分${
+                                                model.unit === "second" ? "/秒" :
+                                                model.unit === "request" ? "/次" :
+                                                model.unit === "image" ? "/张" : ""
+                                            }`
+                                            : "价格待定";
+
+                                        return (
+                                            <div key={model.id} className="model-card">
+                                                <div className="model-card-header">
+                                                    <div className="model-card-icon">
+                                                        {model.familyIcon ? (
+                                                            <img
+                                                                src={model.familyIcon}
+                                                                alt={model.name}
+                                                                className="model-icon-img"
+                                                            />
+                                                        ) : (
+                                                            <span className="model-icon-text">
+                                                                {model.name.slice(0, 2).toUpperCase()}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <StatusBadge status={status} />
+                                                </div>
+
+                                                <div className="model-card-body">
+                                                    <h3 className="model-card-title">{model.name}</h3>
+                                                    {model.description && (
+                                                        <p className="model-card-description">{model.description}</p>
+                                                    )}
+                                                </div>
+
+                                                <div className="model-card-footer">
+                                                    <div className="model-card-capabilities">
+                                                        {capability && (
+                                                            <span className="model-capability-badge" aria-label={capability.label} title={capability.label}>
+                                                                <capability.icon className="size-3.5" aria-hidden="true" />
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="model-card-meta">
+                                                        <span className="model-card-price">{priceText}</span>
+                                                        {model.routeCount > 0 && (
+                                                            <div className="model-card-routes">
+                                                                <span className="model-routes-count">{model.routeCount} 条线路</span>
+                                                                <div className="model-routes-dots">
+                                                                    {Array.from({ length: Math.min(model.routeCount, 5) }).map((_, i) => (
+                                                                        <span key={i} className="model-route-dot" />
+                                                                    ))}
+                                                                    {model.routeCount > 5 && (
+                                                                        <span className="model-routes-more">+{model.routeCount - 5}</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="models-empty">
+                            <p className="models-empty-text">没有找到匹配的模型</p>
+                            <p className="models-empty-hint">尝试调整筛选条件或搜索关键词</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <SiteFooter />
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/pages/models/models.css
+LINES: 1-732
+========================================================================
+/**
+ * 模型广场样式 - 学习 Orbi 定价页面设计
+ */
+
+.models-page {
+    position: relative;
+    /* 页面在 UserLayout 的 main（overflow:hidden）内滚动：必须撑满可用高度而不是跟随内容增高，
+       否则内容会溢出被父级裁掉，页面永远没有可滚动的余量。 */
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--background);
+    /* 全局默认是「滚动时才出现的透明滚动条」；模型广场需要常驻可见的右侧滚动条，
+       所以这里把标准滚动条属性交回浏览器，让下面的 ::-webkit-scrollbar 生效。 */
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+}
+
+.models-content {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 1360px);
+    margin: 0 auto;
+    padding: 40px 40px 72px;
+}
+
+/* ==================== 头部 ==================== */
+
+.models-header {
+    margin-bottom: 32px;
+}
+
+.models-header-content {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 32px;
+}
+
+.models-title {
+    margin: 0;
+    color: var(--foreground);
+    font-size: clamp(32px, 4vw, 48px);
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+}
+
+.models-subtitle {
+    margin: 12px 0 0;
+    color: var(--muted-foreground);
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+.models-stats {
+    display: flex;
+    gap: 24px;
+    padding: 20px 24px;
+    border: 1px solid var(--input);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.models-stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.models-stat-value {
+    color: var(--brand);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.models-stat-label {
+    color: var(--muted-foreground);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* ==================== 筛选栏 ==================== */
+
+.models-filters-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.models-search-wrapper {
+    position: relative;
+    flex: 1;
+    max-width: 480px;
+}
+
+.models-search-icon {
+    position: absolute;
+    top: 50%;
+    left: 16px;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    color: var(--muted-foreground);
+    pointer-events: none;
+}
+
+.models-search-input {
+    width: 100%;
+    height: 44px;
+    padding: 0 16px 0 44px;
+    border: 1px solid var(--input);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--foreground);
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.models-search-input::placeholder {
+    color: var(--muted-foreground);
+}
+
+.models-search-input:focus {
+    outline: none;
+    border-color: var(--brand);
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 0 0 3px rgba(216, 255, 62, 0.1);
+}
+
+.models-filter-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 44px;
+    padding: 0 20px;
+    border: 1px solid var(--input);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--foreground);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.models-filter-toggle:hover {
+    border-color: rgba(216, 255, 62, 0.4);
+    background: rgba(216, 255, 62, 0.05);
+}
+
+.models-filter-toggle.is-active {
+    border-color: var(--brand);
+    background: rgba(216, 255, 62, 0.1);
+    color: var(--brand);
+}
+
+.models-filter-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: var(--brand);
+    color: var(--brand-ink);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* ==================== 筛选面板 ==================== */
+
+.models-filters-panel {
+    margin-bottom: 32px;
+    padding: 24px;
+    border: 1px solid var(--input);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.02);
+    animation: slideInBounce 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes slideInBounce {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.models-filter-group {
+    margin-bottom: 24px;
+}
+
+.models-filter-group:last-of-type {
+    margin-bottom: 0;
+}
+
+.models-filter-title {
+    margin: 0 0 12px;
+    color: var(--foreground);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.models-filter-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.models-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    border: 1px solid var(--input);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--foreground);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.models-filter-chip:hover {
+    border-color: rgba(216, 255, 62, 0.4);
+    background: rgba(216, 255, 62, 0.05);
+    transform: translateY(-1px);
+}
+
+.models-filter-chip.is-selected {
+    border-color: var(--brand);
+    background: var(--brand);
+    color: var(--brand-ink);
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(216, 255, 62, 0.25);
+}
+
+.models-filter-chip-logo {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+}
+
+.models-filter-chip.is-selected .models-filter-chip-logo {
+    filter: brightness(0);
+}
+
+.models-filter-reset {
+    width: 100%;
+    height: 36px;
+    margin-top: 16px;
+    border: 1px solid var(--input);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted-foreground);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.models-filter-reset:hover {
+    border-color: rgba(255, 60, 60, 0.5);
+    background: rgba(255, 60, 60, 0.1);
+    color: rgba(255, 80, 80, 0.9);
+}
+
+/* ==================== 厂商分组 ==================== */
+
+.models-list {
+    display: flex;
+    flex-direction: column;
+    gap: 48px;
+}
+
+.models-vendor-group {
+    animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.models-vendor-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--input);
+}
+
+.models-vendor-logo {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+}
+
+:root:not(.dark) .models-vendor-logo,
+:root:not(.dark) .model-icon-img {
+    filter: brightness(0);
+}
+
+.models-vendor-name {
+    margin: 0;
+    color: var(--foreground);
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.models-vendor-count {
+    margin-left: auto;
+    color: var(--muted-foreground);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* ==================== 模型网格 ==================== */
+
+.models-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+/* ==================== 模型卡片 - 学习 Orbi ==================== */
+
+.model-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--card);
+    transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
+    cursor: pointer;
+}
+
+/* 渐变边框效果 - 学习 Orbi */
+.model-card::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+        135deg,
+        rgba(216, 255, 62, 0) 0%,
+        rgba(216, 255, 62, 0.6) 50%,
+        rgba(216, 255, 62, 0) 100%
+    );
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    pointer-events: none;
+}
+
+.model-card:hover::before {
+    opacity: 1;
+}
+
+.model-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(216, 255, 62, 0.3);
+    background: var(--card);
+    box-shadow:
+        0 20px 40px -10px rgba(0, 0, 0, 0.6),
+        0 0 0 1px rgba(216, 255, 62, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.model-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.model-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border: 1px solid var(--input);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    overflow: hidden;
+}
+
+.model-icon-img {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+}
+
+.model-icon-text {
+    color: var(--brand);
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.model-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.model-status-badge.status-green {
+    background: rgba(34, 197, 94, 0.15);
+    color: rgb(34, 197, 94);
+}
+
+.model-status-badge.status-orange {
+    background: rgba(251, 146, 60, 0.15);
+    color: rgb(251, 146, 60);
+}
+
+.model-status-badge.status-blue {
+    background: rgba(59, 130, 246, 0.15);
+    color: rgb(59, 130, 246);
+}
+
+.model-status-badge.status-red {
+    background: rgba(239, 68, 68, 0.15);
+    color: rgb(239, 68, 68);
+}
+
+.model-card-body {
+    flex: 1;
+    margin-bottom: 16px;
+}
+
+.model-card-title {
+    margin: 0 0 8px;
+    color: var(--foreground);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.model-card-description {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: 14px;
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+}
+
+.model-card-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.model-card-capabilities {
+    display: flex;
+    gap: 8px;
+}
+
+.model-capability-badge {
+    display: inline-grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border-radius: 9px;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.model-card:hover .model-capability-badge {
+    background: var(--brand-soft);
+    color: var(--foreground);
+}
+
+.model-card-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.model-card-price {
+    color: var(--brand);
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.model-card-routes {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.model-routes-count {
+    color: var(--muted-foreground);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.model-routes-dots {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.model-route-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.8);
+    box-shadow: none;
+}
+
+.model-routes-more {
+    color: var(--muted-foreground);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* ==================== 空状态 ==================== */
+
+.models-empty {
+    padding: 80px 20px;
+    text-align: center;
+}
+
+.models-empty-text {
+    margin: 0 0 8px;
+    color: var(--foreground);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.models-empty-hint {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: 14px;
+}
+
+/* ==================== 响应式 ==================== */
+
+@media (max-width: 1024px) {
+    .models-content {
+        padding: 32px 24px 48px;
+    }
+
+    .models-header-content {
+        flex-direction: column;
+    }
+
+    .models-stats {
+        width: 100%;
+        justify-content: space-around;
+    }
+
+    .models-grid {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 16px;
+    }
+}
+
+@media (max-width: 768px) {
+    .models-content {
+        padding: 24px 16px 32px;
+    }
+
+    .models-title {
+        font-size: 28px;
+    }
+
+    .models-subtitle {
+        font-size: 14px;
+    }
+
+    .models-filters-bar {
+        flex-direction: column;
+    }
+
+    .models-search-wrapper {
+        width: 100%;
+        max-width: none;
+    }
+
+    .models-filter-toggle {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .models-filters-panel {
+        padding: 20px;
+    }
+
+    .models-vendor-header {
+        flex-wrap: wrap;
+    }
+
+    .models-vendor-logo {
+        width: 24px;
+        height: 24px;
+    }
+
+    .models-vendor-name {
+        font-size: 20px;
+    }
+
+    .models-vendor-count {
+        flex-basis: 100%;
+        margin-left: 36px;
+    }
+
+    .models-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .model-card:hover {
+        transform: translateY(-2px);
+    }
+}
+
+/* ==================== 自定义滚动条 ==================== */
+
+/* 全局 useGlobalScrollbar 会在滚动时给容器加 .scrollbar-active（灰色半透明滑块），
+   模型广场要常驻品牌色滚动条，这里用更高优先级压住它，不依赖样式加载顺序。 */
+.models-page.scrollbar-active {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+}
+
+.models-page::-webkit-scrollbar {
+    width: 8px;
+}
+
+.models-page::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.models-page::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(216, 255, 62, 0.38);
+}
+
+.models-page::-webkit-scrollbar-thumb:hover {
+    background: rgba(216, 255, 62, 0.6);
+}
+
+/* 触屏设备用系统浮层滚动条：窄屏上不占用 8px 宽度挤压卡片 */
+@media (hover: none) {
+    .models-page,
+    .models-page.scrollbar-active {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(216, 255, 62, 0.5) transparent;
+    }
+}
+
+/* ==================== 加载动画 ==================== */
+
+.model-card {
+    animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.model-card:nth-child(1) { animation-delay: 0.05s; }
+.model-card:nth-child(2) { animation-delay: 0.1s; }
+.model-card:nth-child(3) { animation-delay: 0.15s; }
+.model-card:nth-child(4) { animation-delay: 0.2s; }
+
+/* ==================== 可访问性 ==================== */
+
+.model-card:focus-visible,
+.models-filter-chip:focus-visible,
+.models-filter-toggle:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+
+========================================================================
+FILE: web/src/pages/not-found/index.tsx
+LINES: 1-25
+========================================================================
+import { Home } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { PageTransition } from "@/components/layout/page-transition";
+
+export default function NotFound() {
+    const { t } = useTranslation();
+    return (
+        <PageTransition className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+            <main className="flex h-full min-h-0 items-center justify-center overflow-y-auto bg-page px-6 py-10 text-foreground">
+                <section className="w-full max-w-md text-center">
+                    <div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-[16px] border border-border bg-card text-[22px] font-semibold tabular-nums text-muted-foreground">404</div>
+                    <h1 className="text-[26px] font-semibold leading-9 tracking-[-0.01em]">{t("notFound.title")}</h1>
+                    <p className="mt-3 text-[13px] leading-6 text-muted-foreground">{t("notFound.description")}</p>
+                    <div className="mt-8 flex flex-wrap justify-center gap-3">
+                        <Link to="/" className="jm-btn jm-btn-primary h-9 px-4">
+                            <Home className="size-4" />
+                            {t("notFound.home")}
+                        </Link>
+                    </div>
+                </section>
+            </main>
+        </PageTransition>
+    );
+}
+
+
+========================================================================
+FILE: web/src/pages/prompts/index.tsx
+LINES: 1-93
+========================================================================
+import { FolderPlus, Search } from "lucide-react";
+import { type ReactNode, type UIEvent, useEffect, useState } from "react";
+import { App, Button, Empty, Spin, Tag } from "antd";
+import { useTranslation } from "react-i18next";
+
+import { PromptCard } from "@/components/prompts/prompt-card";
+import { usePromptList } from "@/components/prompts/use-prompt-list";
+import { PromptDetailDialog } from "@/components/prompts/prompt-detail-dialog";
+import { useCopyText } from "@/hooks/use-copy-text";
+import { cn } from "@/lib/utils";
+import { useAssetStore } from "@/stores/use-asset-store";
+import { promptImageUrl } from "@/lib/prompt-image";
+import { ALL_PROMPTS_OPTION, type Prompt } from "@/services/api/prompts";
+
+export default function PromptsPage() {
+    const { message } = App.useApp();
+    const { t } = useTranslation();
+    const [titleKeyword, setTitleKeyword] = useState("");
+    const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const [selectedCategory, setSelectedCategory] = useState(ALL_PROMPTS_OPTION);
+    const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null);
+    const addAsset = useAssetStore((state) => state.addAsset);
+    const copyText = useCopyText();
+    const { query, items: promptItems, tags: promptTags, categories: promptCategoryOptions, total: totalPrompts } = usePromptList({ keyword: titleKeyword, tags: selectedTags, category: selectedCategory });
+
+    useEffect(() => {
+        if (query.isError) message.error(query.error instanceof Error ? query.error.message : t("prompts.loadFailed"));
+    }, [message, query.error, query.isError, t]);
+
+    const toggleTag = (tag: string) => {
+        if (tag === ALL_PROMPTS_OPTION) return setSelectedTags([]);
+        setSelectedTags((items) => (items.includes(tag) ? items.filter((item) => item !== tag) : [...items, tag]));
+    };
+
+    const savePromptAsset = (item: Prompt) => {
+        addAsset({ kind: "text", title: item.title, coverUrl: promptImageUrl(item.coverUrl), tags: item.tags, source: item.category, data: { content: item.prompt }, metadata: { source: "prompt-library", promptId: item.id, githubUrl: item.githubUrl } });
+        message.success(t("common.addedToAssets"));
+    };
+
+    const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
+        const target = event.currentTarget;
+        if (query.hasNextPage && !query.isFetching && !query.isFetchNextPageError && target.scrollTop + target.clientHeight >= target.scrollHeight - 160) void query.fetchNextPage();
+    };
+
+    return (
+        <div className="page-surface flex h-full flex-col overflow-hidden bg-background text-foreground dark:text-foreground">
+            <main className="prompts-main jm-page" onScroll={handleListScroll}>
+                <div className="prompts-band jm-page-inner">
+                    <header className="jm-page-head">
+                    <div className="min-w-0">
+                        <h1 className="jm-page-title">{t("prompts.title")}</h1>
+                        <p className="jm-page-desc">{t("prompts.total", { count: totalPrompts })}</p>
+                    </div>
+                    <label className="jm-search shrink-0">
+                        <Search className="size-4 shrink-0" />
+                        <input value={titleKeyword} placeholder={t("prompts.search")} onChange={(event) => setTitleKeyword(event.target.value)} />
+                    </label>
+                    </header>
+                    <div className="prompts-layout mt-7 space-y-6">
+                        <section aria-label="提示词筛选" className="space-y-3 border-b border-border pb-5">
+                            <PromptFilter label={t("prompts.category")} options={promptCategoryOptions} selected={selectedCategory} onChange={setSelectedCategory} />
+                            <div className="prompt-filter-row">
+                                <div className="prompt-filter-label is-tags">{t("prompts.tags")}</div>
+                                <div className="prompt-tag-scroll" role="group" aria-label={t("prompts.tags")}>
+                                    {promptTags.map((tag) => {
+                                        const active = tag === ALL_PROMPTS_OPTION ? selectedTags.length === 0 : selectedTags.includes(tag);
+                                        return <Tag.CheckableTag key={tag} checked={active} className={cn("prompt-filter-tag", active && "is-active")} onChange={() => toggleTag(tag)}>{tag === ALL_PROMPTS_OPTION ? t("common.all") : tag}</Tag.CheckableTag>;
+                                    })}
+                                </div>
+                            </div>
+                        </section>
+                        <section className="min-w-0">
+                            {query.isLoading ? <div className="flex h-60 items-center justify-center"><Spin /></div> : null}
+                            {!query.isLoading ? <div><PromptGrid items={promptItems} onOpen={setSelectedPrompt} renderActions={(item) => <Button type="text" size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => savePromptAsset(item)}>{t("common.addToAssets")}</Button>} onCopy={(item) => copyText(item.prompt, t("common.promptCopied"))} emptyText={t("prompts.empty")} /></div> : null}
+                            <div className="mt-6 text-center text-xs text-muted-foreground">{query.hasNextPage ? <Button type="text" loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{query.isFetchNextPageError ? t("canvas.sidePanel.loadFailedRetry") : t("prompts.loadMore")}</Button> : promptItems.length > 0 ? t("prompts.end") : null}</div>
+                        </section>
+                    </div>
+                </div>
+            </main>
+
+            <PromptDetailDialog prompt={selectedPrompt} onClose={() => setSelectedPrompt(null)} onCopy={(prompt) => copyText(prompt, t("common.promptCopied"))} onSaveAsset={savePromptAsset} />
+        </div>
+    );
+}
+
+function PromptFilter({ label, options, selected, onChange }: { label: string; options: string[]; selected: string; onChange: (value: string) => void }) {
+    const { t } = useTranslation();
+    return <div className="prompt-filter-row"><div className="prompt-filter-label">{label}</div><div className="prompt-filter-options">{options.map((option) => <Tag.CheckableTag key={option} checked={selected === option} className={cn("prompt-filter-tag", selected === option && "is-active")} onChange={() => onChange(option)}>{option === ALL_PROMPTS_OPTION ? t("common.all") : option}</Tag.CheckableTag>)}</div></div>;
+}
+
+function PromptGrid({ items, onOpen, onCopy, renderActions, emptyText }: { items: Prompt[]; onOpen: (item: Prompt) => void; onCopy: (item: Prompt) => void; renderActions: (item: Prompt) => ReactNode; emptyText: string }) {
+    return <div><div className="prompts-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{items.map((item) => <PromptCard key={`${item.sourceId}:${item.id}`} item={item} onOpen={() => onOpen(item)} onCopy={() => onCopy(item)} extraAction={renderActions(item)} />)}</div>{items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} className="!m-0 jm-card jm-empty min-h-[320px]" /> : null}</div>;
+}
+
+
+========================================================================
+FILE: web/src/pages/video/index.tsx
+LINES: 1-854
+========================================================================
+import { handoffCreationToChat, ensureCreationThread, newCreationThread, saveCreationRecord } from "@/pages/chat/chat-store";
+import { RecordActions } from "@/components/creation/record-actions";
+import { CreationToolbar } from "@/components/creation/creation-toolbar";
+import { Button as ActionButton } from "@astryxdesign/core/Button";
+import { CreationRequest, ContinuationNotice, continuationPrompt } from "@/components/creation/creation-conversation";
+import type { Continuation } from "@/components/creation/creation-drafts";
+import { PromptOptimizationEstimate } from "@/components/creation/prompt-optimization-estimate";
+import { OtherCreationRecord, useOtherCreationHistory } from "@/components/creation/mixed-creation-history";
+import { ChatComposer } from "@astryxdesign/core/Chat";
+import { Thumbnail } from "@astryxdesign/core/Thumbnail";
+import { CreationStream } from "@/components/creation/creation-stream";
+import { CreationRecordsRail, useNarrowRecords } from "@/components/creation/creation-records-rail";
+import { CreditEstimate } from "@/components/creation/credit-estimate";
+import { readCreationDraft, saveCreationDraft } from "@/components/creation/creation-drafts";
+import { useCreationHistory } from "@/components/creation/creation-history";
+import { useVisibleRecords } from "@/components/creation/use-visible-records";
+import { useReferenceTransfer } from "@/components/creation/use-reference-transfer";
+import { creationStatus } from "@/components/creation/creation-status";
+import { downloadCloudMedia, refreshExpiredMedia } from "@/services/media-download";
+import { GenerationHistoryPager, mergeGenerationHistory, generationTaskIds, hideGenerationHistory } from "@/services/api/generation-history";
+import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
+import { App, Button, Checkbox, Drawer, Empty, Modal, Tag, Typography } from "antd";
+import { nanoid } from "nanoid";
+import { saveAs } from "file-saver";
+import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+
+import { imageReferenceLabel } from "@/lib/image-reference-prompt";
+import { mediaFileKind } from "@/lib/media-file";
+import { removePromptParameter, takePendingPrompt } from "@/lib/pending-prompt";
+import type { CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
+import { videoLogStorage } from "@/lib/video-log-storage";
+
+import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
+import { CanvasPromptChipInput } from "@/components/canvas/canvas-prompt-chip-input";
+import { PromptOptimizeButton } from "@/components/prompt-optimize-button";
+import { friendlyErrorMessage } from "@/lib/error-messages";
+import { ModelPicker } from "@/components/model-picker";
+import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
+import { VideoSettingsPanel, normalizeVideoResolutionValue, normalizeVideoSizeValue, videoModeLabel, videoSizeLabel } from "@/components/video-settings-panel";
+import { canvasThemes } from "@/lib/canvas-theme";
+import { clampVideoSeconds, formatVideoResolution } from "@/lib/media-size";
+import { formatBytes, formatDuration } from "@/lib/image-utils";
+import { resolveMediaUrl, uploadMediaFile } from "@/services/file-storage";
+import { resolveImageUrl, ensureImagePreview, getImagePreviewRevision, previewUrlFor, retryLocalImage, subscribeImagePreviews, uploadImage } from "@/services/image-storage";
+import { createVideoGenerationTask, isVideoInsufficientCredits, isVideoSubmissionRejected, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@/services/api/video";
+import { useAssetStore } from "@/stores/use-asset-store";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
+import { boolConfig, modelOptionLabel, modelOptionName, normalizeModelOptionValue, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { useThemeStore } from "@/stores/use-theme-store";
+import type { ReferenceImage } from "@/types/image";
+import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
+import i18n from "@/i18n";
+
+type GeneratedVideo = {
+    id: string;
+    url: string;
+    storageKey: string;
+    durationMs: number;
+    width: number;
+    height: number;
+    bytes: number;
+    mimeType: string;
+};
+
+type GenerationResult = {
+    id: string;
+    status: "pending" | "success" | "failed" | "unavailable";
+    video?: GeneratedVideo;
+    error?: string;
+    statusMessage?: string;
+};
+
+type GenerationLog = {
+    serverTaskIds?: string[];
+    id: string;
+    createdAt: number;
+    title: string;
+    prompt: string;
+    time: string;
+    model: string;
+    config: GenerationLogConfig;
+    references: ReferenceImage[];
+    referenceVideos?: ReferenceVideo[];
+    referenceAudios?: ReferenceAudio[];
+    referenceCount?: number;
+    creditsCharged?: number;
+    reconciliationRequired?: boolean;
+    durationMs: number;
+    size: string;
+    resolution: string;
+    seconds: string;
+    status: "pending" | "success" | "failed" | "unavailable";
+    task?: VideoGenerationTask;
+    video?: GeneratedVideo;
+    error?: string;
+};
+
+type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "videoRouteId" | "size" | "vquality" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "videoMode">;
+
+type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
+
+export default function VideoPage() {
+    const { message } = App.useApp();
+    const { run: transferReference, isTransferring } = useReferenceTransfer();
+    const reportMediaError = (error: unknown) => { if (!(error instanceof Error && error.name === "AbortError")) message.error(error instanceof Error ? error.message : String(error)); };
+    const { t } = useTranslation();
+    useSyncExternalStore(subscribeImagePreviews, getImagePreviewRevision);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const dragDepthRef = useRef(0);
+    const activeLogIdsRef = useRef<Set<string>>(new Set());
+    const accountEpochRef = useRef(0);
+    const config = useConfigStore((state) => state.config);
+    const effectiveConfig = useEffectiveConfig();
+    const updateConfig = useConfigStore((state) => state.updateConfig);
+    const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
+    const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const addAsset = useAssetStore((state) => state.addAsset);
+    const userId = useAuthStore((state) => state.ready ? state.user?.id : undefined);
+    const sessionEpoch = useAuthStore((state) => state.sessionEpoch);
+    const [viewOwner, setViewOwner] = useState<string | undefined>();
+    const [viewEpoch, setViewEpoch] = useState<number | undefined>();
+    const isCurrentView = () => Boolean(userId && viewOwner === userId && viewEpoch === sessionEpoch && isCurrentUser(userId, sessionEpoch));
+    const [prompt, setPrompt] = useState("");
+    const [searchParams] = useSearchParams();
+    const location = useLocation();
+    const navigate = useNavigate();
+    const appliedInitialPrompt = useRef<string | undefined>(undefined);
+    const [references, setReferences] = useState<ReferenceImage[]>([]);
+    const [continuation, setContinuation] = useState<Continuation>();
+    const [submittedPrompt, setSubmittedPrompt] = useState("");
+    const [referenceVideos, setReferenceVideos] = useState<ReferenceVideo[]>([]);
+    const [referenceAudios, setReferenceAudios] = useState<ReferenceAudio[]>([]);
+    useEffect(() => {
+        if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch) return;
+        saveCreationDraft("video", userId, sessionEpoch, { continuation, prompt, references, videos: referenceVideos, audios: referenceAudios });
+    }, [userId, viewOwner, viewEpoch, sessionEpoch, continuation, prompt, references, referenceVideos, referenceAudios]);
+    const [results, setResults] = useState<GenerationResult[]>([]);
+    const [logs, setLogs] = useState<GenerationLog[]>([]);
+    const requestedRecord = searchParams.get("record");
+    const targetRecord = logs.find((log) => log.id === requestedRecord || (requestedRecord && generationTaskIds(log).includes(requestedRecord)))?.id;
+
+    const otherHistory = useOtherCreationHistory(userId, sessionEpoch, "image");
+    const mixedLogs = [...logs.map(log => ({ id: log.id, kind: "active" as const, log })), ...otherHistory.logs.map(log => ({ id: log.id, kind: "other" as const, log }))].sort((a, b) => b.log.createdAt - a.log.createdAt);
+    const visibleHistory = useVisibleRecords(mixedLogs, userId, targetRecord ?? requestedRecord);
+
+    const mixedRecords = visibleHistory.records;
+    const locatedRecordRef = useRef("");
+    const historyPagerRef = useRef<GenerationHistoryPager | null>(null);
+    const [historyHasMore, setHistoryHasMore] = useState(false);
+    const [loadingEarlier, setLoadingEarlier] = useState(false);
+    useEffect(() => {
+        const pager = historyPagerRef.current;
+        if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch || !pager || !requestedRecord || targetRecord || !/^[0-9a-f-]{36}$/i.test(requestedRecord)) return;
+        let active = true;
+        void pager.loadRecord(requestedRecord).then(async snapshot => {
+            if (!active || historyPagerRef.current !== pager) return;
+            if (!snapshot.logs.some(log => log.id === requestedRecord)) { message.info("该记录不存在或已隐藏"); return; }
+            const { items, hasMore } = await readStoredLogs(userId, pager);
+            if (active && historyPagerRef.current === pager) { setLogs(items); setHistoryHasMore(hasMore); }
+        }).catch(() => { if (active) message.error("记录加载失败，请重试"); });
+        return () => { active = false; };
+    }, [userId, sessionEpoch, viewOwner, viewEpoch, requestedRecord, targetRecord]);
+
+    useEffect(() => {
+        if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch) return;
+        useCreationHistory.getState().update(`${userId}:${sessionEpoch}`, "video", logs.map((log) => ({ id: log.id, title: log.title, createdAt: log.createdAt, mode: "video" })));
+    }, [logs, userId, viewOwner, viewEpoch, sessionEpoch]);
+    useEffect(() => {
+        const id = targetRecord;
+        const navigation = `${userId}:${sessionEpoch}:${location.key}:${id}`;
+        if (id && locatedRecordRef.current !== navigation && logs.some((log) => log.id === id)) {
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                const record = document.getElementById(`creation-record-${id}`);
+                if (record && locatedRecordRef.current !== navigation) { locatedRecordRef.current = navigation; record.scrollIntoView({ block: "center" }); }
+            }));
+        }
+    }, [logs, targetRecord, location.key, userId, sessionEpoch]);
+    const [running, setRunning] = useState(false);
+    const [logsOpen, setLogsOpen] = useState(false);
+    // 宽屏把「生成记录」停靠在右侧，窄屏仍走底部抽屉
+    const [recordsRailOpen, setRecordsRailOpen] = useState(false);
+    const narrowRecords = useNarrowRecords();
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [referenceOpen, setReferenceOpen] = useState(false);
+    const [promptDialogOpen, setPromptDialogOpen] = useState(false);
+
+    useEffect(() => {
+        accountEpochRef.current += 1;
+        agentTaskIdRef.current = undefined;
+        setAutoRunToken(0);
+    }, [userId, sessionEpoch]);
+
+    useEffect(() => {
+        if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch || !isCurrentUser(userId, sessionEpoch) || appliedInitialPrompt.current === `${userId}:${sessionEpoch}:${location.key}`) return;
+        const pending = takePendingPrompt("video", userId);
+        if (pending) setContinuation(undefined);
+        const initialPrompt = pending?.prompt || searchParams.get("prompt") || "";
+        if (searchParams.has("prompt")) {
+            const rest = removePromptParameter(searchParams).toString();
+            navigate({ pathname: location.pathname, search: rest ? `?${rest}` : "", hash: location.hash }, { replace: true });
+        }
+        const pendingImages = pending?.references.filter((reference) => !reference.kind || reference.kind === "image") ?? [];
+        const pendingVideos = pending?.references.filter((reference) => reference.kind === "video") ?? [];
+        const pendingAudios = pending?.references.filter((reference) => reference.kind === "audio") ?? [];
+        if (!initialPrompt && !pending?.references.length) return;
+        appliedInitialPrompt.current = `${userId}:${sessionEpoch}:${location.key}`;
+        if (initialPrompt) setPrompt(initialPrompt);
+        if (pending) {
+            const images = pendingImages.map((reference) => ({ id: nanoid(), name: reference.name, type: reference.type, dataUrl: reference.dataUrl, storageKey: reference.storageKey }));
+            setReferences((current) => pending.appendReferences ? [...current, ...images.filter((image) => !current.some((item) => image.storageKey ? item.storageKey === image.storageKey : item.dataUrl === image.dataUrl))] : images);
+            if (!pending.appendReferences) {
+                setReferenceVideos(pendingVideos.map((reference) => ({ id: nanoid(), name: reference.name, type: reference.type, url: reference.dataUrl, storageKey: reference.storageKey })));
+                setReferenceAudios(pendingAudios.map((reference) => ({ id: nanoid(), name: reference.name, type: reference.type, url: reference.dataUrl, storageKey: reference.storageKey })));
+            }
+        }
+    }, [searchParams, userId, viewOwner, viewEpoch, sessionEpoch, navigate, location.pathname, location.hash, location.key]);
+    const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+    const [startedAt, setStartedAt] = useState(0);
+    const [elapsedMs, setElapsedMs] = useState(0);
+    const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
+    const [previewLog, setPreviewLog] = useState<GenerationLog | null>(null);
+    const [detailsLog, setDetailsLog] = useState<GenerationLog | null>(null);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [referenceDragTarget, setReferenceDragTarget] = useState(false);
+    const [autoRunToken, setAutoRunToken] = useState(0);
+    const videoCommand = useWorkbenchAgentStore((state) => state.videoCommand);
+    const clearVideoCommand = useWorkbenchAgentStore((state) => state.clearVideoCommand);
+    const updateAgentTask = useWorkbenchAgentStore((state) => state.updateTask);
+    const processedCommandRef = useRef(0);
+    const agentTaskIdRef = useRef<string | undefined>(undefined);
+
+    const model = effectiveConfig.videoModel || effectiveConfig.model;
+    const serverModels = useConfigStore((state) => state.serverModels);
+    const selectedModel = serverModels.find((item) => item.id === modelOptionName(model));
+    const configuredLimits = selectedModel?.metadata?.referenceLimits as { images?: number; videos?: number; audios?: number } | undefined;
+    const isFl2v = /minimax[-_]?h3[-_]?fl2v/i.test(selectedModel?.upstreamName || "");
+    const limits = { images: isFl2v ? 2 : configuredLimits?.images ?? 7, videos: isFl2v ? 0 : configuredLimits?.videos ?? 3, audios: isFl2v ? 0 : configuredLimits?.audios ?? 3 };
+    const canGenerate = Boolean(prompt.trim());
+    const promptReferences = useMemo<CanvasResourceReference[]>(() => [...references.map((item, index) => ({
+        id: `video:${item.id}`,
+        nodeId: `video:${item.id}`,
+        kind: "image",
+        label: `@${imageReferenceLabel(index)}`,
+        title: item.name || imageReferenceLabel(index),
+        previewUrl: previewUrlFor(item.storageKey) || item.dataUrl,
+        active: true,
+    } as CanvasResourceReference)), ...referenceVideos.map((item, index): CanvasResourceReference => ({
+        id: `video-ref:${item.id}`, nodeId: `video-ref:${item.id}`, kind: "video", label: `@视频${index + 1}`,
+        title: item.name || `视频${index + 1}`, active: true,
+    })), ...referenceAudios.map((item, index): CanvasResourceReference => ({
+        id: `audio-ref:${item.id}`, nodeId: `audio-ref:${item.id}`, kind: "audio", label: `@音频${index + 1}`,
+        title: item.name || `音频${index + 1}`, active: true,
+    }))], [references, referenceVideos, referenceAudios]);
+
+    useEffect(() => {
+        if (!running || !startedAt) return;
+        const timer = window.setInterval(() => setElapsedMs(performance.now() - startedAt), 1000);
+        return () => window.clearInterval(timer);
+    }, [running, startedAt]);
+
+    useEffect(() => {
+        historyPagerRef.current = userId ? new GenerationHistoryPager(userId, "video") : null;
+        setHistoryHasMore(false); setLoadingEarlier(false);
+        setLogs([]); setResults([]); setPreviewLog(null); setDetailsLog(null); setSelectedLogIds([]); setRunning(false); setStartedAt(0);
+        const draft = userId ? readCreationDraft("video", userId, sessionEpoch) : undefined;
+        setContinuation(draft?.continuation); setPrompt(draft?.prompt ?? ""); setReferences(draft?.references ?? []); setReferenceVideos(draft?.videos ?? []); setReferenceAudios(draft?.audios ?? []);
+        setViewOwner(userId); setViewEpoch(sessionEpoch);
+        if (userId) void refreshLogs();
+    }, [userId, sessionEpoch]);
+
+    const addReferences = async (files?: FileList | null) => {
+        const owner = userId, epoch = accountEpochRef.current;
+        if (!owner || !isCurrentView()) return;
+        const active = () => isCurrentUser(owner, sessionEpoch) && accountEpochRef.current === epoch;
+        if (!active()) return;
+        const selectedFiles = Array.from(files || []);
+        const supported = selectedFiles.map((file) => ({ file, kind: mediaFileKind(file) })).filter((item): item is { file: File; kind: NonNullable<ReturnType<typeof mediaFileKind>> } => Boolean(item.kind));
+        if (supported.length !== selectedFiles.length) message.warning(t("videoWorkbench.unsupportedFiles"));
+        const imageFiles = supported.filter((item) => item.kind === "image").map((item) => item.file).slice(0, Math.max(0, limits.images - references.length));
+        const videoFiles = supported.filter((item) => item.kind === "video").map((item) => item.file).slice(0, Math.max(0, limits.videos - referenceVideos.length));
+        const audioFiles = supported.filter((item) => item.kind === "audio").map((item) => item.file).slice(0, Math.max(0, limits.audios - referenceAudios.length));
+        if (imageFiles.length + videoFiles.length + audioFiles.length < supported.length) message.warning(`当前模型最多支持 ${limits.images} 张图片、${limits.videos} 个视频和 ${limits.audios} 个音频`);
+        const queuedImages = imageFiles.map((file) => ({ id: nanoid(), file, previewUrl: URL.createObjectURL(file) }));
+        if (queuedImages.length) setReferences((value) => [...value, ...queuedImages.map(({ id, file, previewUrl }) => ({ id, name: file.name, type: file.type, dataUrl: previewUrl, queued: true, progress: 0 }))]);
+        const nextVideos: ReferenceVideo[] = [];
+        const nextAudios: ReferenceAudio[] = [];
+        let failed: unknown;
+        for (const item of queuedImages) {
+            if (!active()) return;
+            setReferences((value) => value.map((ref) => (ref.id === item.id ? { ...ref, queued: false, uploading: true, progress: 0 } : ref)));
+            try {
+                const image = await uploadImage(item.file, {
+                    expectedOwner: owner,
+                    onProgress: (progress) => setReferences((value) => value.map((ref) => (ref.id === item.id ? { ...ref, progress } : ref))),
+                });
+                setReferences((value) => value.map((ref) => (ref.id === item.id ? { ...ref, dataUrl: image.url, type: image.mimeType, storageKey: image.storageKey, uploading: false, queued: false, progress: 100, error: undefined } : ref)));
+                if (image.url !== item.previewUrl) window.setTimeout(() => URL.revokeObjectURL(item.previewUrl), 1000);
+            } catch (error) {
+                setReferences((value) => value.map((ref) => (ref.id === item.id ? { ...ref, uploading: false, queued: false, progress: 0, error: error instanceof Error ? error.message : String(error) } : ref)));
+                failed ??= error;
+            }
+            if (!active()) return;
+        }
+        for (const file of videoFiles) {
+            if (file.size > 200 * 1024 * 1024) {
+                message.warning(t("videoWorkbench.videoTooLarge"));
+                continue;
+            }
+            try {
+                const media = await uploadMediaFile(file, "video", { expectedOwner: owner });
+                nextVideos.push({ id: nanoid(), name: file.name, type: media.mimeType || file.type, url: media.url, storageKey: media.storageKey, bytes: media.bytes, width: media.width, height: media.height, durationMs: media.durationMs });
+            } catch (error) {
+                failed ??= error;
+            }
+            if (!active()) return;
+        }
+        for (const file of audioFiles) {
+            if (file.size > 15 * 1024 * 1024) {
+                message.warning(t("videoWorkbench.audioTooLarge"));
+                continue;
+            }
+            try {
+                const media = await uploadMediaFile(file, "audio", { expectedOwner: owner });
+                nextAudios.push({ id: nanoid(), name: file.name, type: media.mimeType || file.type, url: media.url, storageKey: media.storageKey, durationMs: media.durationMs });
+            } catch (error) {
+                failed ??= error;
+            }
+            if (!active()) return;
+        }
+        if (failed !== undefined) reportMediaError(failed);
+        if (nextVideos.length) setReferenceVideos((value) => [...value, ...nextVideos].slice(0, limits.videos));
+        if (nextAudios.length) setReferenceAudios((value) => [...value, ...nextAudios].slice(0, limits.audios));
+    };
+
+    const handleReferenceDragEnter = (event: DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        dragDepthRef.current += 1;
+        if (event.dataTransfer.types.includes("Files")) setReferenceDragTarget(true);
+    };
+
+    const handleReferenceDragLeave = (event: DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (!dragDepthRef.current) setReferenceDragTarget(false);
+    };
+
+    const handleReferenceDrop = (event: DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        dragDepthRef.current = 0;
+        setReferenceDragTarget(false);
+        void transferReference(() => addReferences(event.dataTransfer.files)).catch(reportMediaError);
+    };
+
+    const retryReference = async (item: ReferenceImage) => {
+        if (!item.storageKey || item.uploading) return;
+        const owner = userId, epoch = accountEpochRef.current;
+        if (!owner || !isCurrentView()) return;
+        setReferences((value) => value.map((ref) => ref.id === item.id ? { ...ref, uploading: true, queued: false, progress: 0, error: undefined } : ref));
+        try {
+            const image = await retryLocalImage(item.storageKey, {
+                expectedOwner: owner,
+                onProgress: (progress) => setReferences((value) => value.map((ref) => ref.id === item.id ? { ...ref, progress } : ref)),
+            });
+            if (!isCurrentUser(owner, sessionEpoch) || accountEpochRef.current !== epoch) return;
+            setReferences((value) => value.map((ref) => ref.id === item.id ? { ...ref, dataUrl: image.url, type: image.mimeType, storageKey: undefined, uploading: false, queued: false, progress: 100, error: undefined } : ref));
+            if (item.dataUrl.startsWith("blob:")) window.setTimeout(() => URL.revokeObjectURL(item.dataUrl), 1000);
+        } catch (error) {
+            setReferences((value) => value.map((ref) => ref.id === item.id ? { ...ref, uploading: false, queued: false, progress: 0, error: error instanceof Error ? error.message : String(error) } : ref));
+            reportMediaError(error);
+        }
+    };
+
+    const addReferencesFromClipboard = async () => {
+        const owner = userId, epoch = accountEpochRef.current;
+        if (!owner || !isCurrentView()) return;
+        const active = () => isCurrentUser(owner, sessionEpoch) && accountEpochRef.current === epoch;
+        if (!active()) return;
+        try {
+            const items = await navigator.clipboard.read();
+            const blobs = await Promise.all(items.flatMap((item) => item.types.filter((type) => type.startsWith("image/")).map((type) => item.getType(type))));
+            if (!active()) return;
+            if (!blobs.length) {
+                message.error(t("videoWorkbench.clipboardEmpty"));
+                return;
+            }
+            const nextReferences = await Promise.all(
+                blobs.slice(0, Math.max(0, limits.images - references.length)).map(async (blob, index) => {
+                    const image = await uploadImage(blob, { expectedOwner: owner });
+                    return { id: nanoid(), name: `clipboard-${index + 1}.png`, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
+                }),
+            );
+            if (!active()) return;
+            if (nextReferences.length < blobs.length) message.warning(`当前模型最多支持 ${limits.images} 张参考图`);
+            setReferences((value) => [...value, ...nextReferences].slice(0, limits.images));
+            message.success(t("videoWorkbench.clipboardAdded", { count: nextReferences.length }));
+        } catch {
+            if (active()) message.error(t("videoWorkbench.clipboardEmpty"));
+        }
+    };
+    const generationThread = useRef("");
+    const generate = async () => {
+        const owner = userId;
+        if (!owner || !isCurrentView()) return;
+        const epoch = accountEpochRef.current;
+        const active = () => isCurrentUser(owner, sessionEpoch) && accountEpochRef.current === epoch;
+        const agentTaskId = agentTaskIdRef.current;
+        agentTaskIdRef.current = undefined;
+        const snapshot = buildRequestSnapshot();
+        if (!snapshot) {
+            if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", error: t("videoWorkbench.invalidParams") });
+            return;
+        }
+        generationThread.current = await ensureCreationThread(owner);
+        if (!active()) return;
+        setElapsedMs(0);
+        setSubmittedPrompt(snapshot.text);
+        setRunning(true);
+        if (agentTaskId) updateAgentTask(agentTaskId, { status: "running", error: undefined });
+        setPreviewLog(null);
+        setResults([{ id: nanoid(), status: "pending" }]);
+        const batchStartedAt = performance.now();
+        setStartedAt(batchStartedAt);
+        try {
+            const task = await createVideoGenerationTask(snapshot.config, snapshot.text, snapshot.references, { videos: snapshot.videos, audios: snapshot.audios, expectedUserId: owner });
+            if (!active()) return;
+            const log = buildLog({ prompt: snapshot.text, model, config: snapshot.config, references: snapshot.references, referenceVideos: snapshot.videos, referenceAudios: snapshot.audios, durationMs: 0, status: "pending", task });
+            saveCreationRecord(owner, log, generationThread.current);
+            await saveLog(log, false);
+            void pollGenerationLog(log, snapshot.config, agentTaskId);
+        } catch (error) {
+            if (!active()) return;
+            if (isVideoInsufficientCredits(error) || isVideoSubmissionRejected(error)) {
+                const errorMessage = (error as Error).message;
+                const log = buildLog({ prompt: snapshot.text, model, config: snapshot.config, references: snapshot.references, referenceVideos: snapshot.videos, referenceAudios: snapshot.audios, durationMs: performance.now() - batchStartedAt, status: "failed", error: errorMessage });
+            saveCreationRecord(owner, log, generationThread.current);
+                setResults([{ id: log.id, status: "failed", error: errorMessage }]);
+                if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", successCount: 0, failCount: 1, error: errorMessage });
+                message.error(errorMessage);
+                setRunning(false);
+                await saveLog(log, false);
+                return;
+            }
+            // A lost submission response cannot establish whether a task was created.
+            const errorMessage = `提交结果暂无法确认，请先查看生成记录或账户状态。${(error as Error)?.message || ""}`;
+            const log = buildLog({ prompt: snapshot.text, model, config: snapshot.config, references: snapshot.references, referenceVideos: snapshot.videos, referenceAudios: snapshot.audios, durationMs: performance.now() - batchStartedAt, status: "unavailable", error: errorMessage });
+            saveCreationRecord(owner, log, generationThread.current);
+            setResults([{ id: log.id, status: "unavailable", error: errorMessage }]);
+            if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", successCount: 0, failCount: 1, error: errorMessage });
+            message.error(errorMessage);
+            await saveLog(log, false);
+            setRunning(false);
+        }
+    };
+
+    // Handle video-generation commands from the Agent panel by setting the prompt and optionally starting generation.
+    useEffect(() => {
+        if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch || !isCurrentUser(userId, sessionEpoch) || !videoCommand || videoCommand.nonce === processedCommandRef.current) return;
+        processedCommandRef.current = videoCommand.nonce;
+        clearVideoCommand();
+        if (typeof videoCommand.prompt === "string") setPrompt(videoCommand.prompt);
+        if (videoCommand.run && running) {
+            if (videoCommand.taskId) updateAgentTask(videoCommand.taskId, { status: "failed", error: t("videoWorkbench.busy") });
+            return;
+        }
+        if (videoCommand.run) {
+            agentTaskIdRef.current = videoCommand.taskId;
+            setAutoRunToken((value) => value + 1);
+        }
+    }, [videoCommand, clearVideoCommand, running, updateAgentTask, userId, viewOwner, viewEpoch, sessionEpoch]);
+
+    useEffect(() => {
+        if (!autoRunToken || !userId || !isCurrentUser(userId, sessionEpoch) || viewOwner !== userId || viewEpoch !== sessionEpoch) return;
+        void generate();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoRunToken]);
+
+    const buildRequestSnapshot = () => {
+        const text = continuationPrompt(prompt, continuation);
+        if (!text) {
+            message.error(t("videoWorkbench.promptRequired"));
+            return null;
+        }
+        if (references.length > limits.images || referenceVideos.length > limits.videos || referenceAudios.length > limits.audios) {
+            message.error(`当前模型最多支持 ${limits.images} 张图片、${limits.videos} 个视频和 ${limits.audios} 个音频，请先调整素材`);
+            return null;
+        }
+        if (!isAiConfigReady(effectiveConfig, model)) {
+            message.warning(t("workbench.configFirst"));
+            openConfigDialog(true);
+            return null;
+        }
+        return { text, config: buildVideoConfig(effectiveConfig, model), references: [...references], videos: [...referenceVideos], audios: [...referenceAudios] };
+    };
+
+    const retryResult = () => {
+        void generate();
+    };
+
+    const downloadVideo = (video: GeneratedVideo) => {
+        if (!isCurrentView()) return;
+        if (!downloadCloudMedia(video.url, "video.mp4")) saveAs(video.url, "video.mp4");
+    };
+
+    const saveResultToAssets = (video: GeneratedVideo) => {
+        if (!userId || !isCurrentView()) return;
+        addAsset({
+            kind: "video",
+            title: t("videoWorkbench.resultTitle"),
+            coverUrl: "",
+            tags: [],
+            source: t("videoWorkbench.source"),
+            data: { url: video.url, storageKey: video.storageKey, width: video.width, height: video.height, bytes: video.bytes, mimeType: video.mimeType },
+            metadata: { source: "video-page", prompt },
+        });
+        message.success(t("common.addedToAssets"));
+    };
+
+    const insertPickedAsset = async (payload: InsertAssetPayload) => {
+        const owner = userId, epoch = accountEpochRef.current;
+        if (!owner || !isCurrentView()) return;
+        if (payload.kind === "text") {
+            setPrompt(payload.content);
+        } else if (payload.kind === "image") {
+            if (references.length >= limits.images) { message.warning(`当前模型最多支持 ${limits.images} 张参考图`); return; }
+            const stored = await uploadImage(payload.dataUrl, { expectedOwner: owner });
+            if (!isCurrentUser(owner, sessionEpoch) || accountEpochRef.current !== epoch) return;
+            setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }].slice(0, limits.images));
+        }
+        setAssetPickerOpen(false);
+    };
+
+    const openChat = async () => {
+        if (!userId || !isCurrentView()) return;
+        const threadId = await ensureCreationThread(userId);
+        if (!isCurrentView()) return;
+        const selected = previewLog ?? logs.find(log => log.id === requestedRecord || (requestedRecord && generationTaskIds(log).includes(requestedRecord)));
+        const record = selected ?? (references.length ? { id: `draft-video-${threadId}`, createdAt: Date.now(), prompt, model, status: "success", references } : undefined);
+        return handoffCreationToChat(userId, record);
+    };
+
+    const createSession = () => {
+        if (!isCurrentView()) return;
+        if (isTransferring) { message.warning("参考素材正在处理，请等待完成后再新建创作"); return; }
+        if (userId) newCreationThread(userId);
+        setContinuation(undefined);
+        setPrompt("");
+        setReferences([]);
+        setReferenceVideos([]);
+        setReferenceAudios([]);
+        setResults([]);
+        setElapsedMs(0);
+        setStartedAt(0);
+        setSelectedLogIds([]);
+        setPreviewLog(null);
+    };
+
+    const deleteSelectedLogs = () => {
+        if (!userId || !isCurrentView()) return;
+        void hideGenerationHistory(userId, logs.filter(log => selectedLogIds.includes(log.id)).flatMap(generationTaskIds)).then(() => Promise.all(selectedLogIds.map((id) => videoLogStorage.remove(userId, id)) )).then(() => { if (!isCurrentUser(userId, sessionEpoch)) return; historyPagerRef.current = new GenerationHistoryPager(userId, "video"); return refreshLogs(); }).catch(error => message.error(error instanceof Error ? error.message : String(error)));
+        if (previewLog && selectedLogIds.includes(previewLog.id)) {
+            setPreviewLog(null);
+            setResults([]);
+        }
+        setSelectedLogIds([]);
+        setDeleteConfirmOpen(false);
+    };
+
+    const saveLog = async (log: GenerationLog, resumePending = true) => {
+        if (!userId || !isCurrentUser(userId, sessionEpoch)) return;
+        saveCreationRecord(userId, log);
+        const epoch = accountEpochRef.current;
+        await videoLogStorage.set(userId, log.id, serializeLog(log));
+        if (!isCurrentUser(userId, sessionEpoch) || accountEpochRef.current !== epoch) return;
+        await refreshLogs(resumePending);
+    };
+
+    const refreshLogs = async (resumePending = true) => {
+        if (!userId) return [];
+        const epoch = accountEpochRef.current;
+        const pager = historyPagerRef.current;
+        if (!pager) return [];
+        const { items: nextLogs, hasMore } = await readStoredLogs(userId, pager);
+        if (!isCurrentUser(userId, sessionEpoch) || accountEpochRef.current !== epoch || historyPagerRef.current !== pager) return [];
+        setLogs(nextLogs);
+        setHistoryHasMore(hasMore);
+        if (resumePending) resumePendingLogs(nextLogs);
+        return nextLogs;
+    };
+
+    const showEarlierRecords = async () => {
+        if (visibleHistory.hasEarlier) { visibleHistory.showEarlier(); return; }
+        const pager = historyPagerRef.current;
+        if (!userId || !pager || (!historyHasMore && !otherHistory.more) || loadingEarlier) return;
+        const epoch = accountEpochRef.current;
+        setLoadingEarlier(true);
+        try {
+            const [{ items, hasMore }] = await Promise.all([
+                historyHasMore ? readStoredLogs(userId, pager, true) : Promise.resolve({ items: logs, hasMore: false }),
+                otherHistory.more ? otherHistory.loadMore() : Promise.resolve(),
+            ]);
+            if (!isCurrentUser(userId, sessionEpoch) || accountEpochRef.current !== epoch || historyPagerRef.current !== pager) return;
+            setLogs(items); setHistoryHasMore(hasMore); visibleHistory.showEarlier(); resumePendingLogs(items);
+        } catch (error) { reportMediaError(error); }
+        finally { if (historyPagerRef.current === pager) setLoadingEarlier(false); }
+    };
+
+    const resumePendingLogs = (items: GenerationLog[]) => {
+        for (const log of items) {
+            if (log.status === "pending" && log.task) void pollGenerationLog(log);
+        }
+    };
+
+    const pollGenerationLog = async (log: GenerationLog, configOverride?: AiConfig, agentTaskId?: string) => {
+        const owner = userId;
+        if (!owner || !isCurrentUser(owner, sessionEpoch)) return;
+        const epoch = accountEpochRef.current;
+        const active = () => isCurrentUser(owner, sessionEpoch) && accountEpochRef.current === epoch;
+        const activeKey = `${epoch}:${log.id}`;
+        if (!log.task || activeLogIdsRef.current.has(activeKey)) return;
+        activeLogIdsRef.current.add(activeKey);
+        setRunning(true);
+        setStartedAt((value) => value || performance.now());
+        setResults((value) => (value.length ? value : [{ id: log.id, status: "pending" }]));
+        const taskConfig = buildVideoConfig({ ...effectiveConfig, ...log.config }, log.task.model || log.model);
+        let confirmedFailure = false;
+        let statusMessage = '已提交，正在查询状态';
+        try {
+            for (;;) {
+                const state = await pollVideoGenerationTask(configOverride || taskConfig, log.task, { expectedUserId: owner });
+                if (!active()) return;
+                if (state.status === "completed") {
+                    const stored = await storeGeneratedVideo(state.result, { expectedOwner: owner });
+                    if (!active()) return;
+                    const nextVideo: GeneratedVideo = {
+                        id: nanoid(),
+                        url: stored.url,
+                        storageKey: stored.storageKey,
+                        durationMs: Date.now() - log.createdAt,
+                        width: stored.width || 1280,
+                        height: stored.height || 720,
+                        bytes: stored.bytes,
+                        mimeType: stored.mimeType,
+                    };
+                    setResults([{ id: log.id, status: "success", video: nextVideo }]);
+                    if (agentTaskId) updateAgentTask(agentTaskId, { status: "succeeded", successCount: 1, failCount: 0, error: undefined });
+                    await saveLog({ ...log, status: "success", durationMs: nextVideo.durationMs, video: nextVideo, error: undefined });
+                    message.success(t("videoWorkbench.generated"));
+                    return;
+                }
+                if (state.status === "failed") { confirmedFailure = true; throw new Error(state.error); }
+                if (state.status === "unavailable") {
+                    setResults([{ id: log.id, status: "unavailable", error: state.error }]);
+                    if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", successCount: 0, failCount: 1, error: state.error });
+                    await saveLog({ ...log, status: "unavailable", durationMs: Date.now() - log.createdAt, error: state.error }, false);
+                    message.warning(state.error);
+                    return;
+                }
+                statusMessage = state.statusMessage || '已提交，等待处理';
+                setResults([{ id: log.id, status: 'pending', statusMessage }]);
+                if (state.review) {
+                    await saveLog({ ...log, status: 'pending', durationMs: Date.now() - log.createdAt }, false);
+                    return;
+                }
+                if (Date.now() - log.createdAt >= 60 * 60 * 1000) throw new Error("任务处理中");
+                await delay(5000);
+            }
+        } catch (error) {
+            if (!active()) return;
+            const errorMessage = error instanceof Error ? error.message : t("workbench.generationFailed");
+            if (confirmedFailure) {
+                setResults([{ id: log.id, status: "failed", error: errorMessage }]);
+                if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", successCount: 0, failCount: 1, error: errorMessage });
+                await saveLog({ ...log, status: "failed", durationMs: Date.now() - log.createdAt, error: errorMessage });
+                message.error(errorMessage);
+            } else {
+                setResults([{ id: log.id, status: "pending", statusMessage }]);
+                await saveLog({ ...log, status: "pending", durationMs: Date.now() - log.createdAt, error: undefined }, false);
+            }
+        } finally {
+            activeLogIdsRef.current.delete(activeKey);
+            if (active() && ![...activeLogIdsRef.current].some((key) => key.startsWith(`${epoch}:`))) {
+                setRunning(false);
+                setStartedAt(0);
+            }
+        }
+    };
+
+    const continueVideo = (log: GenerationLog) => {
+        if (!isCurrentView() || isTransferring || running) return;
+        previewGenerationLog(log);
+        setContinuation({ title: log.title, prompt: log.prompt });
+        setPrompt("");
+    };
+
+    const previewGenerationLog = (log: GenerationLog) => {
+        if (!isCurrentView()) return false;
+        if (isTransferring) { message.warning("参考素材正在处理，请等待完成后再回填记录"); return false; }
+        setPreviewLog(log);
+        setLogsOpen(false);
+        setContinuation(undefined);
+        setPrompt(log.prompt);
+        setReferences(log.references || []);
+        setReferenceVideos(log.referenceVideos || []);
+        setReferenceAudios(log.referenceAudios || []);
+        if (log.config.videoModel || log.model) updateConfig("videoModel", normalizeModelOptionValue(log.config.videoModel || log.model, effectiveConfig.channels));
+        updateConfig("videoRouteId", log.config.videoRouteId || "");
+        if (log.config.size) updateConfig("size", log.config.size);
+        if (log.config.vquality) updateConfig("vquality", log.config.vquality);
+        if (log.config.videoSeconds) updateConfig("videoSeconds", log.config.videoSeconds);
+        if (log.config.videoGenerateAudio) updateConfig("videoGenerateAudio", log.config.videoGenerateAudio);
+        if (log.config.videoWatermark) updateConfig("videoWatermark", log.config.videoWatermark);
+        if (log.config.videoMode) updateConfig("videoMode", log.config.videoMode);
+        setResults(log.status === "pending" || log.status === "unavailable" ? [{ id: log.id, status: log.status, error: log.error }] : log.video ? [{ id: log.video.id, status: "success", video: log.video }] : [{ id: log.id, status: "failed", error: log.error || t("workbench.generationFailed") }]);
+        const missing = historyGaps(log);
+        if (missing.length) message.warning(`${missing.join("；")}，请检查后再生成`);
+        return missing.length > 0;
+    };
+
+    const editedNavigation = useRef("");
+    useEffect(() => {
+        if (!["edit", "continue"].includes(searchParams.get("action") || "") || !targetRecord || !isCurrentView() || isTransferring) return;
+        const key = `${userId}:${sessionEpoch}:${location.key}`;
+        if (editedNavigation.current === key) return;
+        const log = logs.find(item => item.id === targetRecord);
+        if (!log) return;
+        editedNavigation.current = key;
+        if (searchParams.get("action") === "continue") continueVideo(log);
+        else void previewGenerationLog(log);
+        const params = new URLSearchParams(searchParams);
+        params.delete("action");
+        params.delete("image");
+        navigate({ pathname: location.pathname, search: `?${params}`, hash: location.hash }, { replace: true });
+    }, [targetRecord, logs, searchParams, location.key, userId, sessionEpoch, viewOwner, viewEpoch, isTransferring]);
+    if (!userId || viewOwner !== userId || viewEpoch !== sessionEpoch) return null;
+    const previewGaps = previewLog ? historyGaps({ ...previewLog, references, referenceVideos, referenceAudios }) : [];
+
+    return (
+        <div className="flex h-full flex-col overflow-hidden bg-muted text-foreground dark:bg-background dark:text-foreground page-surface">
+            <div className="flex min-h-0 flex-1">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div className="creation-top-actions flex shrink-0 items-center justify-between gap-2 px-4 py-2">
+                    <ActionButton variant="ghost" size="sm" label="新建创作" icon={<Plus className="size-4" />} isDisabled={isTransferring} onClick={createSession} />
+                    {/* 宽屏入口在右侧停靠栏，顶栏不再放重复按钮；窄屏没有停靠栏，仍保留 */}
+                    {narrowRecords ? <ActionButton variant="ghost" size="sm" label="生成记录" icon={<History className="size-4" />} onClick={() => setLogsOpen(true)} /> : null}
+                </div>
+                <CreationStream tasks={mixedLogs.map(entry => ({ id: entry.id, status: entry.log.status }))} onScrollTop={() => void showEarlierRecords()} composer={
+                    <div className="creation-composer mx-auto w-full max-w-[960px]">
+                        {previewGaps.length > 0 && <div role="status" className="mb-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-300">{previewGaps.join("；")}，请核对后再生成。</div>}
+                        <ChatComposer
+                            value={prompt}
+                            onSubmit={() => void generate()}
+                            elevation="none"
+                            input={<div className="thin-scrollbar max-h-[30dvh] space-y-2 overflow-y-auto" onDragOver={(event) => { if (!referenceOpen && !references.length && !referenceVideos.length && !referenceAudios.length) event.preventDefault(); }} onDrop={(event) => { if (!referenceOpen && !references.length && !referenceVideos.length && !referenceAudios.length) { event.preventDefault(); void transferReference(() => addReferences(event.dataTransfer.files)).catch(reportMediaError); } }}>
+                        <ContinuationNotice value={continuation} mode="video" onCancel={() => { setContinuation(undefined); }} />
+                                <div className="relative">
+                                    <CanvasPromptChipInput
+                                        value={prompt}
+                                        references={promptReferences}
+                                        onChange={setPrompt}
+                                        placeholder={continuation ? "例如：镜头推进慢一点，保留原来的场景…" : "描述你想生成的视频，或选择已有作品继续调整…"}
+                                        placeholderClassName="left-3 top-2 leading-7"
+                                        chipMode="label"
+                                        className="thin-scrollbar min-h-20 w-full rounded-lg border border-border bg-transparent px-3 py-2 pb-9 pr-10 text-sm leading-7 text-foreground focus:border-foreground/40"
+                                    />
+                                    <PromptOptimizeButton prompt={prompt} model={model} capability="video" disabled={running} onOptimized={setPrompt} />
+                                </div>
+                                {(referenceOpen || references.length > 0 || referenceVideos.length > 0 || referenceAudios.length > 0) && (
+                                    <div className="min-w-0">
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                    <span className="text-base font-semibold">{t("videoWorkbench.references")}</span>
+                                    <div className="flex gap-2">
+                                        <Button size="small" icon={<ClipboardPaste className="size-3.5" />} onClick={() => void transferReference(addReferencesFromClipboard)}>
+                                            {t("workbench.clipboard")}
+                                        </Button>
+                                        <Button size="small" icon={<Upload className="size-3.5" />} onClick={() => fileInputRef.current?.click()}>
+                                            {t("workbench.upload")}
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div
+                                    className={`hover-scrollbar hover-scrollbar-hint flex min-h-24 w-full min-w-0 max-w-full gap-2 overflow-x-scroll overflow-y-hidden rounded-lg border border-dashed p-2 pb-3 overscroll-x-contain transition-colors ${referenceDragTarget ? "border-foreground bg-muted/80 dark:border-white/20 dark:bg-muted/80" : "border-border dark:border-border"}`}
+                                    onDragEnter={handleReferenceDragEnter}
+                                    onDragOver={(event) => {
+                                        event.preventDefault();
+                                        event.dataTransfer.dropEffect = "copy";
+                                    }}
+                                    onDragLeave={handleReferenceDragLeave}
+                                    onDrop={handleReferenceDrop}
+                                >
+                                    {references.map((item, index) => (
+                                        <div key={item.id} className={`group relative size-20 shrink-0 overflow-hidden rounded-md border ${item.storageKey ? "border-amber-500" : "border-border"}`} title={item.storageKey ? t("common.localOnlyHint") : undefined}>
+                                            <Thumbnail src={previewUrlFor(item.storageKey) || item.dataUrl} alt={item.name} label={item.name} className="size-full" />
+                                            <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{index + 1}</span>
+                                            {item.storageKey && !item.uploading && !item.queued ? <button type="button" className="absolute left-1 top-7 z-30 rounded bg-amber-600/90 px-1.5 py-0.5 text-[9px] font-medium text-white" onClick={(event) => { event.stopPropagation(); void transferReference(() => retryReference(item)); }} title={t("common.retryUpload")}>{t("common.retryUpload")}</button> : null}
+                                            {!item.uploading && !item.queued && !item.error ? <ReferenceOrderButtons index={index} total={references.length} onMove={(offset) => setReferences((value) => moveListItem(value, index, offset))} /> : null}
+                                            <button type="button" className="absolute right-1 top-1 z-30 flex size-7 items-center justify-center rounded-full bg-black/70 text-white shadow-sm" onClick={() => setReferences((value) => value.filter((ref) => ref.id !== item.id))} aria-label={t("videoWorkbench.removeImage")}>
+                                                <Trash2 className="size-3.5" />
+                                            </button>
+                                            {item.uploading || item.queued || item.error ? (
+                                                <div className="absolute inset-x-0 bottom-0 z-20 bg-black/70 px-1.5 py-1" title={item.error}>
+                                                    {item.error ? <div className="text-center text-[9px] font-medium text-red-300">{t("common.uploadFailedStatus")}</div> : <>
+                                                        <div className="h-1 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full bg-[#D8FF3E] transition-[width]" style={{ width: `${item.queued ? 0 : item.progress ?? 0}%` }} /></div>
+                                                        <div className="mt-0.5 text-center text-[9px] text-white">{item.queued ? t("common.waitingStatus") : `${t("common.uploadingStatus")} ${item.progress ?? 0}%`}</div>
+                                                    </>}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    ))}
+                                    {!references.length && !referenceVideos.length && !referenceAudios.length ? <div className="flex min-w-full items-center justify-center text-sm text-muted-foreground">{referenceDragTarget ? t("videoWorkbench.dropReferences") : `暂无参考素材，可拖入图片、视频或音频；当前模型最多 ${limits.images} 张图片、${limits.videos} 个视频、${limits.audios} 个音频`}</div> : null}
+                                </div>
+                                {referenceVideos.length || referenceAudios.length ? (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        {referenceVideos.map((video) => (
+                                            <Tag key={video.id} closable onClose={() => setReferenceVideos((value) => value.filter((item) => item.id !== video.id))} className="m-0 max-w-full">
+                                                {t("videoWorkbench.videoReferences")} · <span className="inline-block max-w-40 truncate align-bottom">{video.name}</span>
+                                            </Tag>
+                                        ))}
+                                        {referenceAudios.map((audio) => (
+                                            <Tag key={audio.id} closable onClose={() => setReferenceAudios((value) => value.filter((item) => item.id !== audio.id))} className="m-0 max-w-full">
+                                                {t("videoWorkbench.audioReferences")} · <span className="inline-block max-w-40 truncate align-bottom">{audio.name}</span>
+                                            </Tag>
+                                        ))}
+                                    </div>
+                                ) : null}
+                            </div>
+                                )}
+                            </div>}
+                            footerActions={<div className="creation-actions w-full min-w-0"><CreationToolbar mode="video" onChat={openChat} busy={isTransferring || running} referencesOpen={referenceOpen} onSettings={() => setSettingsOpen(true)} onUpload={() => fileInputRef.current?.click()} onReferences={() => setReferenceOpen(value => !value)} onPrompts={() => setPromptDialogOpen(true)} onAssets={() => setAssetPickerOpen(true)} modelPicker={<ModelPicker config={config} value={model} capability="video" placeholder="选择视频模型" onChange={(value) => updateConfig("videoModel", value)} onRouteSelect={(value, routeId) => { updateConfig("videoModel", value); updateConfig("videoRouteId", routeId); }} />} /></div>}
+                            sendActions={<div className="creation-costs"><PromptOptimizationEstimate mode="video" /><CreditEstimate mode="video" /></div>}
+                            sendButton={<ActionButton variant="primary" size="lg" label={running ? "生成中" : continuation ? "生成新版本" : "开始生成"} icon={<Sparkles className="size-4" />} isLoading={running} isDisabled={!canGenerate || running || isTransferring} onClick={() => void generate()} />}
+
+                        />
+                    </div>
+                }>
+                    <div className="mx-auto w-full max-w-[960px] px-2 pb-8 pt-6">
+                        {(visibleHistory.hasEarlier || historyHasMore || otherHistory.more) && <Button type="text" className="creation-load-earlier" loading={loadingEarlier} onClick={() => void showEarlierRecords()}>加载更早记录</Button>}
+                        {otherHistory.error && <p className="mb-4 text-sm text-muted-foreground">{otherHistory.error}</p>}
+                        {mixedRecords.map((entry) => entry.kind === "other" ? <OtherCreationRecord onUseImage={image => void transferReference(() => insertPickedAsset({ kind: "image", dataUrl: image.dataUrl, storageKey: image.storageKey, title: entry.log.title })).catch(reportMediaError)} disabled={isTransferring} key={entry.log.id} log={entry.log} mode="image" /> : ((log: GenerationLog) => (
+                        <article id={`creation-record-${log.id}`} key={log.id} className="astryx-chat-message mb-12 max-w-[620px]">
+                            <CreationRequest prompt={log.prompt} />
+                            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">视频生成</span><span>{modelOptionLabel(effectiveConfig, log.model)}</span><span>{log.time}</span><span>{log.reconciliationRequired ? "待核对" : creationStatus(log.status)}</span></div>
+                            {log.video && <ResultVideoCard video={log.video} onDownload={downloadVideo} onSaveAsset={saveResultToAssets} />}
+                            {log.error && <div className="mt-2 text-sm text-muted-foreground">{friendlyErrorMessage(log.error)}</div>}
+                            <RecordActions archiveUrl={log.video?.url} primary={{ key: "continue", label: "调整后重生成", disabled: running || isTransferring, run: () => continueVideo(log) }} secondary={{ key: "details", label: "生成详情", run: () => setDetailsLog(log) }} more={[
+                                { key: "edit", label: "编辑原描述与参数", disabled: isTransferring, run: () => { previewGenerationLog(log); } },
+                                { key: "again", label: "按原参数再次生成", disabled: isTransferring, run: () => { if (!previewGenerationLog(log)) message.info("已回填原参数，请核对当前积分后点击开始生成"); } },
+                                ...(log.task && (log.status === "pending" || log.status === "unavailable") ? [{ key: "query", label: "查询任务进度", run: () => { void pollGenerationLog(log); } }] : []),
+                            ]} />
+                        </article>
+                    ))(entry.log))}
+                        {(running || (!logs.length && !otherHistory.logs.length) || (!previewLog && results.some((result) => (result.status === "failed" || result.status === "unavailable") && !logs.some((log) => log.id === result.id) || (result.video && !logs.some((log) => log.id === result.id || (log.video && sameVideo(log.video, result.video!))))))) && (<div className={!running && !results.length ? "creation-empty-wrap" : "max-w-[620px]"}>
+
+
+========================================================================
+FILE: web/src/pages/video/index.tsx
+LINES: 855-1220
+========================================================================
+                        {running && submittedPrompt && !logs.some(log => log.prompt === submittedPrompt) && <CreationRequest prompt={submittedPrompt} />}
+                        <div className={running || results.length ? "mb-4 flex items-center justify-between gap-3" : "hidden"}>
+                            <h2 className="text-sm text-muted-foreground">{running ? "正在生成视频…" : "生成结果"}</h2>
+                            {running ? <Tag className="m-0 px-2 py-1">{results.find(result => result.status === 'pending')?.statusMessage || '正在提交'} · {formatDuration(elapsedMs)}</Tag> : null}
+                        </div>
+                        {results.some((result) => result.status !== "pending") ? (
+                            <div className="grid gap-4">
+                                {results.map((result) => (result.status === "success" && result.video ? <ResultVideoCard key={result.id} video={result.video} onDownload={downloadVideo} onSaveAsset={saveResultToAssets} /> : result.status === "failed" ? <FailedVideoCard key={result.id} error={friendlyErrorMessage(result.error || t("workbench.generationFailed"))} onRetry={retryResult} /> : result.status === "unavailable" ? <div key={result.id} className="rounded-lg border border-amber-300 p-5 text-sm dark:border-amber-700">{result.error}</div> : null))}
+                            </div>
+                        ) : (
+                            <div className="flex min-h-32 flex-col items-center justify-center text-center">
+                                {running ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={results.find(result => result.status === 'pending')?.statusMessage || '正在提交'} /> : <div className="creation-empty"><span className="creation-empty-icon"><Sparkles /></span><h2>让想象动起来</h2><p>描述镜头、动作与氛围，或添加参考素材。<br />在这里开始你的视频创作。</p></div>}
+                            </div>
+                        )}
+                    </div>)}
+                    </div>
+                </CreationStream>
+                </div>
+                {/* 宽屏：生成记录停靠右侧，不再盖住合成器 */}
+                <CreationRecordsRail open={recordsRailOpen} count={logs.length} onToggle={() => setRecordsRailOpen((value) => !value)}>
+                    <LogPanel logs={logs} selectedLogIds={selectedLogIds} activeLogId={previewLog?.id} onSelectedLogIdsChange={setSelectedLogIds} onCreateSession={createSession} onDeleteSelected={() => setDeleteConfirmOpen(true)} onPreviewLog={previewGenerationLog} />
+                </CreationRecordsRail>
+            </div>
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*,audio/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                    void transferReference(() => addReferences(event.target.files)).catch(reportMediaError);
+                    event.target.value = "";
+                }}
+            />
+            <Drawer title={t("workbench.logs")} placement="bottom" size="large" open={logsOpen} onClose={() => setLogsOpen(false)}>
+                <LogPanel logs={logs} selectedLogIds={selectedLogIds} activeLogId={previewLog?.id} onSelectedLogIdsChange={setSelectedLogIds} onCreateSession={createSession} onDeleteSelected={() => setDeleteConfirmOpen(true)} onPreviewLog={previewGenerationLog} />
+            </Drawer>
+            <Drawer title={t("workbench.settings")} placement="bottom" height="82vh" rootClassName="creation-settings-drawer" open={settingsOpen} onClose={() => setSettingsOpen(false)}>
+                <div className="grid grid-cols-1 gap-3 pb-4 sm:grid-cols-2">
+                    <GenerationSettings config={effectiveConfig} model={model} updateConfig={updateConfig} openConfigDialog={openConfigDialog} />
+                </div>
+            </Drawer>
+            <Drawer title="生成详情" open={Boolean(detailsLog)} onClose={() => setDetailsLog(null)}>
+                {detailsLog && <div className="mb-4 space-y-2 text-sm">
+                    <p>生成模式：{detailsLog.config.videoMode === "reference" ? "多参考" : detailsLog.config.videoMode === "frames" ? "首尾帧" : "未记录"}</p>
+                    <p>声音：{detailsLog.config.videoGenerateAudio === "true" ? "开启" : detailsLog.config.videoGenerateAudio === "false" ? "关闭" : "未记录"} · 水印：{detailsLog.config.videoWatermark === "true" ? "开启" : detailsLog.config.videoWatermark === "false" ? "关闭" : "未记录"}</p>
+                </div>}
+                {detailsLog && <dl className="space-y-4 text-sm"><div><dt className="text-muted-foreground">提示词</dt><dd className="mt-1 whitespace-pre-wrap break-words">{detailsLog.prompt}</dd></div><div><dt className="text-muted-foreground">模型与参数</dt><dd className="mt-1">{modelOptionLabel(effectiveConfig, detailsLog.model)} · {detailsLog.size || "比例未记录"} · {detailsLog.resolution || "清晰度未记录"} · {detailsLog.seconds ? `${detailsLog.seconds} 秒` : "时长未记录"}</dd></div><div><dt className="text-muted-foreground">参考素材</dt><dd className="mt-1 break-words">{[...detailsLog.references, ...(detailsLog.referenceVideos || []), ...(detailsLog.referenceAudios || [])].map((item) => item.name).join("、") || "暂无可展示的参考素材"}{missingReferenceCount(detailsLog) ? `（另有 ${missingReferenceCount(detailsLog)} 项未保存，请重新添加）` : ""}</dd></div><div><dt className="text-muted-foreground">时间与状态</dt><dd className="mt-1">{detailsLog.time} · {detailsLog.reconciliationRequired ? "待核对" : creationStatus(detailsLog.status)}</dd></div><div><dt className="text-muted-foreground">实际积分</dt><dd className="mt-1">{detailsLog.creditsCharged == null ? "尚未结算或暂不可用" : `${detailsLog.creditsCharged} 积分`}</dd></div></dl>}
+            </Drawer>
+            <PromptSelectDialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen} onSelect={setPrompt} />
+            <AssetPickerModal open={assetPickerOpen} defaultTab="my-assets" onInsert={(payload) => void transferReference(() => insertPickedAsset(payload)).catch(reportMediaError)} onClose={() => setAssetPickerOpen(false)} />
+            <Modal title={t("workbench.deleteLogs")} open={deleteConfirmOpen} onCancel={() => setDeleteConfirmOpen(false)} onOk={deleteSelectedLogs} okText={t("common.delete")} okButtonProps={{ danger: true }} cancelText={t("common.cancel")}>
+                {t("workbench.deleteLogsConfirm", { count: selectedLogIds.length })}
+            </Modal>
+        </div>
+    );
+}
+
+function GenerationSettings({ config, model, updateConfig, openConfigDialog }: { config: AiConfig; model: string; updateConfig: UpdateAiConfig; openConfigDialog: (shouldPromptContinue?: boolean) => void }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const { t } = useTranslation();
+
+    return (
+        <>
+            <label className="col-span-2 block min-w-0 sm:col-span-1">
+                <span className="mb-1.5 block text-sm font-semibold sm:mb-2 sm:text-base">{t("workbench.model")}</span>
+                <ModelPicker config={config} value={model} onChange={(value) => updateConfig("videoModel", value)} onRouteSelect={(value, routeId) => { updateConfig("videoModel", value); updateConfig("videoRouteId", routeId); }} capability="video" fullWidth onMissingConfig={() => openConfigDialog(false)} />
+            </label>
+            <div className="col-span-2">
+                <VideoSettingsPanel config={config} model={model} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-4" />
+            </div>
+        </>
+    );
+}
+
+function sameVideo(a: GeneratedVideo, b: GeneratedVideo) {
+    return a.id === b.id || Boolean(a.url && a.url === b.url) || Boolean(a.storageKey && a.storageKey === b.storageKey);
+}
+
+function ResultVideoCard({ video, onDownload, onSaveAsset }: { video: GeneratedVideo; onDownload: (video: GeneratedVideo) => void; onSaveAsset: (video: GeneratedVideo) => void }) {
+    const { t } = useTranslation();
+    return (
+        <div className="creation-result-card overflow-hidden rounded-2xl border border-border bg-background dark:border-border">
+            <video onError={refreshExpiredMedia} onPlay={(event) => { const current = event.currentTarget; current.closest(".creation-stream")?.querySelectorAll("video").forEach((other) => { if (other !== current) other.pause(); }); }} src={video.url} preload="none" controls playsInline className="aspect-video w-full bg-black object-contain" />
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-border px-3 py-2.5 dark:border-border">
+                <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    {video.width > 0 && video.height > 0 && <span>{video.width}x{video.height}</span>}
+                    {video.bytes > 0 && <span>{formatBytes(video.bytes)}</span>}
+                    <span>{formatDuration(video.durationMs)}</span>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                    <Button size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => onSaveAsset(video)}>
+                        {t("common.addToAssets")}
+                    </Button>
+                    <Button size="small" icon={<Download className="size-3.5" />} onClick={() => onDownload(video)}>
+                        {t("common.download")}
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function FailedVideoCard({ error, onRetry }: { error: string; onRetry: () => void }) {
+    const { t } = useTranslation();
+    return (
+        <div className="overflow-hidden rounded-2xl border border-red-200 bg-red-50 dark:border-red-950 dark:bg-red-950/20">
+            <div className="flex aspect-video flex-col items-center justify-center gap-3 p-5 text-center">
+                <div className="text-sm font-medium text-red-600 dark:text-red-300">{t("workbench.failed")}</div>
+                <Typography.Paragraph ellipsis={{ rows: 4 }} className="!mb-0 !text-xs !text-red-500 dark:!text-red-300">
+                    {error}
+                </Typography.Paragraph>
+            </div>
+            <div className="flex justify-end border-t border-red-200 p-3 dark:border-red-950">
+                <Button size="small" danger onClick={onRetry}>
+                    {t("workbench.retry")}
+                </Button>
+            </div>
+        </div>
+    );
+}
+
+function LogPanel({
+    logs,
+    selectedLogIds,
+    activeLogId,
+    onSelectedLogIdsChange,
+    onCreateSession,
+    onDeleteSelected,
+    onPreviewLog,
+}: {
+    logs: GenerationLog[];
+    selectedLogIds: string[];
+    activeLogId?: string;
+    onSelectedLogIdsChange: (ids: string[]) => void;
+    onCreateSession: () => void;
+    onDeleteSelected: () => void;
+    onPreviewLog: (log: GenerationLog) => void;
+}) {
+    const { t } = useTranslation();
+    const allSelected = Boolean(logs.length) && selectedLogIds.length === logs.length;
+    const toggleAll = () => onSelectedLogIdsChange(allSelected ? [] : logs.map((log) => log.id));
+
+    return (
+        <>
+            {/* 标题/计数已移到停靠面板头部，这里只留吸顶工具栏 */}
+            <div className="crec-toolbar">
+                <Button size="small" icon={<Plus className="size-3.5" />} onClick={onCreateSession}>
+                    {t("workbench.new")}
+                </Button>
+                <Button size="small" icon={<CheckSquare className="size-3.5" />} disabled={!logs.length} onClick={toggleAll}>
+                    {allSelected ? t("common.cancel") : t("workbench.selectAll")}
+                </Button>
+                <Button size="small" danger icon={<Trash2 className="size-3.5" />} disabled={!selectedLogIds.length} onClick={onDeleteSelected}>
+                    {t("common.delete")}
+                </Button>
+            </div>
+            <div className="space-y-3">
+                {logs.map((log) => (
+                    <LogCard key={log.id} log={log} selected={selectedLogIds.includes(log.id)} active={activeLogId === log.id} onSelectedChange={(checked) => onSelectedLogIdsChange(checked ? [...selectedLogIds, log.id] : selectedLogIds.filter((id) => id !== log.id))} onClick={() => onPreviewLog(log)} />
+                ))}
+                {!logs.length ? <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-border text-center text-sm text-muted-foreground dark:border-border">{t("workbench.noLogs")}</div> : null}
+            </div>
+        </>
+    );
+}
+
+function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: GenerationLog; selected: boolean; active: boolean; onSelectedChange: (checked: boolean) => void; onClick: () => void }) {
+    const { t } = useTranslation();
+    return (
+        <button type="button" className={`block w-full rounded-lg border p-2 text-left transition ${active ? "border-foreground bg-brand-soft dark:bg-brand-soft" : "border-border bg-background hover:bg-muted dark:border-border dark:hover:bg-accent"}`} onClick={onClick}>
+            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
+                <Checkbox className="mt-0.5" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />
+                <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold leading-5">{log.title}</div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{log.size}</Tag>
+                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{formatVideoResolution(log.resolution)}</Tag>
+                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{log.seconds}s</Tag>
+                    </div>
+                </div>
+                <div className="grid justify-items-end gap-2">
+                    <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color={log.status === "success" ? "blue" : log.status === "pending" ? "processing" : log.status === "unavailable" ? "warning" : "red"}>
+                        {log.status === "unavailable" ? "结果不可用" : t(`workbench.${log.status === "success" ? "success" : log.status === "pending" ? "generating" : "failed"}`)}
+                    </Tag>
+                    <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="green">
+                        {formatDuration(log.durationMs)}
+                    </Tag>
+                </div>
+            </div>
+        </button>
+    );
+}
+
+function isCurrentUser(owner: string, sessionEpoch: number) {
+    const auth = useAuthStore.getState();
+    return auth.ready && auth.user?.id === owner && auth.sessionEpoch === sessionEpoch;
+}
+
+async function readStoredLogs(owner: string, pager: GenerationHistoryPager, loadMore = false) {
+    if (typeof window === "undefined") return { items: [] as GenerationLog[], hasMore: false };
+    const local = await videoLogStorage.list<GenerationLog>(owner).catch(() => [] as GenerationLog[]);
+    try {
+        const cloud = loadMore ? await pager.loadMore() : await pager.refresh();
+        const remote = cloud.logs as unknown as GenerationLog[];
+        return { items: await Promise.all(mergeGenerationHistory(local, remote, cloud.hiddenTaskIds).map(normalizeLog)), hasMore: cloud.hasMore };
+    } catch {
+        if (loadMore) throw new Error("加载更早记录失败，请重试");
+        return { items: (await Promise.all(local.map(normalizeLog))).sort((a,b)=>b.createdAt-a.createdAt), hasMore: false };
+    }
+}
+
+async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {
+    const video = log.video?.storageKey ? { ...log.video, url: await resolveMediaUrl(log.video.storageKey, log.video.url) } : log.video;
+    const references = await Promise.all(
+        (log.references || []).map(async (item) => {
+            void ensureImagePreview(item.storageKey);
+            return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
+        }),
+    );
+    const config = normalizeLogConfig(log);
+    return {
+        serverTaskIds: log.serverTaskIds,
+        creditsCharged: log.creditsCharged,
+        reconciliationRequired: log.reconciliationRequired,
+        referenceCount: log.referenceCount,
+        id: log.id || nanoid(),
+        createdAt: log.createdAt || Date.now(),
+        title: log.title || log.model || i18n.t("workbench.untitled"),
+        prompt: log.prompt || "",
+        time: log.time || new Date().toLocaleString(i18n.resolvedLanguage, { hour12: false }),
+        model: log.model || config.videoModel || "",
+        config,
+        references,
+        referenceVideos: await Promise.all((log.referenceVideos || []).map(async (item) => ({ ...item, url: await resolveMediaUrl(item.storageKey, item.url) }))),
+        referenceAudios: await Promise.all((log.referenceAudios || []).map(async (item) => ({ ...item, url: await resolveMediaUrl(item.storageKey, item.url) }))),
+        durationMs: log.durationMs || 0,
+        size: log.size || config.size || "",
+        resolution: log.resolution || config.vquality ? normalizeResolution(log.resolution || config.vquality) : "",
+        seconds: log.seconds || config.videoSeconds || "",
+        status: log.status || "success",
+        task: log.task,
+        video,
+        error: log.error,
+    };
+}
+
+function serializeLog(log: GenerationLog): GenerationLog {
+    return {
+        ...log,
+        references: log.references.map((item) => ({ ...item, dataUrl: item.storageKey ? "" : item.dataUrl })),
+        referenceVideos: log.referenceVideos?.map((item) => ({ ...item, url: item.storageKey ? "" : item.url })),
+        referenceAudios: log.referenceAudios?.map((item) => ({ ...item, url: item.storageKey ? "" : item.url })),
+        video: log.video?.storageKey ? { ...log.video, url: "" } : log.video,
+    };
+}
+
+function moveListItem<T>(items: T[], index: number, offset: number) {
+    const targetIndex = index + offset;
+    if (targetIndex < 0 || targetIndex >= items.length) return items;
+    const next = [...items];
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    return next;
+}
+
+function ReferenceOrderButtons({ index, total, onMove }: { index: number; total: number; onMove: (offset: number) => void }) {
+    if (total <= 1) return null;
+    return (
+        <div className="absolute inset-x-1 bottom-1 flex justify-between">
+            <Button size="small" className="!h-6 !w-6 !min-w-6 !rounded-full !bg-white/85 !p-0 !shadow-sm" icon={<ArrowLeft className="size-3" />} disabled={index <= 0} onClick={() => onMove(-1)} />
+            <Button size="small" className="!h-6 !w-6 !min-w-6 !rounded-full !bg-white/85 !p-0 !shadow-sm" icon={<ArrowRight className="size-3" />} disabled={index >= total - 1} onClick={() => onMove(1)} />
+        </div>
+    );
+}
+
+function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
+    return {
+        model: log.config?.model || log.model || "",
+        videoModel: log.config?.videoModel || log.model || "",
+        videoRouteId: log.config?.videoRouteId || "",
+        size: log.config?.size || log.size || "",
+        vquality: log.config?.vquality || log.resolution ? normalizeResolution(log.config?.vquality || log.resolution || "") : "",
+        videoSeconds: log.config?.videoSeconds || log.seconds || "",
+        videoGenerateAudio: log.config?.videoGenerateAudio || "",
+        videoWatermark: log.config?.videoWatermark || "",
+        videoMode: log.config?.videoMode === "reference" ? "reference" : log.config?.videoMode === "frames" ? "frames" : "",
+    };
+}
+
+function missingReferenceCount(log: GenerationLog) {
+    const available = log.references.length + (log.referenceVideos?.length || 0) + (log.referenceAudios?.length || 0);
+    return Math.max(0, (log.referenceCount ?? 0) - available);
+}
+
+function historyGaps(log: GenerationLog) {
+    const missing: string[] = [];
+    if (!log.config.size || !log.config.vquality || !log.config.videoSeconds || !log.config.videoGenerateAudio || !log.config.videoWatermark || !log.config.videoMode) missing.push("部分历史参数未保存");
+    const references = missingReferenceCount(log);
+    if (references) missing.push(`${references} 项参考素材未保存，请重新添加`);
+    return missing;
+}
+
+function buildLog({ prompt, model, config, references, referenceVideos, referenceAudios, durationMs, status, task, video, error }: { prompt: string; model: string; config: AiConfig; references: ReferenceImage[]; referenceVideos?: ReferenceVideo[]; referenceAudios?: ReferenceAudio[]; durationMs: number; status: GenerationLog["status"]; task?: VideoGenerationTask; video?: GeneratedVideo; error?: string }): GenerationLog {
+    const logConfig = {
+        model: config.model,
+        videoModel: config.videoModel,
+        videoRouteId: config.videoRouteId || "",
+        size: config.size,
+        vquality: normalizeResolution(config.vquality),
+        videoSeconds: config.videoSeconds,
+        videoGenerateAudio: config.videoGenerateAudio,
+        videoWatermark: config.videoWatermark,
+        videoMode: config.videoMode === "reference" ? "reference" : "frames",
+    };
+    return {
+        id: nanoid(),
+        createdAt: Date.now(),
+        title: prompt.slice(0, 12) || i18n.t("workbench.untitled"),
+        prompt,
+        time: new Date().toLocaleString(i18n.resolvedLanguage, { hour12: false }),
+        model,
+        config: logConfig,
+        references,
+        referenceVideos,
+        referenceAudios,
+        durationMs,
+        size: logConfig.size,
+        resolution: logConfig.vquality,
+        seconds: logConfig.videoSeconds,
+        status,
+        task,
+        video,
+        error,
+    };
+}
+
+function buildVideoConfig(config: AiConfig, model: string): AiConfig {
+    return {
+        ...config,
+        model,
+        videoModel: model,
+        size: normalizeVideoSize(config.size),
+        videoSeconds: normalizeVideoSeconds(config.videoSeconds),
+        vquality: normalizeResolution(config.vquality),
+        videoGenerateAudio: String(boolConfig(config.videoGenerateAudio, true)),
+        videoWatermark: String(boolConfig(config.videoWatermark, false)),
+        videoMode: config.videoMode === "reference" ? "reference" : "frames",
+    };
+}
+
+function normalizeVideoSeconds(value: string) {
+    if (String(value).trim() === "-1") return "-1";
+    return clampVideoSeconds(value);
+}
+
+function normalizeVideoSize(value: string) {
+    return normalizeVideoSizeValue(value);
+}
+
+function normalizeResolution(value: string) {
+    return normalizeVideoResolutionValue(value);
+}
+
+function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+
+========================================================================
+FILE: web/src/router.tsx
+LINES: 1-101
+========================================================================
+import { lazy, Suspense, useEffect } from "react";
+import { createBrowserRouter, Navigate, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+
+import { AuthDialogHost } from "@/components/layout/lazy-overlays";
+import { AnalyticsTracker } from "@/components/layout/analytics-tracker";
+import { RequireAuth } from "@/components/layout/require-auth";
+import { RouteErrorPage } from "@/components/layout/route-error";
+import { PageSkeleton } from "@/components/loading/page-skeleton";
+import UserLayout from "@/layouts/user-layout";
+import HomePage from "@/pages/home";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { GUEST_DRAFT_KEY, storePendingPrompt } from "@/lib/pending-prompt";
+import NotFound from "@/pages/not-found";
+
+const AccountPage = lazy(() => import("@/pages/account"));
+const AdminPage = lazy(() => import("@/pages/admin"));
+const AssetsPage = lazy(() => import("@/pages/assets"));
+const AuthGate = lazy(() => import("@/pages/auth").then((module) => ({ default: module.AuthGate })));
+const CanvasPage = lazy(() => import("@/pages/canvas"));
+const CanvasProjectPage = lazy(() => import("@/pages/canvas/project"));
+const ChatPage = lazy(() => import("@/pages/chat"));
+const ImagePage = lazy(() => import("@/pages/image"));
+const PromptsPage = lazy(() => import("@/pages/prompts"));
+const VideoPage = lazy(() => import("@/pages/video"));
+const GuestCreation = lazy(() => import("@/pages/home/guest-creation").then((module) => ({ default: module.GuestCreation })));
+
+function CreationHome() {
+    const [params] = useSearchParams();
+    const user = useAuthStore((state) => state.user);
+    const ready = useAuthStore((state) => state.ready);
+    const navigate = useNavigate();
+    useEffect(() => {
+        if (!user || !ready) return;
+        try {
+            const raw = sessionStorage.getItem(GUEST_DRAFT_KEY);
+            if (!raw) return;
+            const draft = JSON.parse(raw) as { mode?: string; prompt?: string };
+            sessionStorage.removeItem(GUEST_DRAFT_KEY);
+            if (typeof draft.prompt !== "string") return;
+            const mode = draft.mode === "video" ? "video" : "image";
+            storePendingPrompt(mode, draft.prompt, [], user.id);
+            navigate(`/create?mode=${mode}`, { replace: true });
+        } catch { /* a bad guest draft must not block the workspace */ }
+    }, [user?.id, ready, navigate]);
+    if (!ready) return <PageSkeleton />;
+    return user ? (params.get("mode") === "chat" ? <ChatPage key={`${user.id}:${useAuthStore.getState().sessionEpoch}`} /> : params.get("mode") === "video" ? <VideoPage /> : <ImagePage />) : <GuestCreation />;
+}
+
+function HomeEntry() {
+    const location = useLocation();
+    const params = new URLSearchParams(location.search);
+    if (params.has("mode") || params.has("record")) return <Navigate to={{ pathname: "/create", search: location.search, hash: location.hash }} replace />;
+    return <HomePage landing />;
+}
+
+function LegacyCreation({ mode }: { mode: "image" | "video" }) {
+    const location = useLocation();
+    const params = new URLSearchParams(location.search);
+    params.set("mode", mode);
+    return <Navigate to={{ pathname: "/create", search: `?${params}`, hash: location.hash }} replace />;
+}
+
+export const router = createBrowserRouter([
+    {
+        element: (
+            <Suspense fallback={<PageSkeleton />}>
+                <Outlet />
+                <AuthDialogHost />
+            </Suspense>
+        ),
+        errorElement: <RouteErrorPage />,
+        children: [
+            {
+                element: (
+                    <UserLayout>
+                        <AnalyticsTracker />
+                        <Outlet />
+                    </UserLayout>
+                ),
+                children: [
+                    { path: "/", element: <HomeEntry /> },
+                    { path: "/create", element: <CreationHome /> },
+                    { path: "/explore", element: <HomePage /> },
+                    { path: "/image", element: <RequireAuth><LegacyCreation mode="image" /></RequireAuth> },
+                    { path: "/video", element: <RequireAuth><LegacyCreation mode="video" /></RequireAuth> },
+                    { path: "/assets", element: <RequireAuth><AssetsPage /></RequireAuth> },
+                    { path: "/prompts", element: <RequireAuth><PromptsPage /></RequireAuth> },
+                    { path: "/models", element: <Navigate to="/" replace /> },
+                    { path: "/canvas", element: <RequireAuth><CanvasPage /></RequireAuth> },
+                    { path: "/canvas/:id", element: <RequireAuth><CanvasProjectPage /></RequireAuth> },
+                    { path: "/login", element: <AuthGate mode="login" /> },
+                    { path: "/register", element: <AuthGate mode="register" /> },
+                    { path: "/forgot-password", element: <AuthGate mode="reset" /> },
+                    { path: "/account", element: <RequireAuth><AccountPage /></RequireAuth> },
+                ],
+            },
+            { path: "/admin", element: <AdminPage /> },
+            { path: "*", element: <NotFound /> },
+        ],
+    },
+]);
+
+
+========================================================================
+FILE: web/src/services/api/account-headers.ts
+LINES: 1-10
+========================================================================
+export function expectedAccountHeaders(requestUrl: string, expectedUserId?: string): Record<string, string> {
+    if (!expectedUserId || typeof window === "undefined") return {};
+    try {
+        const url = new URL(requestUrl, window.location.origin);
+        if (url.origin === window.location.origin && /^\/api\/v1(?:\/|$)/.test(url.pathname)) {
+            return { "X-Sundas-User": expectedUserId };
+        }
+    } catch { /* 无效地址会由请求处理报告 */ }
+    return {};
+}
+
+
+========================================================================
+FILE: web/src/services/api/admin/access.ts
+LINES: 1-14
+========================================================================
+import type { ApiRequestInit } from "../client";
+type Request = <T = unknown>(path: string, init?: ApiRequestInit) => Promise<T>;
+export type AdminRole = { id: string; code: string; name: string; description: string; isSystem: boolean; permissions: string[]; userCount: number };
+export type Administrator = { id: string; email: string; displayName: string; status: string; roleIds: string[]; roleNames: string[] };
+export const accessApi = (request: Request) => ({
+    me: () => request<{ permissions: string[] }>("/api/admin/me"),
+    roles: () => request<{ roles: AdminRole[]; permissions: string[] }>("/api/admin/roles"),
+    administrators: () => request<{ administrators: Administrator[] }>("/api/admin/administrators"),
+    saveRole: (id: string | undefined, body: unknown) => request(id ? `/api/admin/roles/${id}` : "/api/admin/roles", { method: id ? "PATCH" : "POST", json: body }),
+    deleteRole: (id: string) => request(`/api/admin/roles/${id}`, { method: "DELETE" }),
+    addAdmin: (userId: string, roles: string[]) => request("/api/admin/administrators", { method: "POST", json: { userId, roles } }),
+    assign: (id: string, roles: string[]) => request(`/api/admin/administrators/${id}/roles`, { method: "PUT", json: { roles } }),
+    remove: (id: string) => request(`/api/admin/administrators/${id}`, { method: "DELETE" }),
+});
+
+
+========================================================================
+FILE: web/src/services/api/admin/analytics.ts
+LINES: 1-10
+========================================================================
+import type { ApiRequestInit } from "../client";
+type Request = <T=unknown>(path:string,init?:ApiRequestInit)=>Promise<T>;
+export type Summary={total:number;succeeded:number;failed:number;queued:number;running:number;pending:number;creditsCharged:number;creditsHeld:number;successRate:number|null;estimatedCostCents:number|null;noSnapshot:number};
+export type StatsRow={channelId:string|null;channelName:string|null;modelId:string|null;modelName:string;type:string;total:number;succeeded:number;failed:number;queued:number;running:number;pending:number;creditsCharged:string;creditsHeld:string};
+export const analyticsApi=(request:Request)=>({
+    tasks:(query:URLSearchParams)=>request<{summary:Summary;items:StatsRow[]}>(`/api/admin/analytics/tasks?${query}`),
+    errors:(query:URLSearchParams)=>request<{items:{category:string;count:number}[]}>(`/api/admin/analytics/task-errors?${query}`),
+    channel:(id:string)=>request<{channel:Record<string,unknown>;models:Record<string,unknown>[];summary:Summary}>(`/api/admin/channels/${encodeURIComponent(id)}/overview`),
+    model:(id:string)=>request<{model:Record<string,unknown>;summary:Summary}>(`/api/admin/models/${encodeURIComponent(id)}/overview`),
+});
+
+
+========================================================================
+FILE: web/src/services/api/admin/credit-review.ts
+LINES: 1-7
+========================================================================
+import type { ApiRequestInit } from "../client";
+type Request = <T=unknown>(path:string,init?:ApiRequestInit)=>Promise<T>;
+export type IssueReview={id:string;state:string;note:string;operator:string;createdAt:string};
+export const creditReviewApi=(request:Request)=>({
+ list:(issueType:string,targetId:string)=>request<{items:IssueReview[]}>(`/api/admin/credit-issues/reviews?${new URLSearchParams({issueType,targetId})}`),
+ add:(issueType:string,targetId:string,state:string,note:string)=>request('/api/admin/credit-issues/reviews',{method:'POST',json:{issueType,targetId,state,note}}),
+});
+
+
+========================================================================
+FILE: web/src/services/api/admin/dashboard.ts
+LINES: 1-3
+========================================================================
+import type { ApiRequestInit } from "../client";
+type Request=<T=unknown>(path:string,init?:ApiRequestInit)=>Promise<T>;
+export const adminDashboardApi=(request:Request)=>({todos:()=>request<{items:{key:string;label:string;count:number;tab:string}[]}>("/api/admin/dashboard/todos")});
+
+
+========================================================================
+FILE: web/src/services/api/admin/prompts.ts
+LINES: 1-14
+========================================================================
+import type { ApiRequestInit } from "../client";
+
+type Request = <T = unknown>(path: string, init?: ApiRequestInit) => Promise<T>;
+export type PromptSource = { id: string; name: string; url: string; homepage: string; enabled: boolean; promptCount: number; lastSyncAt: string | null; lastError: string };
+export type PromptJob = { id: string; trigger: string; status: string; createdAt: string; startedAt: string | null; finishedAt: string | null; error: string; requestedByEmail: string | null };
+export type PromptJobSource = { sourceId: string; sourceName: string; status: string; fetched: number; kept: number; filtered: number; error: string; startedAt: string | null; finishedAt: string | null };
+export const promptAdminApi = (request: Request) => ({
+    save: (source: { id: string; name: string; url: string; homepage: string; enabled: boolean }, creating: boolean) => request(creating ? '/api/admin/prompt-sources' : `/api/admin/prompt-sources/${encodeURIComponent(source.id)}`, { method: creating ? 'POST' : 'PATCH', json: source }),
+    sources: () => request<{ sources: PromptSource[] }>("/api/admin/prompt-sources"),
+    enable: (id: string, enabled: boolean) => request(`/api/admin/prompt-sources/${encodeURIComponent(id)}`, { method: "PATCH", json: { enabled } }),
+    sync: (sourceId?: string) => request<{ jobId: string; status: string; reused: boolean; existingJobIds: string[] }>("/api/admin/prompt-syncs", { method: "POST", json: sourceId ? { sourceId } : {} }),
+    jobs: (page: number, sourceId = "", status = "") => request<{ items: PromptJob[]; total: number; pageSize: number }>(`/api/admin/prompt-syncs?${new URLSearchParams({ page: String(page), sourceId, status })}`),
+    job: (id: string) => request<{ job: PromptJob; sources: PromptJobSource[] }>(`/api/admin/prompt-syncs/${encodeURIComponent(id)}`),
+});
+
+
+========================================================================
+FILE: web/src/services/api/admin/tasks.ts
+LINES: 1-11
+========================================================================
+import type { ApiRequestInit } from "../client";
+type Request = <T = unknown>(path: string, init?: ApiRequestInit) => Promise<T>;
+export type AdminTask = { id:string; userId:string; email:string; type:string; modelId:string | null; modelName:string; status:string; channelId:string | null; channelName:string | null; upstreamId:string | null; creditsHeld:number; creditsCharged:number; error:string | null; createdAt:string; finishedAt:string | null; reconciliationRequired:boolean; params?:Record<string,unknown>; executionSnapshot?:Record<string,unknown>|null; resultSummary?:Record<string,unknown>|null };
+export type Review = { id:string; state:string; note:string; operator:string; createdAt:string };
+export const adminTaskApi = (request: Request) => ({
+    upstream: (id:string) => request<{checkedAt:string;status?:string|null;progress?:string|null;message:string}>(`/api/admin/tasks/${encodeURIComponent(id)}/upstream`),
+    list: (query: URLSearchParams) => request<{items:AdminTask[]; total:number; pageSize:number}>(`/api/admin/tasks?${query}`),
+    detail: (id:string) => request<{ task:AdminTask; reservations:Record<string,unknown>[]; ledger:Record<string,unknown>[]; media:{id:string;kind:string;mime:string;bytes:string;url:string}[]; textResult:string|null }>(`/api/admin/tasks/${encodeURIComponent(id)}`),
+    reviews: (id:string) => request<{items:Review[]}>(`/api/admin/tasks/${encodeURIComponent(id)}/reviews`),
+    review: (id:string,state:string,note:string) => request(`/api/admin/tasks/${encodeURIComponent(id)}/reviews`,{method:"POST",json:{state,note}}),
+});
+
+
+========================================================================
+FILE: web/src/services/api/admin/users.ts
+LINES: 1-9
+========================================================================
+import type { ApiRequestInit } from "../client";
+type Request = <T = unknown>(path: string, init?: ApiRequestInit) => Promise<T>;
+export type UserDetails = { user: { id: string; email: string; displayName: string; role: string; status: string; createdAt: string; lastLoginAt: string | null }; wallet: Record<string, unknown> | null; subscriptions: Record<string, unknown>[] };
+export const adminUserApi = (request: Request) => ({
+    detail: (id: string) => request<UserDetails>(`/api/admin/users/${encodeURIComponent(id)}`),
+    records: (id: string, kind: string, page: number) => request<{ items: Record<string, unknown>[]; total: number; pageSize: number }>(`/api/admin/users/${encodeURIComponent(id)}/records/${kind}?page=${page}`),
+    nickname: (id: string, displayName: string) => request(`/api/admin/users/${encodeURIComponent(id)}`, { method: "PATCH", json: { displayName } }),
+    resetPassword: (id: string, password: string, note: string) => request(`/api/admin/users/${encodeURIComponent(id)}/reset-password`, { method: "POST", json: { password, note } }),
+});
+
+
+========================================================================
+FILE: web/src/services/api/audio.ts
+LINES: 1-200
+========================================================================
+import { assertMediaOwner, currentMediaOwner } from "@/services/cloud-media";
+import axios from "axios";
+
+import i18n from "@/i18n";
+import { audioMimeType, normalizeAudioFormatValue, normalizeAudioSpeedValue, normalizeAudioVoiceValue } from "@/lib/audio-generation";
+import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
+import { buildApiUrl, resolveModelRequestConfig, resolveModelScript, withLocalProxy, type AiConfig } from "@/stores/use-config-store";
+import { runModelPlugin } from "./model-plugin";
+import { expectedAccountHeaders } from "./account-headers";
+import { refreshGenerationWallet } from "./generation-wallet";
+
+type RequestOptions = { signal?: AbortSignal; expectedUserId?: string };
+const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
+
+function aiApiUrl(config: AiConfig, path: string) {
+    return buildApiUrl(config.baseUrl, path);
+}
+
+function aiHeaders(config: AiConfig) {
+    return {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/json",
+    };
+}
+
+type AudioReceipt = { taskId?: string; status: 'pending' | 'review' | 'failed' | 'completed'; error?: string; media?: UploadedFile & { mediaId: string; objectKey: string } };
+
+export async function requestStoredAudio(config: AiConfig, prompt: string, options: RequestOptions & { requestId: string }): Promise<UploadedFile> {
+    const owner = options.expectedUserId ?? currentMediaOwner();
+    assertMediaOwner(owner, options.signal);
+    const selected = config.model || config.audioModel;
+    const requestConfig = resolveModelRequestConfig(config, selected);
+    if (resolveModelScript(config, selected) || requestConfig.apiKey !== 'server') {
+        return storeGeneratedAudio(await requestAudioGeneration(config, prompt, options), config.audioFormat, { signal: options.signal, expectedOwner: options.expectedUserId });
+    }
+    const url = aiApiUrl(requestConfig, '/audio/speech');
+    const headers = { ...aiHeaders(requestConfig), ...expectedAccountHeaders(url, options.expectedUserId) };
+    const resultUrl = aiApiUrl(requestConfig, `/audio/operations/${options.requestId}`);
+    const readResult = async () => (await axios.get<AudioReceipt>(resultUrl, { headers, signal: options.signal })).data;
+    try {
+        let result: AudioReceipt;
+        try {
+            result = (await axios.post<AudioReceipt>(url, {
+                model: requestConfig.model.trim(), input: prompt,
+                voice: normalizeAudioVoiceValue(config.audioVoice), response_format: normalizeAudioFormatValue(config.audioFormat),
+                speed: Number(normalizeAudioSpeedValue(config.audioSpeed)),
+                ...(config.audioInstructions.trim() ? { instructions: config.audioInstructions.trim() } : {}),
+            }, { headers: { ...headers, 'X-Sundas-Audio-Result': 'json', 'Idempotency-Key': options.requestId }, signal: options.signal })).data;
+        } catch (error) {
+            if (options.signal?.aborted || (axios.isAxiosError(error) && error.response?.status && error.response.status < 500)) throw error;
+            result = await readResult();
+        }
+        if (result.status !== 'completed' || !result.media) throw new Error(result.error || '原音频任务处理中，请稍后重试以查询原结果');
+        assertMediaOwner(owner, options.signal);
+        window.dispatchEvent(new CustomEvent('sundas:generation-updated', { detail: { owner: options.expectedUserId } }));
+        return { ...result.media, taskId: result.taskId };
+    } catch (error) { throw new Error(readAxiosError(error, apiText('audioGenerationFailed'))); }
+    finally { refreshGenerationWallet(options.expectedUserId); }
+}
+
+export async function requestAudioGeneration(config: AiConfig, prompt: string, options?: RequestOptions): Promise<Blob> {
+    try { return await requestAudioGenerationInner(config, prompt, options); }
+    finally { refreshGenerationWallet(options?.expectedUserId); }
+}
+
+async function requestAudioGenerationInner(config: AiConfig, prompt: string, options?: RequestOptions): Promise<Blob> {
+    const requestConfig = resolveModelRequestConfig(config, config.model || config.audioModel);
+    const model = requestConfig.model.trim();
+    const format = normalizeAudioFormatValue(config.audioFormat);
+    const script = resolveModelScript(config, config.model || config.audioModel);
+    if (script) {
+        if (!model) throw new Error(apiText("audioModelRequired"));
+        if (!requestConfig.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
+        if (!requestConfig.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
+        try {
+            const result = await runModelPlugin({
+                capability: "audio",
+                script,
+                config: requestConfig,
+                prompt,
+                params: { voice: normalizeAudioVoiceValue(config.audioVoice), format, speed: normalizeAudioSpeedValue(config.audioSpeed), instructions: config.audioInstructions.trim() },
+                signal: options?.signal,
+            });
+            return await audioPluginBlob(result, format);
+        } catch (error) {
+            throw new Error(readAxiosError(error, apiText("audioGenerationFailed")));
+        }
+    }
+    assertAudioConfig(requestConfig, model);
+    const instructions = config.audioInstructions.trim();
+
+    try {
+        const response = await axios.post<Blob>(
+            aiApiUrl(requestConfig, "/audio/speech"),
+            {
+                model,
+                input: prompt,
+                voice: normalizeAudioVoiceValue(config.audioVoice),
+                response_format: format,
+                speed: Number(normalizeAudioSpeedValue(config.audioSpeed)),
+                ...(instructions ? { instructions } : {}),
+            },
+            { headers: { ...aiHeaders(requestConfig), ...expectedAccountHeaders(aiApiUrl(requestConfig, "/audio/speech"), options?.expectedUserId) }, responseType: "blob", signal: options?.signal },
+        );
+        await assertAudioBlob(response.data);
+        return response.data.type.startsWith("audio/") ? response.data : new Blob([response.data], { type: audioMimeType(format) });
+    } catch (error) {
+        throw new Error(readAxiosError(error, apiText("audioGenerationFailed")));
+    }
+}
+
+async function audioPluginBlob(result: unknown, format: string): Promise<Blob> {
+    if (result instanceof Blob) return result.type.startsWith("audio/") ? result : new Blob([result], { type: audioMimeType(format) });
+    let source = "";
+    if (typeof result === "string") source = result;
+    else if (result && typeof result === "object") {
+        const record = result as Record<string, unknown>;
+        source = typeof record.b64_json === "string" ? record.b64_json : typeof record.data === "string" ? record.data : typeof record.url === "string" ? record.url : "";
+    }
+    if (!source) throw new Error(apiText("scriptNoAudio"));
+    const url = source.startsWith("data:") || /^https?:/i.test(source) ? source : `data:${audioMimeType(format)};base64,${source}`;
+    const blob = await (await fetch(withLocalProxy(url))).blob();
+    return blob.type.startsWith("audio/") ? blob : new Blob([blob], { type: audioMimeType(format) });
+}
+
+export async function storeGeneratedAudio(blob: Blob, format = "mp3", options?: { expectedOwner?: string | null; signal?: AbortSignal }): Promise<UploadedFile> {
+    const audio = blob.type.startsWith("audio/") ? blob : new Blob([blob], { type: audioMimeType(format) });
+    return uploadMediaFile(audio, "audio", options);
+}
+
+function assertAudioConfig(config: AiConfig, model: string) {
+    if (!model) throw new Error(apiText("audioModelRequired"));
+    if (!config.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
+    if (!config.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
+    if (config.apiFormat === "gemini") throw new Error(apiText("geminiAudioUnsupported"));
+}
+
+async function assertAudioBlob(blob: Blob) {
+    if (!blob.type.includes("json")) return;
+    let payload: { code?: number; msg?: string; error?: { message?: string } };
+    try {
+        payload = JSON.parse(await blob.text()) as { code?: number; msg?: string; error?: { message?: string } };
+    } catch {
+        return;
+    }
+    if (typeof payload.code === "number" && payload.code !== 0) throw new Error(payload.msg || apiText("audioGenerationFailed"));
+    if (payload.error?.message) throw new Error(payload.error.message);
+}
+
+function readApiErrorMessage(value: unknown): string {
+    if (!value) return "";
+    if (typeof value === "string") {
+        try {
+            const parsed = JSON.parse(value);
+            const inner = readApiErrorMessage(parsed) || value;
+            if (inner === value && typeof parsed === "object" && Object.keys(parsed).length === 0) return "";
+            return inner;
+        } catch {
+            if (/<[a-z][\s\S]*>/i.test(value)) return apiText("htmlError", { preview: `${value.slice(0, 80)}...` });
+            return value;
+        }
+    }
+    if (typeof value !== "object") return "";
+    const payload = value as { msg?: unknown; message?: unknown; error?: unknown; detail?: unknown };
+    const errorMsg =
+        typeof payload.error === "string"
+            ? payload.error
+            : (payload.error as { message?: unknown })?.message;
+    return (
+        readApiErrorMessage(payload.msg) ||
+        readApiErrorMessage(payload.message) ||
+        readApiErrorMessage(errorMsg) ||
+        readApiErrorMessage(payload.detail) ||
+        ""
+    );
+}
+
+function readAxiosError(error: unknown, fallback: string) {
+    if (axios.isCancel(error)) return apiText("requestCanceled");
+    if (axios.isAxiosError(error)) {
+        if (!error.response && error.code === "ERR_NETWORK") return apiText("requestFailed");
+        const responseData = error.response?.data;
+        const apiMsg = readApiErrorMessage(responseData);
+        if (apiMsg) return apiMsg;
+        const statusMsg = statusMessage(error.response?.status, fallback);
+        if (statusMsg) return statusMsg;
+        return error.message || fallback;
+    }
+    if (error instanceof DOMException && error.name === "AbortError") return apiText("requestCanceled");
+    return error instanceof Error ? readApiErrorMessage(error.message) || error.message : fallback;
+}
+
+function statusMessage(status: number | undefined, fallback: string) {
+    if (status === 401 || status === 403) return apiText("authenticationFailed");
+    if (status === 429) return apiText("rateLimited");
+    if (status === 404) return apiText("notFound");
+    if (status === 502) return apiText("badGateway");
+    if (status === 503) return apiText("serviceBusy");
+    return status ? apiText("httpFailed", { status }) : fallback;
+}
+
+
+========================================================================
+FILE: web/src/services/api/canvas-director.ts
+LINES: 1-21
+========================================================================
+import { apiRequest } from './client';
+import type { DirectorScene } from '@/types/director';
+
+export type DirectorRenderParameters = { sequenceId: string; kind: 'frames' | 'video'; startFrame: number; endFrame: number; frames?: number[]; fixedCameraId?: string };
+export type DirectorRenderOutput = { url: string; objectKey: string; frame?: number; width: number; height: number; duration?: number; mime: string; bytes: string };
+export type DirectorRenderRequest = { id: string; sceneId: string; projectVersion: number; parameters: DirectorRenderParameters; status: 'waiting' | 'claimed' | 'completed' | 'failed' | 'cancelled'; snapshot?: DirectorScene; claimToken?: string; error?: string; receipt?: { fps: number; outputs: DirectorRenderOutput[] } };
+export type AdoptDirectorRender = (task: DirectorRenderRequest, output: DirectorRenderOutput, target?: 'canvas' | 'production') => Promise<void>;
+export function directorClient(projectId: string, userId: string, signal: AbortSignal) {
+    const root = `/api/canvas/projects/${encodeURIComponent(projectId)}/director/render-requests`;
+    const options = { signal, headers: { 'X-Sundas-User': userId } };
+    const action = <T>(id: string, action: string, json: unknown = {}) => apiRequest<T>(`${root}/${encodeURIComponent(id)}/${action}`, { ...options, method: 'POST', json });
+    return {
+        list: () => apiRequest<{ requests: DirectorRenderRequest[] }>(root, options),
+        create: (input: { id: string; expectedVersion: number; sceneId: string; parameters: DirectorRenderParameters }) => apiRequest<{ request: DirectorRenderRequest }>(root, { ...options, method: 'POST', json: input }),
+        claim: (id: string, browserSession: string) => action<{ request: DirectorRenderRequest }>(id, 'claim', { browserSession }),
+        complete: (id: string, claimToken: string, outputs: Array<{ objectKey: string; frame?: number }>) => action<{ receipt: DirectorRenderRequest['receipt'] }>(id, 'complete', { claimToken, outputs }),
+        fail: (id: string, claimToken: string, error: string) => action(id, 'fail', { claimToken, error }),
+        cancel: (id: string) => action(id, 'cancel'),
+        resume: (id: string) => action(id, 'resume'),
+    };
+}
+
+
+========================================================================
+FILE: web/src/services/api/canvas-production.ts
+LINES: 1-45
+========================================================================
+import { apiRequest } from './client';
+import { useAuthStore } from '@/stores/use-auth-store';
+import type { AgentProject } from './creative-agent';
+import type { ProductionMedia } from '../../../../shared/production';
+import type { DirectorCutMapping } from '../../../../shared/director-production';
+
+export type ProductionRequest = { kind: 'script' | 'images' | 'narration' | 'audition' | 'render' | 'preview'; expectedVersion: number; modelId?: string; shotIds?: string[]; narrationIds?: string[]; assetIds?: string[]; prompt?: string; voice?: string; format?: string; speed?: number; instructions?: string; size?: string; resolution?: string; skills?: Array<{ id: string; version: number }>; options?: Record<string, unknown> };
+export type ProductionQuote = { digest: string; minCredits: number; maxCredits: number; message: string; steps: Array<{ targetId: string; targetKind: string; inputHash: string; minCredits: number; maxCredits: number; prompt?: string }> };
+export type ProductionSubmission = ProductionRequest & { clientRequestId: string; confirmed: true; quoteDigest: string; acceptedCredits: number };
+export type ProductionRun = { id: string; projectId: string; kind: ProductionRequest['kind']; status: string; createdAt: string; updatedAt?: string; clientRequestId?: string; error?: string; errorMessage?: string; [key: string]: unknown };
+export type ProductionStep = { id: string; runId: string; targetId: string; targetKind?: string; status: string; taskIds?: string[]; error?: string; errorMessage?: string; input?: Record<string, unknown>; output?: Record<string, unknown>; stale?: boolean; result?: { media?: ProductionMedia[]; text?: string; draft?: Record<string, unknown>; creditsCharged?: number; [key: string]: unknown }; [key: string]: unknown };
+export type ProductionRunDetail = { run: ProductionRun; steps: ProductionStep[] };
+export type ProductionModel = { id: string; name: string; capability: 'text' | 'image' | 'audio' | 'video'; voices: string[]; minCredits: number; maxCredits: number; unit?: string };
+export type ProductionCommandRecord = { clientRequestId: string; beforeVersion: number; projectVersion: number; type: 'adopt' | 'director-adopt' | 'restore'; createdAt: string };
+
+export function canvasProductionApi(projectId: string, signal?: AbortSignal) {
+    const account = useAuthStore.getState();
+    const owner = account.user?.id, epoch = account.sessionEpoch;
+    const current = () => owner && useAuthStore.getState().user?.id === owner && useAuthStore.getState().sessionEpoch === epoch && !signal?.aborted;
+    const base = `/api/canvas/projects/${encodeURIComponent(projectId)}/production`;
+    async function request<T>(path: string, method = 'GET', json?: unknown): Promise<T> {
+        if (!current()) throw new Error('登录会话已变化，请重新打开制作面板');
+        const result = await apiRequest<T>(path.startsWith('/api/') ? path : `${base}${path}`, { method, json, signal, headers: { 'X-Sundas-User': owner! } });
+        if (!current()) throw new Error('账户已变化，本次制作结果未回填');
+        if (result && typeof result === 'object') {
+            const scoped = result as { run?: ProductionRun; project?: AgentProject; runs?: ProductionRun[] };
+            if ((scoped.run && scoped.run.projectId !== projectId) || (scoped.project && scoped.project.id !== projectId) || scoped.runs?.some(run => run.projectId !== projectId)) throw new Error('制作回执项目归属不一致，已停止回填');
+        }
+        return result;
+    }
+    return {
+        models: () => request<{ models: ProductionModel[]; audioTimestamps: boolean; message?: string }>('/api/canvas/production/models'),
+        directorMapping: (renderId: string) => request<{ mapping: DirectorCutMapping[]; sourceVersion: number }>(`/director-mapping/${encodeURIComponent(renderId)}`),
+        adoptDirector: (input: { clientRequestId: string; expectedVersion: number; command: { type: 'director-adopt'; renderRequestId: string } }) => request<{ project: AgentProject; receipt: Record<string, unknown> }>('/commands', 'POST', input),
+        commands: () => request<{ commands: ProductionCommandRecord[] }>('/commands'),
+        quote: (input: ProductionRequest) => request<{ quote: ProductionQuote }>('/quotes', 'POST', input),
+        create: (input: ProductionSubmission) => request<ProductionRunDetail>('/runs', 'POST', input),
+        list: () => request<{ runs: ProductionRun[] }>('/runs'),
+        detail: (id: string) => request<ProductionRunDetail>(`/runs/${encodeURIComponent(id)}`),
+        resume: (id: string) => request<ProductionRunDetail>(`/runs/${encodeURIComponent(id)}/resume`, 'POST', {}),
+        pause: (id: string) => request<ProductionRunDetail>(`/runs/${encodeURIComponent(id)}/pause`, 'POST', {}),
+        adopt: (input: { clientRequestId: string; expectedVersion: number; command: { type: 'adopt'; runId: string; stepId: string; resultIndex?: number; allowStale?: boolean } }) => request<{ project: AgentProject; receipt: Record<string, unknown> }>('/commands', 'POST', input),
+        restore: (input: { clientRequestId: string; expectedVersion: number; command: { type: 'restore'; requestId: string } }) => request<{ project: AgentProject; receipt: Record<string, unknown> }>('/commands', 'POST', input),
+    };
+}
+

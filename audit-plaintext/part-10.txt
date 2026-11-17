@@ -1,0 +1,4787 @@
+SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
+This is uncompressed source text, not a directory index or archive.
+Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
+Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+
+========================================================================
+FILE: web/src/components/layout/model-script-editor.tsx
+LINES: 1-183
+========================================================================
+import { javascript } from "@codemirror/lang-javascript";
+import CodeMirror from "@uiw/react-codemirror";
+import { Button, Modal } from "antd";
+import { Copy } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+
+import { useCopyText } from "@/hooks/use-copy-text";
+import { getPluginAuthoringPrompt, getPluginReturn, getPluginTemplates, getPluginVariables } from "@/services/api/model-plugin";
+import type { ModelCapability } from "@/stores/use-config-store";
+
+function isDarkMode() {
+    return typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+}
+
+function StepHeading({ index, title }: { index: number; title: string }) {
+    return (
+        <div className="mb-2 flex items-center gap-2">
+            <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[11px] font-medium text-white dark:bg-muted dark:text-foreground">{index}</span>
+            <span className="text-sm font-medium text-foreground dark:text-foreground">{title}</span>
+        </div>
+    );
+}
+
+function StepBlock({ index, title, children }: { index: number; title: string; children: ReactNode }) {
+    return (
+        <section className="border-b border-border/70 px-5 py-4 dark:border-border">
+            <StepHeading index={index} title={title} />
+            {children}
+        </section>
+    );
+}
+
+export function ModelScriptEditor({ open, capability, modelName, value, onSave, onClose }: { open: boolean; capability: ModelCapability; modelName: string; value: string; onSave: (script: string) => void; onClose: () => void }) {
+    const { t } = useTranslation();
+    const copyText = useCopyText();
+    const [draft, setDraft] = useState(value);
+    useEffect(() => {
+        if (open) setDraft(value);
+    }, [open, value]);
+
+    const variables = getPluginVariables().filter((variable) => !variable.capabilities || variable.capabilities.includes(capability));
+    const templates = getPluginTemplates()[capability];
+    const capabilityLabel = t(`config.channelEditor.capabilities.${capability}`);
+    const hasScript = Boolean(draft.trim());
+
+    return (
+        <Modal
+            open={open}
+            title={null}
+            footer={null}
+            width="100vw"
+            centered={false}
+            onCancel={onClose}
+            wrapClassName="[&_.ant-modal]:!inset-0 [&_.ant-modal]:!top-0 [&_.ant-modal]:!m-0 [&_.ant-modal]:!max-w-none [&_.ant-modal]:!h-dvh [&_.ant-modal]:!w-full [&_.ant-modal]:!p-0 [&_.ant-modal]:!rounded-none [&_.ant-modal]:!overflow-hidden [&_.ant-modal]:before:!hidden [&_.ant-modal-container]:!h-dvh [&_.ant-modal-container]:!p-0 [&_.ant-modal-body]:!h-full [&_.ant-modal-body]:!max-h-full [&_.ant-modal-body]:!overflow-hidden [&_.ant-modal-body]:!p-0"
+            styles={{
+                wrapper: { overflow: "hidden" },
+                body: { height: "100dvh", maxHeight: "100dvh", padding: 0, overflow: "hidden" },
+            }}
+            style={{ top: 0, margin: 0, paddingBottom: 0, maxWidth: "100vw" }}
+        >
+            <div className="flex h-dvh max-h-dvh flex-col overflow-hidden">
+                <header className="shrink-0 border-b border-border px-6 py-3 pr-12 dark:border-border">
+                    <div className="text-base font-semibold">
+                        {t("config.scriptEditor.title", { capability: capabilityLabel })}
+                        {modelName ? ` · ${modelName}` : ""}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">{t("config.scriptEditor.description")}</div>
+                </header>
+                <div className="flex min-h-0 flex-1 overflow-hidden">
+                    <aside className="flex h-full w-[420px] shrink-0 flex-col border-r border-border bg-muted/80 dark:border-border dark:bg-muted/40">
+                        <div className="flex shrink-0 gap-2 border-b border-border/70 px-5 py-3 text-xs text-muted-foreground dark:border-border dark:text-muted-foreground">
+                            <span>1. {t("config.scriptEditor.stepRule")}</span>
+                            <span>→</span>
+                            <span>2. {t("config.scriptEditor.stepAi")}</span>
+                            <span>→</span>
+                            <span>3. {t("config.scriptEditor.stepEdit")}</span>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-y-scroll overscroll-contain p-0">
+                            <StepBlock index={1} title={t("config.scriptEditor.stepRule")}>
+                                <p className="text-xs leading-5 text-foreground/75">{t("config.scriptEditor.stepRuleHint")}</p>
+                                <div className="mt-3">
+                                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("config.scriptEditor.returnRequirements")}</div>
+                                    <div className="text-xs leading-6 text-foreground/75">{getPluginReturn(capability)}</div>
+                                </div>
+                            </StepBlock>
+                            <StepBlock index={2} title={t("config.scriptEditor.stepAi")}>
+                                <ol className="list-decimal space-y-1.5 pl-4 text-xs leading-5 text-foreground/75">
+                                    <li>{t("config.scriptEditor.stepAiCopy")}</li>
+                                    <li>{t("config.scriptEditor.stepAiAsk")}</li>
+                                    <li>{t("config.scriptEditor.stepAiPaste")}</li>
+                                </ol>
+                                <p className="mt-2 text-[11px] leading-5 text-muted-foreground">{t("config.scriptEditor.stepAiIncludes")}</p>
+                                <Button
+                                    type="primary"
+                                    className="mt-3"
+                                    icon={<Copy className="size-3.5" />}
+                                    onClick={() => copyText(getPluginAuthoringPrompt(capability, modelName, draft), t("config.scriptEditor.briefCopied"))}
+                                >
+                                    {t("config.scriptEditor.copyBrief")}
+                                </Button>
+                            </StepBlock>
+                            <section className="px-5 py-4">
+                                <StepHeading index={3} title={t("config.scriptEditor.variables")} />
+                                <div className="mb-2 flex items-center justify-between">
+                                    <p className="text-xs leading-5 text-muted-foreground">
+                                        {t("config.scriptEditor.variablesHint")}
+                                        {capability === "video" ? ` ${t("config.scriptEditor.variablesHintVideo")}` : ""}
+                                    </p>
+                                    <span className="shrink-0 text-[10px] text-muted-foreground">{t("config.scriptEditor.insert")}</span>
+                                </div>
+                                <div className="space-y-1.5">
+                                    {variables.map((variable) => (
+                                        <button
+                                            key={variable.name}
+                                            type="button"
+                                            onClick={() => setDraft((current) => (current ? `${current}\n${variable.name}` : variable.name))}
+                                            className="group block w-full rounded-lg border border-transparent px-2.5 py-2 text-left transition-colors hover:border-border hover:bg-white dark:hover:border-muted-foreground/50 dark:hover:bg-accent/60"
+                                        >
+                                            <div className="flex flex-wrap items-baseline gap-1.5">
+                                                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold text-foreground group-hover:bg-brand-soft dark:bg-muted dark:text-foreground">
+                                                    {variable.name}
+                                                </code>
+                                                <span className="font-mono text-[10px] text-muted-foreground">{variable.type}</span>
+                                            </div>
+                                            <div className="mt-1 text-xs leading-5 text-muted-foreground">{variable.desc}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </section>
+                        </div>
+                    </aside>
+                    <div className="flex h-full min-w-0 flex-1 flex-col bg-white dark:bg-background">
+                        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2.5 dark:border-border">
+                            <div>
+                                <div className="text-sm font-medium text-foreground dark:text-foreground">{t("config.scriptEditor.editorTitle")}</div>
+                                <div className="text-xs text-muted-foreground">{t("config.scriptEditor.editorHint")}</div>
+                            </div>
+                            <span className="shrink-0 text-[11px] text-muted-foreground">{hasScript ? t("config.scriptEditor.editorFilled") : t("config.scriptEditor.editorEmpty")}</span>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-hidden">
+                            <CodeMirror
+                                value={draft}
+                                onChange={setDraft}
+                                height="100%"
+                                theme={isDarkMode() ? "dark" : "light"}
+                                extensions={[javascript()]}
+                                placeholder={t("config.scriptEditor.placeholder")}
+                                style={{ height: "100%", fontSize: 13 }}
+                                className="h-full [&_.cm-editor]:h-full [&_.cm-gutters]:border-none [&_.cm-scroller]:overflow-auto"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border px-6 py-3 dark:border-border">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{t("config.scriptEditor.startFromTemplate")}</span>
+                        {templates.map((template) => (
+                            <Button key={template.label} size="small" onClick={() => setDraft(template.script)}>
+                                {t("config.scriptEditor.insertTemplate", { name: template.label })}
+                            </Button>
+                        ))}
+                        <Button size="small" danger onClick={() => setDraft("")}>
+                            {t("config.scriptEditor.restoreDefault")}
+                        </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button onClick={onClose}>{t("common.cancel")}</Button>
+                        <Button
+                            type="primary"
+                            onClick={() => {
+                                onSave(draft.trim());
+                                onClose();
+                            }}
+                        >
+                            {t("common.save")}
+                        </Button>
+                    </div>
+                </footer>
+            </div>
+        </Modal>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/layout/model-select-modal.tsx
+LINES: 1-155
+========================================================================
+import { App, Button, Checkbox, Input, Modal, Tabs } from "antd";
+import { RefreshCw, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+
+import { fetchChannelModels } from "@/services/api/image";
+import type { ModelChannel } from "@/stores/use-config-store";
+
+// Channel model selector: fetch upstream models or add them manually, then include checked models in the channel list.
+export function ModelSelectModal({ open, channel, selectedNames, onConfirm, onClose }: { open: boolean; channel: ModelChannel | null; selectedNames: string[]; onConfirm: (names: string[]) => void; onClose: () => void }) {
+    const { message } = App.useApp();
+    const { t } = useTranslation();
+    const [existing, setExisting] = useState<string[]>([]);
+    const [fetched, setFetched] = useState<string[]>([]);
+    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [activeTab, setActiveTab] = useState("new");
+    const [search, setSearch] = useState("");
+    const [manual, setManual] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!open) return;
+        setExisting(selectedNames);
+        setFetched([]);
+        setSelected(new Set(selectedNames));
+        setActiveTab(selectedNames.length ? "existing" : "new");
+        setSearch("");
+        setManual("");
+    }, [open, selectedNames]);
+
+    const currentList = activeTab === "new" ? fetched : existing;
+    const visibleList = useMemo(() => {
+        const keyword = search.trim().toLowerCase();
+        return keyword ? currentList.filter((name) => name.toLowerCase().includes(keyword)) : currentList;
+    }, [currentList, search]);
+    const visibleSelectedCount = visibleList.filter((name) => selected.has(name)).length;
+
+    const toggle = (name: string, checked: boolean) =>
+        setSelected((current) => {
+            const next = new Set(current);
+            if (checked) next.add(name);
+            else next.delete(name);
+            return next;
+        });
+
+    const selectVisible = (checked: boolean) =>
+        setSelected((current) => {
+            const next = new Set(current);
+            visibleList.forEach((name) => (checked ? next.add(name) : next.delete(name)));
+            return next;
+        });
+
+    const addManual = () => {
+        const name = manual.trim();
+        if (!name) return;
+        if (!fetched.includes(name) && !existing.includes(name)) setFetched((current) => [name, ...current]);
+        setSelected((current) => new Set(current).add(name));
+        setManual("");
+        setActiveTab("new");
+    };
+
+    const fetchModels = async () => {
+        if (!channel) return;
+        if (!channel.baseUrl.trim() || !channel.apiKey.trim()) {
+            message.error(t("config.modelSelect.missingConfig"));
+            return;
+        }
+        setLoading(true);
+        try {
+            const models = await fetchChannelModels(channel);
+            setFetched(models);
+            setActiveTab("new");
+            message.success(t("config.modelSelect.fetched", { count: models.length }));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("config.modelSelect.fetchFailed"));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const confirm = () => {
+        const ordered = [...existing, ...fetched].filter((name, index, list) => list.indexOf(name) === index).filter((name) => selected.has(name));
+        onConfirm(ordered);
+        onClose();
+    };
+
+    return (
+        <Modal
+            open={open}
+            width={880}
+            centered
+            onCancel={onClose}
+            title={
+                <span>
+                    {t("config.modelSelect.title")} <span className="ml-2 text-xs font-normal text-muted-foreground">{t("config.modelSelect.selected", { selected: selected.size, total: new Set([...existing, ...fetched]).size })}</span>
+                </span>
+            }
+            styles={{ body: { maxHeight: "62vh", overflowY: "auto" } }}
+            footer={[
+                <Button key="cancel" onClick={onClose}>
+                    {t("common.cancel")}
+                </Button>,
+                <Button key="confirm" type="primary" onClick={confirm}>
+                    {t("config.modelSelect.confirm")}
+                </Button>,
+            ]}
+        >
+            <div className="flex flex-wrap items-center gap-3">
+                <Input className="min-w-[200px] flex-1" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("config.modelSelect.search")} prefix={<Search className="size-4 text-muted-foreground" />} allowClear />
+                <Input className="min-w-[180px] flex-1" value={manual} onChange={(event) => setManual(event.target.value)} onPressEnter={addManual} placeholder={t("config.modelSelect.modelName")} />
+                <Button onClick={addManual}>{t("config.modelSelect.add")}</Button>
+                <Button icon={<RefreshCw className="size-4" />} loading={loading} onClick={() => void fetchModels()}>
+                    {t("config.modelSelect.fetch")}
+                </Button>
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">{t("config.modelSelect.description")}</div>
+
+            <Tabs
+                className="mt-3"
+                activeKey={activeTab}
+                onChange={setActiveTab}
+                items={[
+                    { key: "new", label: t("config.modelSelect.fetchedTab", { count: fetched.length }) },
+                    { key: "existing", label: t("config.modelSelect.existingTab", { count: existing.length }) },
+                ]}
+            />
+
+            <div className="mb-3 flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">{t("config.modelSelect.visibleSelected", { selected: visibleSelectedCount, total: visibleList.length })}</span>
+                <div className="flex gap-2">
+                    <Button size="small" disabled={!visibleList.length} onClick={() => selectVisible(true)}>
+                        {t("config.modelSelect.selectVisible")}
+                    </Button>
+                    <Button size="small" disabled={!visibleSelectedCount} onClick={() => selectVisible(false)}>
+                        {t("config.modelSelect.clearVisible")}
+                    </Button>
+                </div>
+            </div>
+
+            {visibleList.length ? (
+                <div className="grid grid-cols-1 gap-x-8 gap-y-3 md:grid-cols-2">
+                    {visibleList.map((name) => (
+                        <Checkbox key={name} checked={selected.has(name)} onChange={(event) => toggle(name, event.target.checked)}>
+                            <span className="truncate" title={name}>
+                                {name}
+                            </span>
+                        </Checkbox>
+                    ))}
+                </div>
+            ) : (
+                <div className="py-8 text-center text-sm text-muted-foreground">{t(activeTab === "new" ? "config.modelSelect.fetchedEmpty" : "config.modelSelect.existingEmpty")}</div>
+            )}
+        </Modal>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/layout/nav-icons.tsx
+LINES: 1-88
+========================================================================
+/**
+ * 顶栏导航图标（自绘一套，7 个入口 7 个不同比喻）。
+ *
+ * 之前 首页 / 我的画布 都用 LayoutGrid，看上去是同一个图标；
+ * 其余是 lucide 通用图标，放在一起缺乏整体感。
+ *
+ * 这里统一：24 网格、1.7 描边、圆头圆角、只用 currentColor，
+ * 图形元素控制在 2~4 条路径，保证缩到 16px 仍然清楚。
+ */
+
+type IconProps = { className?: string };
+
+const base = {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+    focusable: "false" as const,
+};
+
+/** 首页：院落感的小房子（屋檐 + 门），比纯网格更像「家」。 */
+export function NavHomeIcon({ className }: IconProps) {
+    return <svg {...base} className={className}>
+        <path d="M3.9 10.4 11.2 4.3a1.2 1.2 0 0 1 1.6 0l7.3 6.1" />
+        <path d="M5.9 9.2v9.4a1.9 1.9 0 0 0 1.9 1.9h8.4a1.9 1.9 0 0 0 1.9-1.9V9.2" />
+        <path d="M9.9 20.5v-4.2a2.1 2.1 0 0 1 4.2 0v4.2" />
+    </svg>;
+}
+
+/** 我的画布：三层叠放的画板，表示「多个画布/项目」。 */
+export function NavCanvasIcon({ className }: IconProps) {
+    return <svg {...base} className={className}>
+        <path d="M12 2.9 3.2 7.5l8.8 4.6 8.8-4.6L12 2.9Z" />
+        <path d="M3.2 12.2 12 16.8l8.8-4.6" />
+        <path d="M3.2 16.6 12 21.2l8.8-4.6" />
+    </svg>;
+}
+
+/** 创作：一支带笔锋分界的笔。16px 下加星芒会糊成一个点，所以保持单一形体。 */
+export function NavCreateIcon({ className }: IconProps) {
+    return <svg {...base} className={className}>
+        <path d="M6.4 19.6l1-3.8L16.9 6.3a2.35 2.35 0 0 1 3.3 3.3L10.7 19.1l-4.3.5Z" />
+        <path d="M15 8l2.8 2.8" />
+    </svg>;
+}
+
+/** 发现与灵感：放大镜里放一枚四角星，探索 + 灵感两层含义。 */
+export function NavExploreIcon({ className }: IconProps) {
+    return <svg {...base} className={className}>
+        <circle cx="10.6" cy="10.6" r="6.7" />
+        <path d="M15.5 15.5 20.6 20.6" />
+        <path d="M10.6 7.8a2.8 2.8 0 0 0 2.8 2.8 2.8 2.8 0 0 0-2.8 2.8 2.8 2.8 0 0 0-2.8-2.8 2.8 2.8 0 0 0 2.8-2.8Z" />
+    </svg>;
+}
+
+/** 素材库：文件夹里放一张图（山峦），比空文件夹更具体。 */
+export function NavAssetsIcon({ className }: IconProps) {
+    return <svg {...base} className={className}>
+        <path d="M3.6 8.4a2 2 0 0 1 2-2h3.2l1.9 2.2h7.7a2 2 0 0 1 2 2v7.6a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2V8.4Z" />
+        <path d="M6.4 17.4l2.5-2.6a1.5 1.5 0 0 1 2.1 0l1.4 1.4 1.1-1.1a1.4 1.4 0 0 1 2 0l1.7 1.7" />
+    </svg>;
+}
+
+/** 提示词库：书 + 书签飘带。 */
+export function NavPromptsIcon({ className }: IconProps) {
+    return <svg {...base} className={className}>
+        <path d="M6.4 3.8h9.2a2.4 2.4 0 0 1 2.4 2.4v13.6a2.4 2.4 0 0 1-2.4 2.4H6.4A2.4 2.4 0 0 1 4 19.8V6.2a2.4 2.4 0 0 1 2.4-2.4Z" />
+        <path d="M8.4 3.8v6.8l2.9-1.9 2.9 1.9V3.8" />
+    </svg>;
+}
+
+/** 管理后台：竖向推子面板，比盾牌更贴「后台管理」。 */
+export function NavAdminIcon({ className }: IconProps) {
+    return <svg {...base} className={className}>
+        <path d="M3.6 7.6h4.5" />
+        <path d="M12.3 7.6h8.1" />
+        <circle cx="10.2" cy="7.6" r="2.1" />
+        <path d="M3.6 12h8.3" />
+        <path d="M16.5 12h3.9" />
+        <circle cx="14.4" cy="12" r="2.1" />
+        <path d="M3.6 16.4h2.7" />
+        <path d="M10.5 16.4h9.9" />
+        <circle cx="8.4" cy="16.4" r="2.1" />
+    </svg>;
+}
+
+
+========================================================================
+FILE: web/src/components/layout/page-transition.tsx
+LINES: 1-39
+========================================================================
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
+
+export function PageTransition({ children, disabled = false, className = "h-full min-h-0" }: { children: ReactNode; disabled?: boolean; className?: string }) {
+    const { pathname, search } = useLocation();
+    const frame = useRef<HTMLDivElement>(null);
+
+    useLayoutEffect(() => {
+        const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+        if (disabled || preference.matches || !frame.current?.animate) return;
+        const animation = frame.current.animate(
+            [{ opacity: 0.55, translate: "0 6px" }, { opacity: 1, translate: "0 0" }],
+            { duration: 200, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+        );
+        const stop = () => { if (preference.matches) animation.cancel(); };
+        preference.addEventListener("change", stop);
+        return () => { animation.cancel(); preference.removeEventListener("change", stop); };
+    }, [disabled, pathname, search]);
+
+    useEffect(() => {
+        if (disabled) return;
+        const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+        let pressed: Animation | undefined;
+        const stop = () => pressed?.cancel();
+        const click = (event: MouseEvent) => {
+            if (preference.matches || !(event.target instanceof Element)) return;
+            const control = event.target.closest<HTMLElement>("button, a[href], [role='button'], [role='tab'], [role='menuitem'], .ant-segmented-item, .ant-tag-checkable");
+            if (!control?.animate || control.closest(":disabled, [aria-disabled='true'], .ant-btn-loading, .ant-tabs-tab-disabled, .ant-segmented-item-disabled")) return;
+            stop();
+            pressed = control.animate([{ scale: "1" }, { scale: "0.97", offset: 0.35 }, { scale: "1" }], { duration: 160, easing: "ease-out" });
+        };
+        // 捕获阶段覆盖导航、普通按钮及弹窗内的按钮，不改变原有点击行为。
+        document.addEventListener("click", click, true);
+        preference.addEventListener("change", stop);
+        return () => { stop(); document.removeEventListener("click", click, true); preference.removeEventListener("change", stop); };
+    }, [disabled]);
+
+    return <div ref={frame} className={className}>{children}</div>;
+}
+
+
+========================================================================
+FILE: web/src/components/layout/require-admin.tsx
+LINES: 1-20
+========================================================================
+import type { ReactNode } from "react";
+import { Spin } from "antd";
+import { Navigate } from "react-router-dom";
+
+import { useAuthStore } from "@/stores/use-auth-store";
+
+export function RequireAdmin({ children }: { children: ReactNode }) {
+    const user = useAuthStore((state) => state.user);
+    const ready = useAuthStore((state) => state.ready);
+
+    if (!ready) {
+        return (
+            <div className="flex h-dvh items-center justify-center">
+                <Spin />
+            </div>
+        );
+    }
+    if (!user || user.role !== "admin") return <Navigate to="/" replace />;
+    return <>{children}</>;
+}
+
+
+========================================================================
+FILE: web/src/components/layout/require-auth.tsx
+LINES: 1-23
+========================================================================
+import type { ReactNode } from "react";
+import { Spin } from "antd";
+import { Navigate, useLocation } from "react-router-dom";
+
+import { useAuthStore } from "@/stores/use-auth-store";
+
+export function RequireAuth({ children }: { children: ReactNode }) {
+    const user = useAuthStore((state) => state.user);
+    const ready = useAuthStore((state) => state.ready);
+    const location = useLocation();
+
+    if (!ready) {
+        return (
+            <div className="flex h-full items-center justify-center">
+                <Spin />
+            </div>
+        );
+    }
+    if (!user) {
+        return <Navigate to={`/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`} replace />;
+    }
+    return <>{children}</>;
+}
+
+
+========================================================================
+FILE: web/src/components/layout/route-error.tsx
+LINES: 1-25
+========================================================================
+import { isRouteErrorResponse, useRouteError } from "react-router-dom";
+
+export function RouteErrorPage() {
+    const error = useRouteError();
+    const message = isRouteErrorResponse(error)
+        ? `${error.status} ${error.statusText}`
+        : error instanceof Error ? error.message : String(error ?? "");
+    const chunkError = /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|ChunkLoadError/i.test(message);
+    return (
+        <main className="grid min-h-dvh place-items-center bg-background px-6 text-foreground">
+            <div className="w-full max-w-md text-center">
+                <h1 className="text-[26px] font-semibold leading-9 tracking-[-0.01em]">{chunkError ? "页面资源已更新" : "页面加载失败"}</h1>
+                <p className="mt-3 text-[13px] leading-6 text-muted-foreground">
+                    {chunkError ? "检测到新版本资源，刷新页面即可继续使用。" : "页面遇到了一点问题，请刷新后重试。"}
+                </p>
+                <div className="mt-7 flex justify-center gap-2">
+                    <button type="button" className="jm-btn jm-btn-primary" onClick={() => window.location.reload()}>
+                        刷新页面
+                    </button>
+                    <a className="jm-btn jm-btn-secondary" href="/">返回首页</a>
+                </div>
+            </div>
+        </main>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/layout/site-footer.css
+LINES: 1-260
+========================================================================
+/* ===== site footer（参照 sundas-index.html 页脚）===== */
+
+.site-footer {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* 通栏分隔线：横线铺满视口，内容仍按 1360 居中 */
+.site-footer-band {
+    width: 100%;
+    border-top: 1px solid var(--border);
+}
+
+.site-footer-main {
+    display: grid;
+    width: min(100%, 1360px);
+    margin: 0 auto;
+    grid-template-columns: minmax(220px, 1.1fr) minmax(0, 2.4fr);
+    gap: clamp(32px, 5vw, 88px);
+    align-items: start;
+    padding: 52px 40px 44px;
+}
+
+.site-footer-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--foreground);
+    transition: opacity 160ms ease;
+}
+
+.site-footer-logo:hover {
+    opacity: 0.78;
+}
+
+.site-footer-symbol {
+    width: 26px;
+    height: 26px;
+}
+
+.site-footer-tagline {
+    max-width: 260px;
+    margin: 14px 0 0;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 12px;
+    line-height: 20px;
+}
+
+.site-footer-cols {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(20px, 3vw, 48px);
+}
+
+.site-footer-col h3 {
+    margin: 0 0 16px;
+    color: var(--foreground);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.site-footer-col ul {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.site-footer-col li {
+    color: var(--muted-foreground);
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+.site-footer-col li a,
+.site-footer-col li .promo-contact-link {
+    color: var(--muted-foreground);
+    font-size: 12.5px;
+    text-decoration: none;
+    transition: color 160ms ease;
+}
+
+.site-footer-col li a:hover,
+.site-footer-col li .promo-contact-link:hover {
+    color: var(--foreground);
+}
+
+/* 联系客服弹出面板（footer 作用域内向上弹出） */
+.site-footer .promo-contact-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+}
+
+.site-footer .promo-community-popover {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 0;
+    z-index: 30;
+    width: min(340px, 78vw);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    padding: 14px;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+
+.site-footer .promo-community-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.site-footer .promo-community-head strong {
+    display: block;
+    font-size: 13px;
+}
+
+.site-footer .promo-community-head span {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted-foreground);
+    font-size: 11px;
+}
+
+.site-footer .promo-community-close {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    cursor: pointer;
+}
+
+.site-footer .promo-community-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.site-footer .promo-community-grid.is-single {
+    grid-template-columns: 1fr;
+}
+
+.site-footer .promo-community-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--muted);
+    padding: 10px;
+    text-align: center;
+}
+
+.site-footer .promo-community-qr {
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.site-footer .promo-community-qr img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.site-footer .promo-community-name {
+    display: block;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--foreground);
+}
+
+.site-footer .promo-community-placeholder {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    color: var(--muted-foreground);
+}
+
+/* 底栏：版权 + 协议链接合成一组，整行水平居中，共享同一条基线 */
+.site-footer-bottom {
+    display: flex;
+    width: min(100%, 1360px);
+    margin: 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    flex-wrap: wrap;
+    padding: 22px 40px;
+    color: var(--muted-foreground);
+    font-size: 12.5px;
+    line-height: 20px;
+    text-align: center;
+}
+
+/* 版权：保持句子整体不折行，行盒固定 20px 便于与右侧链接对齐 */
+.site-footer-copy {
+    display: inline-block;
+    white-space: nowrap;
+    line-height: 20px;
+    vertical-align: middle;
+}
+
+/* 行内文字 logo 落在文字基线上，避免被 preflight 的 middle 抬高 */
+.site-footer-copy img {
+    display: inline-block;
+    vertical-align: baseline;
+}
+
+.site-footer-legal {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    line-height: 20px;
+}
+
+.site-footer-legal i {
+    width: 1px;
+    height: 10px;
+    background: var(--border);
+}
+
+@media (max-width: 900px) {
+    .site-footer-main,
+    .site-footer-bottom {
+        padding-left: 24px;
+        padding-right: 24px;
+    }
+
+    .site-footer-main {
+        grid-template-columns: 1fr;
+        gap: 36px;
+    }
+
+    .site-footer-bottom {
+        gap: 10px 18px;
+        padding-top: 20px;
+        padding-bottom: 20px;
+    }
+
+    .site-footer-copy {
+        line-height: 18px;
+    }
+}
+
+
+========================================================================
+FILE: web/src/components/layout/site-footer.tsx
+LINES: 1-73
+========================================================================
+import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
+
+import { BrandName, BrandWordmark } from "@/components/brand/brand-wordmark";
+import { PromoContactButton } from "@/components/promo/promo-contact-button";
+import "./site-footer.css";
+
+export function SiteFooter() {
+    const { t } = useTranslation();
+    const year = new Date().getFullYear();
+
+    return (
+        <footer className="site-footer">
+            <div className="site-footer-band">
+                <div className="site-footer-main">
+                    <div className="site-footer-brand">
+                        <Link to="/" className="site-footer-logo">
+                            <img src="/brand/sundas-symbol.svg" alt="" className="site-footer-symbol" />
+                            <BrandWordmark height={18} decorative />
+                        </Link>
+                        <p className="site-footer-tagline">{t("footer.tagline")}</p>
+                    </div>
+
+                    <nav className="site-footer-cols" aria-label="footer">
+                        <div className="site-footer-col">
+                            <h3>{t("footer.product")}</h3>
+                            <ul>
+                                <li><Link to="/image">{t("footer.productImage")}</Link></li>
+                                <li><Link to="/video">{t("footer.productVideo")}</Link></li>
+                                <li><Link to="/canvas">{t("footer.productMore")}</Link></li>
+                                <li><Link to="/prompts">{t("footer.productOpen")}</Link></li>
+                            </ul>
+                        </div>
+                        <div className="site-footer-col">
+                            <h3>{t("footer.resources")}</h3>
+                            <ul>
+                                <li><span>{t("footer.changelog")}</span></li>
+                                <li><span>{t("footer.tutorial")}</span></li>
+                                <li><span>{t("footer.help")}</span></li>
+                                <li><span>{t("footer.contact")}</span></li>
+                            </ul>
+                        </div>
+                        <div className="site-footer-col">
+                            <h3>{t("footer.company")}</h3>
+                            <ul>
+                                <li><span>{t("footer.about")}</span></li>
+                                <li><span>{t("footer.join")}</span></li>
+                                <li>
+                                    <PromoContactButton />
+                                </li>
+                            </ul>
+                        </div>
+                    </nav>
+                </div>
+            </div>
+
+            <div className="site-footer-band">
+                <div className="site-footer-bottom">
+                    <span className="site-footer-copy">
+                        <BrandName text={t("footer.copyright", { year })} imageClassName="opacity-70" />
+                    </span>
+                    <div className="site-footer-legal">
+                        <span>{t("footer.terms")}</span>
+                        <i aria-hidden="true" />
+                        <span>{t("footer.privacy")}</span>
+                        <i aria-hidden="true" />
+                        <span>{t("footer.disclaimer")}</span>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/layout/user-status-actions.tsx
+LINES: 1-72
+========================================================================
+import type { CSSProperties } from "react";
+import { Dropdown } from "antd";
+import { ChevronDown, Keyboard, Settings2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { changeAppLocale, listLocales, type LocaleCode } from "@/i18n";
+import { canvasThemes } from "@/lib/canvas-theme";
+import { useConfigStore } from "@/stores/use-config-store";
+import { useThemeStore } from "@/stores/use-theme-store";
+
+type UserStatusActionsProps = {
+    showConfig?: boolean;
+    variant?: "default" | "canvas";
+    onOpenShortcuts?: () => void;
+};
+
+/** 语言切换下拉：自动列出 i18n 注册表内全部语言，登录/未登录均可复用 */
+export function LanguageMenu({ buttonClassName, iconStyle }: { buttonClassName?: string; iconStyle?: CSSProperties }) {
+    const { i18n, t } = useTranslation();
+    const locale = i18n.resolvedLanguage as LocaleCode;
+    const locales = listLocales();
+    const currentLocale = locales.find((item) => item.code === locale);
+    const languageLabel = t("topNav.switchLanguage", { language: currentLocale ? currentLocale.label : locale });
+
+    return (
+        <Dropdown
+            trigger={["click"]}
+            placement="bottom"
+            menu={{
+                items: locales.map((item) => ({ key: item.code, label: item.label })),
+                selectable: true,
+                selectedKeys: [locale],
+                onClick: ({ key }) => {
+                    if (key !== locale) void changeAppLocale(key as LocaleCode);
+                },
+            }}
+        >
+            <button type="button" className={buttonClassName} style={iconStyle} aria-label={languageLabel} aria-haspopup="menu">
+                {currentLocale?.short ?? "中"}
+                <ChevronDown className="size-3 opacity-60" />
+            </button>
+        </Dropdown>
+    );
+}
+
+export function UserStatusActions({ showConfig = true, variant = "default", onOpenShortcuts }: UserStatusActionsProps) {
+    const { t } = useTranslation();
+    const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const theme = useThemeStore((state) => state.theme);
+    const canvasTheme = canvasThemes[theme];
+    const naturalIconClass = "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10 dark:hover:text-white [&_svg]:size-4";
+    const iconStyle: CSSProperties | undefined = variant === "canvas" ? { color: canvasTheme.node.text } : undefined;
+
+    return (
+        <div className="inline-flex shrink-0 items-center gap-1">
+            {showConfig ? (
+                <button type="button" className={naturalIconClass} style={iconStyle} onClick={() => openConfigDialog(false)} aria-label={t("navigation.config")} title={t("navigation.config")}>
+                    <Settings2 className="size-4" />
+                </button>
+            ) : null}
+            <LanguageMenu
+                buttonClassName={`${naturalIconClass} gap-0.5 px-1.5 text-[11px] font-semibold tracking-tight`}
+                iconStyle={iconStyle}
+            />
+            {onOpenShortcuts ? (
+                <button type="button" className={naturalIconClass} style={iconStyle} onClick={onOpenShortcuts} aria-label={t("topNav.shortcuts")} title={t("topNav.shortcuts")}>
+                    <Keyboard className="size-4" />
+                </button>
+            ) : null}
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/loading/page-skeleton.tsx
+LINES: 1-58
+========================================================================
+/**
+ * 页面加载骨架屏
+ * 提供比简单文本更好的加载体验，减少感知加载时间
+ */
+export const PageSkeleton = () => {
+    return (
+        <div className="flex h-screen w-full flex-col bg-background p-6">
+            {/* 顶部导航栏骨架 */}
+            <div className="mb-8 flex items-center justify-between">
+                <div className="h-8 w-32 animate-pulse rounded-lg bg-muted" />
+                <div className="flex gap-4">
+                    <div className="h-10 w-20 animate-pulse rounded-lg bg-muted" />
+                    <div className="h-10 w-24 animate-pulse rounded-lg bg-muted" />
+                </div>
+            </div>
+
+            {/* 主内容区域骨架 */}
+            <div className="flex-1 space-y-6">
+                {/* 标题 */}
+                <div className="h-10 w-64 animate-pulse rounded-lg bg-muted" />
+
+                {/* 内容卡片 */}
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <div key={i} className="space-y-3 rounded-xl border border-border bg-card p-4">
+                            <div className="aspect-video animate-pulse rounded-lg bg-muted" />
+                            <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
+                            <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* 品牌化加载指示器（可选） */}
+            <div className="fixed bottom-8 left-1/2 -translate-x-1/2">
+                <div className="flex items-center gap-2 rounded-full bg-card/80 px-4 py-2 shadow-lg backdrop-blur">
+                    <div className="h-2 w-2 animate-pulse rounded-full bg-brand" />
+                    <span className="text-sm text-muted-foreground">加载中...</span>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+/**
+ * 简化版骨架屏 - 用于较小的组件
+ */
+export const CompactSkeleton = () => {
+    return (
+        <div className="flex items-center justify-center p-12">
+            <div className="space-y-4 w-full max-w-md">
+                <div className="h-8 w-3/4 animate-pulse rounded-lg bg-muted" />
+                <div className="h-4 w-full animate-pulse rounded bg-muted" />
+                <div className="h-4 w-5/6 animate-pulse rounded bg-muted" />
+            </div>
+        </div>
+    );
+};
+
+
+========================================================================
+FILE: web/src/components/loading/prompt-card-skeleton.tsx
+LINES: 1-32
+========================================================================
+/**
+ * 骨架屏 - 灵感卡片加载状态
+ */
+export function PromptCardSkeleton() {
+    return (
+        <div className="home-prompt-card is-loading">
+            <div className="home-prompt-media">
+                <div className="skeleton skeleton-media" />
+            </div>
+            <div className="home-prompt-body">
+                <div className="skeleton skeleton-avatar" />
+                <div className="home-prompt-info">
+                    <div className="skeleton skeleton-title" />
+                    <div className="skeleton skeleton-tags" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * 多个骨架屏卡片网格
+ */
+export function PromptGridSkeleton({ count = 12 }: { count?: number }) {
+    return (
+        <div className="home-prompt-grid">
+            {Array.from({ length: count }).map((_, i) => (
+                <PromptCardSkeleton key={i} />
+            ))}
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/loading/skeleton.css
+LINES: 1-116
+========================================================================
+/**
+ * 骨架屏样式 - 学习Orbi的加载效果
+ */
+
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.02) 0%,
+        rgba(255, 255, 255, 0.08) 50%,
+        rgba(255, 255, 255, 0.02) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s ease-in-out infinite;
+    border-radius: 8px;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* 媒体区域骨架 */
+.skeleton-media {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 12px;
+}
+
+/* 头像骨架 */
+.skeleton-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* 标题骨架 */
+.skeleton-title {
+    width: 80%;
+    height: 18px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+}
+
+/* 标签骨架 */
+.skeleton-tags {
+    width: 60%;
+    height: 14px;
+    border-radius: 4px;
+}
+
+/* 加载状态卡片 */
+.home-prompt-card.is-loading {
+    pointer-events: none;
+    cursor: default;
+}
+
+.home-prompt-card.is-loading:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+/* 行内骨架 */
+.skeleton-inline {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+/* 文本骨架 */
+.skeleton-text {
+    height: 1em;
+    border-radius: 4px;
+}
+
+.skeleton-text-sm {
+    height: 0.875em;
+}
+
+.skeleton-text-lg {
+    height: 1.25em;
+}
+
+/* 按钮骨架 */
+.skeleton-button {
+    width: 120px;
+    height: 40px;
+    border-radius: 12px;
+}
+
+/* 圆形骨架 */
+.skeleton-circle {
+    border-radius: 50%;
+}
+
+/* 矩形骨架 */
+.skeleton-rect {
+    border-radius: 8px;
+}
+
+/* 骨架容器 - 可用于整个区域 */
+.skeleton-container {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+
+========================================================================
+FILE: web/src/components/media-thumbnail.tsx
+LINES: 1-20
+========================================================================
+import { useEffect, useState, type ReactNode } from 'react';
+import { useMediaPreview } from '@/hooks/use-media-preview';
+
+// Small cards never fetch a cloud original to stand in for its derivative.
+export function MediaThumbnail({source,kind='image',alt='',className='grid size-full place-items-center overflow-hidden',imageClassName='size-full object-cover',fallback}: {
+    source?:string;kind?:'image'|'video';alt?:string;className?:string;imageClassName?:string;fallback?:ReactNode;
+}) {
+    const [element,setElement]=useState<HTMLElement|null>(null),[visible,setVisible]=useState(false);
+    useEffect(()=>{
+        if (!element) return;
+        if (typeof IntersectionObserver==='undefined') {setVisible(true);return;}
+        const observer=new IntersectionObserver(entries=>setVisible(entries.some(entry=>entry.isIntersecting)));
+        observer.observe(element);return()=>observer.disconnect();
+    },[element]);
+    const preview=useMediaPreview(visible?source:undefined);
+    const url=visible?(preview.cloud?preview.url:source):undefined;
+    return <span ref={setElement} className={className} title={preview.error?`${preview.error}，点击可重试缩略图`:undefined} onClick={()=>{if(preview.error)preview.retry();}}>
+        {url?(kind==='video'&&!preview.cloud?<video src={url} muted preload="metadata" className={imageClassName}/>:<img src={url} alt={alt} loading="lazy" decoding="async" className={imageClassName}/>):fallback}
+    </span>;
+}
+
+
+========================================================================
+FILE: web/src/components/model-picker.tsx
+LINES: 1-232
+========================================================================
+import { useEffect, useId, useMemo, useState, type CSSProperties } from "react";
+import { Cpu } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import i18n from "@/i18n";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { parseVideoResolution, videoResolutionOptionsFromMap } from "@/lib/media-size";
+import { modelOptionLabel, modelOptionName, selectableModelsByCapability, useConfigStore, type AiConfig, type ModelCapability, type ServerModelInfo } from "@/stores/use-config-store";
+
+type ModelPickerProps = {
+    config: AiConfig;
+    value?: string;
+    onChange: (model: string) => void;
+    capability?: ModelCapability;
+    className?: string;
+    fullWidth?: boolean;
+    placeholder?: string;
+    onMissingConfig?: () => void;
+    onRouteSelect?: (model: string, routeId: string) => void;
+    triggerStyle?: CSSProperties;
+};
+
+type ModelGroup = { key: string; label: string; hint: string; models: string[] };
+
+export function ModelPicker({ config, value, onChange, capability, className, fullWidth = false, placeholder, onMissingConfig, onRouteSelect, triggerStyle }: ModelPickerProps) {
+    const { t } = useTranslation();
+    const pickerId = useId();
+    const [open, setOpen] = useState(false);
+    const serverModels = useConfigStore((state) => state.serverModels);
+    const options = useMemo(() => {
+        const candidates = [...(config.channelMode === "local" && !capability ? [value] : []), ...selectableModelsByCapability(config, capability)];
+        return Array.from(new Set(candidates.filter((model): model is string => !!model && (!model.startsWith("server::") || serverModels.some(item => item.id === modelOptionName(model))))));
+    }, [capability, config, value, serverModels]);
+    const current = value && options.includes(value) ? value : "";
+    const pickerPlaceholder = placeholder || t("settingsPanels.model.select");
+    const serverInfo = useMemo(() => {
+        const map = new Map(serverModels.map((model) => [model.id, model]));
+        return (model: string) => map.get(modelOptionName(model));
+    }, [serverModels]);
+    const groups = useMemo(() => groupModels(config, options, serverInfo), [config, options, serverInfo]);
+    const selected = serverInfo(current);
+    const selectedRoute = capability === 'video' && onRouteSelect && config.videoRouteId ? selected?.routes.find((route) => route.id === config.videoRouteId) : undefined;
+    const routeLabel = selectedRoute ? displayRouteName(selectedRoute.channelName) : (capability === 'video' && onRouteSelect && config.videoRouteId ? '所选线路已不可用，请重新选择' : capability === 'video' && onRouteSelect && selected?.routes.length ? '自动选择' : '');
+    const routeValue = (model: string, routeId: string) => `__video_route__${encodeURIComponent(model)}|${routeId}`;
+    const selectVideoRoute = (model: string, routeId: string) => {
+        const info = serverInfo(model);
+        const capabilities = routeId ? info?.routes.find(route => route.id === routeId)?.resolutionMultipliers : info?.resolutionMultipliers;
+        const resolutions = videoResolutionOptionsFromMap(capabilities);
+        if (!resolutions.some(option => option.value === parseVideoResolution(config.vquality))) {
+            useConfigStore.getState().updateConfig("vquality", resolutions.find(option => option.value === "720")?.value ?? resolutions[0].value);
+        }
+        onRouteSelect?.(model, routeId);
+    };
+
+    useEffect(() => {
+        const closeOtherPicker = (event: Event) => {
+            if ((event as CustomEvent<string>).detail !== pickerId) setOpen(false);
+        };
+        window.addEventListener("model-picker-open", closeOtherPicker);
+        return () => window.removeEventListener("model-picker-open", closeOtherPicker);
+    }, [pickerId]);
+
+    return (
+        <Select
+            open={open}
+            value={selectedRoute ? routeValue(current, selectedRoute.id) : current}
+            onOpenChange={(nextOpen) => {
+                if (nextOpen && !options.length && config.channelMode === "local") onMissingConfig?.();
+                if (nextOpen) window.dispatchEvent(new CustomEvent("model-picker-open", { detail: pickerId }));
+                setOpen(nextOpen);
+            }}
+            onValueChange={(next) => {
+                if (next.startsWith('__video_route__') && onRouteSelect) {
+                    const [encoded, routeId] = next.slice('__video_route__'.length).split('|');
+                    selectVideoRoute(decodeURIComponent(encoded), routeId);
+                } else if (capability === 'video' && onRouteSelect) selectVideoRoute(next, '');
+                else onChange(next);
+            }}
+        >
+            <SelectTrigger
+                className={cn(
+                    "canvas-composer-model-picker h-8 w-fit max-w-full gap-2 rounded-full border border-input bg-transparent px-3 text-sm font-normal shadow-sm transition-colors",
+                    fullWidth ? "w-full min-w-0 justify-start" : "min-w-[9rem] justify-start",
+                    "data-[state=open]:border-ring data-[state=open]:ring-2 data-[state=open]:ring-ring/20",
+                    className,
+                )}
+                style={triggerStyle}
+                onMouseDown={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+                title={current ? `${selected?.name || modelOptionLabel(config, current)}${routeLabel ? ` · ${routeLabel}` : ''}` : pickerPlaceholder}
+            >
+                <ModelIcon model={current} icon={selected?.familyIcon} />
+                <span className="canvas-model-picker-text min-w-0 flex-1 truncate text-left">{current ? `${selected?.name || modelOptionLabel(config, current)}${routeLabel ? ` · ${routeLabel}` : ''}` : pickerPlaceholder}</span>
+            </SelectTrigger>
+            <SelectContent
+                data-canvas-no-zoom
+                className={cn("z-[1200] max-w-[calc(100vw-24px)] rounded-xl border border-border/70 bg-popover p-1 shadow-lg [&_[data-position=popper]]:min-w-0 [&_[data-slot=select-item]>span:last-child]:min-w-0 [&_[data-slot=select-item]>span:last-child]:flex-1", options.length ? "w-[300px]" : "w-[240px]")}
+                position="popper"
+                align="start"
+                side="bottom"
+                sideOffset={6}
+                onPointerDown={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
+            >
+                {groups.length ? (
+                    groups.map((group) => (
+                        <SelectGroup key={group.key}>
+                            <SelectLabel className="flex items-center justify-between gap-2 px-2 py-1.5">
+                                <span className="truncate font-medium text-foreground">{group.label}</span>
+                                <span className="shrink-0 text-[10px] font-normal text-muted-foreground">{group.hint}</span>
+                            </SelectLabel>
+                            {group.models.map((model) => {
+                                const info = serverInfo(model);
+                                const hasVideoRoutes = capability === 'video' && onRouteSelect && Boolean(info?.routes.length);
+                                if (!hasVideoRoutes || !info) return <SelectItem key={model} value={model} textValue={info?.name || modelOptionLabel(config, model)} disabled={Boolean(info && info.routeCount === 0 && model !== current)} className="items-start py-2">
+                                    <ModelLabel config={config} model={model} info={info} />
+                                </SelectItem>;
+                                return <div key={model} className="mb-1 rounded-lg border border-border/50 p-1">
+                                    <div className="px-2 py-1.5"><ModelLabel config={config} model={model} info={info} hideRoutes /></div>
+                                    <SelectItem value={model} textValue={`${info.name} 自动选择`} className="my-0.5 py-2 pl-8 text-xs">
+                                        <span className="flex w-full items-center justify-between gap-2"><span className="font-medium">自动选择</span><span className="text-muted-foreground">系统选择可用线路</span></span>
+                                    </SelectItem>
+                                    {info.routes.map((route) => {
+                                        const keys = Object.keys(route.resolutionMultipliers ?? {});
+                                        const paused = keys.length > 0 && !keys.some((key) => /^(480|720|1080|2k|4k)$/i.test(key));
+                                        const resolution = parseVideoResolution(config.vquality);
+                                        const multiplier = route.resolutionMultipliers?.[resolution];
+                                        const unsupported = keys.length > 0 && multiplier === undefined;
+                                        const name = displayRouteName(route.channelName);
+                                        return <SelectItem key={route.id} value={routeValue(model, route.id)} textValue={`${info.name} ${name}`} disabled={paused} className="my-0.5 py-2 pl-8 text-xs">
+                                            <span className="flex w-full items-center justify-between gap-2"><span className="font-medium">{name}</span><span className="shrink-0 text-muted-foreground">{paused ? '暂不可用' : unsupported ? '切换后调整清晰度' : `${formatCredits(route.baseCredits * (multiplier ?? 1), true)} 积分/${route.unit === 'second' ? '秒' : '次'}`}</span></span>
+                                        </SelectItem>;
+                                    })}
+                                </div>;
+                            })}
+                        </SelectGroup>
+                    ))
+                ) : (
+                    <SelectItem value="__empty__" disabled className="whitespace-normal py-2 text-xs leading-5">{emptyModelLabel(config, capability)}</SelectItem>
+                )}
+            </SelectContent>
+        </Select>
+    );
+}
+
+function groupModels(config: AiConfig, options: string[], infoOf: (model: string) => ServerModelInfo | undefined): ModelGroup[] {
+    const groups = new Map<string, ModelGroup>();
+    for (const model of options) {
+        const info = infoOf(model);
+        const channel = config.channels.find((item) => item.id === model.split("::")[0]);
+        const key = info?.familyId || info?.familyName || channel?.id || "other";
+        const existing = groups.get(key);
+        if (existing) {
+            existing.models.push(model);
+            continue;
+        }
+        const label = info?.familyName || channel?.name || i18n.t("settingsPanels.model.select");
+        const hint = info?.familyVendor || (info ? `${info.routeCount} 条线路` : channel?.baseUrl || "");
+        groups.set(key, { key, label, hint, models: [model] });
+    }
+    return [...groups.values()];
+}
+
+function emptyModelLabel(config: AiConfig, capability?: ModelCapability) {
+    if (capability === "video") return "暂无可用的视频模型，请联系管理员";
+    const label = capability ? i18n.t(`settingsPanels.model.capabilities.${capability}`) : "";
+    if (capability && config.models.length) return i18n.t("settingsPanels.model.assign", { capability: label });
+    return config.models.length ? i18n.t("settingsPanels.model.noMatch", { capability: label }) : i18n.t("settingsPanels.model.addFirst");
+}
+
+function displayRouteName(name: string) {
+    if (name.includes("稳定快速版")) return "稳定快速版";
+    if (name.includes("按秒线路")) return "按秒线路";
+    const backup = name.match(/备用线路\s*(\d+)/);
+    return backup ? `标准线路 ${backup[1]}` : name;
+}
+
+function ModelLabel({ config, model, info, hideRoutes = false }: { config: AiConfig; model: string; info?: ServerModelInfo; hideRoutes?: boolean }) {
+    if (!info) {
+        return (
+            <span className="flex min-w-0 items-center gap-2">
+                <ModelIcon model={model} />
+                <span className="truncate">{modelOptionLabel(config, model)}</span>
+            </span>
+        );
+    }
+    const min = formatCredits(info.minCredits, info.capability === "video");
+    const max = formatCredits(info.maxCredits, info.capability === "video");
+    const price = info.routeCount || info.minCredits > 0 ? `${min === max ? min : `${min}–${max}`} 积分${info.unit === "second" ? "/秒" : info.unit === "request" ? "/次" : ""}` : "价格待定";
+    return (
+        <span className="flex min-w-0 flex-1 items-start gap-2.5">
+            <ModelIcon model={model} icon={info.familyIcon} />
+            <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-medium text-foreground">{info.name}</span>
+                    <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">{price}</span>
+                </span>
+                {!hideRoutes && (info.description || info.routes.length > 0) && <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{info.description || info.routes.map((route) => route.channelName).join(" / ")}</span>}
+                {!hideRoutes && <span className="mt-1 flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground">{info.routeCount ? `${info.routeCount} 条线路` : "即将上线"}</span>
+                    <span className="flex items-center gap-1">
+                        {info.routes.slice(0, 7).map((route) => (
+                            <span key={route.id} title={route.channelName} className="size-1.5 rounded-full bg-green-500" />
+                        ))}
+                    </span>
+                </span>}
+            </span>
+        </span>
+    );
+}
+
+function formatCredits(value: number, integer = false) {
+    if (integer) return `${Number.isInteger(value) ? "" : "约"}${Math.round(value)}`;
+    return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+}
+
+function ModelIcon({ model, icon }: { model: string; icon?: string | null }) {
+    const src = icon || resolveModelIcon(modelOptionName(model));
+    return src ? <img src={src} alt="" className="mt-0.5 size-4 shrink-0 dark:invert" /> : <Cpu className="mt-0.5 size-4 shrink-0 opacity-70" />;
+}
+
+function resolveModelIcon(model: string) {
+    const name = model.toLowerCase();
+    if (name.includes("claude") || name.includes("anthropic")) return "/icons/claude.svg";
+    if (name.includes("gemini") || name.includes("google")) return "/icons/gemini.svg";
+    if (name.includes("gpt") || name.includes("openai")) return "/icons/openai.svg";
+    if (name.includes("grok")) return "/icons/grok.svg";
+    if (name.includes("deepseek")) return "/icons/deepseek.svg";
+    if (name.includes("glm")) return "/icons/glm.svg";
+    return "";
+}
+
+
+========================================================================
+FILE: web/src/components/promo/promo-carousel.tsx
+LINES: 1-157
+========================================================================
+import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { trackPromoClick, type PromoItem } from "@/services/api/promo";
+import { usePromoAction } from "./use-promo-action";
+import "./promo.css";
+
+const FALLBACK_RATIO = 2.28;
+
+export function PromoCarousel({ items, variant = "default" }: { items: PromoItem[]; variant?: "default" | "hero" }) {
+    const action = usePromoAction();
+    const [index, setIndex] = useState(0);
+    const [failed, setFailed] = useState<Set<string>>(() => new Set());
+    const [paused, setPaused] = useState(false);
+    const [ratio, setRatio] = useState(FALLBACK_RATIO);
+    const visible = useMemo(() => items.filter((item) => item.enabled), [items]);
+
+    useEffect(() => {
+        if (index >= visible.length) setIndex(0);
+    }, [index, visible.length]);
+
+    useEffect(() => {
+        if (visible.length < 2 || paused) return;
+        const timer = window.setInterval(() => setIndex((value) => (value + 1) % visible.length), 5000);
+        return () => window.clearInterval(timer);
+    }, [paused, visible.length]);
+
+    if (!visible.length) return null;
+    const current = Math.min(index, visible.length - 1);
+    const item = visible[current];
+    const previous = visible.length > 1 ? visible[(current - 1 + visible.length) % visible.length] : null;
+    const next = visible.length > 1 ? visible[(current + 1) % visible.length] : null;
+
+    const run = () => {
+        void trackPromoClick({ placement: "carousel", itemId: item.id });
+        action(item);
+    };
+
+    // 预加载相邻两张，点击切换时立即出图，避免“点了没反应”的慢加载错觉
+    useEffect(() => {
+        if (visible.length < 2) return;
+        const neighbours = [visible[(current + 1) % visible.length], visible[(current - 1 + visible.length) % visible.length]];
+        for (const entry of neighbours) {
+            if (entry && !failed.has(entry.id)) {
+                const img = new window.Image();
+                img.src = entry.imageUrl;
+            }
+        }
+    }, [current, visible, failed]);
+
+    const image = (entry: PromoItem, hero: boolean) => (
+        <picture>
+            {entry.mobileImageUrl ? <source media="(max-width: 760px)" srcSet={entry.mobileImageUrl} /> : null}
+            {failed.has(entry.id) ? (
+                // 加载失败的图不再从轮播中剔除（否则切换会回落到同一张，看起来“点不动”），
+                // 改为显示兜底占位，保证切换始终有可见反馈
+                <span className={hero ? "promo-carousel-fallback is-hero" : "promo-carousel-fallback"}>{entry.title || entry.alt}</span>
+            ) : (
+                <img
+                    key={entry.id}
+                    className={hero ? "promo-carousel-hero-media" : "promo-carousel-media"}
+                    src={entry.imageUrl}
+                    alt={entry.alt}
+                    onLoad={(event) => {
+                        const value = event.currentTarget.naturalWidth / event.currentTarget.naturalHeight;
+                        if (value > 0.5 && value < 6) setRatio(value);
+                    }}
+                    onError={() => {
+                        setFailed((value) => new Set(value).add(entry.id));
+                    }}
+                />
+            )}
+        </picture>
+    );
+
+    // 右下角分页器：仅保留「02 / 03」计数（短横线指示条已按需求移除）
+    const pager =
+        visible.length > 1 ? (
+            <div className="promo-carousel-pager">
+                <span className="promo-carousel-count">
+                    <b>{String(current + 1).padStart(2, "0")}</b>
+                    <span className="promo-carousel-count-sep">/</span>
+                    {String(visible.length).padStart(2, "0")}
+                </span>
+            </div>
+        ) : null;
+
+    if (variant === "hero") {
+        return (
+            <section
+                className="promo-carousel is-hero"
+                aria-label="首页轮播"
+                onMouseEnter={() => setPaused(true)}
+                onMouseLeave={() => setPaused(false)}
+                onFocusCapture={() => setPaused(true)}
+                onBlurCapture={() => setPaused(false)}
+            >
+                <div className="promo-carousel-stage" style={{ aspectRatio: ratio }}>
+                    {previous ? (
+                        <div className="promo-carousel-peek is-prev" aria-hidden>
+                            <img src={previous.imageUrl} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+                        </div>
+                    ) : null}
+                    {next ? (
+                        <div className="promo-carousel-peek is-next" aria-hidden>
+                            <img src={next.imageUrl} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+                        </div>
+                    ) : null}
+
+                    <button type="button" className="promo-carousel-main" onClick={run} aria-label={item.alt}>
+                        {image(item, true)}
+                    </button>
+
+                    {visible.length > 1 ? (
+                        <button type="button" className="promo-carousel-arrow is-prev" aria-label="上一张" onClick={() => setIndex((value) => (value - 1 + visible.length) % visible.length)}>
+                            <ChevronLeft className="size-4" />
+                        </button>
+                    ) : null}
+                    {visible.length > 1 ? (
+                        <button type="button" className="promo-carousel-arrow is-next" aria-label="下一张" onClick={() => setIndex((value) => (value + 1) % visible.length)}>
+                            <ChevronRight className="size-4" />
+                        </button>
+                    ) : null}
+                </div>
+
+                {pager}
+            </section>
+        );
+    }
+
+    return (
+        <section
+            className="promo-carousel"
+            aria-label="首页轮播"
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+            onFocusCapture={() => setPaused(true)}
+            onBlurCapture={() => setPaused(false)}
+        >
+            <button type="button" className="promo-carousel-slide" onClick={run} aria-label={item.alt}>
+                {image(item, false)}
+            </button>
+
+            {visible.length > 1 ? (
+                <>
+                    <button type="button" className="promo-carousel-arrow is-prev" aria-label="上一张" onClick={() => setIndex((value) => (value - 1 + visible.length) % visible.length)}>
+                        <ChevronLeft className="size-4" />
+                    </button>
+                    <button type="button" className="promo-carousel-arrow is-next" aria-label="下一张" onClick={() => setIndex((value) => (value + 1) % visible.length)}>
+                        <ChevronRight className="size-4" />
+                    </button>
+                    {pager}
+                </>
+            ) : null}
+        </section>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/promo/promo-contact-button.tsx
+LINES: 1-137
+========================================================================
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { App, Image, Spin } from "antd";
+import { Link2, Mail, MessageCircle, Phone, QrCode, Send, UsersRound, X } from "lucide-react";
+
+import { loadPromoConfig, type PromoContact, type PromoContactChannel } from "@/services/api/promo";
+import { usePromoContactAction } from "./use-promo-contact-action";
+import "./promo.css";
+
+const ICONS: Record<PromoContactChannel, typeof MessageCircle> = {
+    wechat: MessageCircle,
+    wechat_group: UsersRound,
+    wecom: UsersRound,
+    qq: MessageCircle,
+    qq_group: UsersRound,
+    email: Mail,
+    phone: Phone,
+    telegram: Send,
+    whatsapp: MessageCircle,
+    link: Link2,
+};
+
+export function PromoContactButton({ variant = "sidebar" }: { variant?: "sidebar" | "topbar" }) {
+    const { t } = useTranslation();
+    const { message } = App.useApp();
+    const activate = usePromoContactAction();
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const [contacts, setContacts] = useState<PromoContact[]>([]);
+    const [available, setAvailable] = useState(false);
+    const [open, setOpen] = useState(false);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        void loadPromoConfig()
+            .then((data) => {
+                setContacts(data.contacts);
+                setAvailable(data.contacts.length > 0);
+            })
+            .catch(() => setAvailable(false));
+    }, []);
+
+    useEffect(() => {
+        if (!open) return;
+        const closeOutside = (event: PointerEvent) => {
+            if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);
+        };
+        const closeEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setOpen(false);
+        };
+        document.addEventListener("pointerdown", closeOutside);
+        document.addEventListener("keydown", closeEscape);
+        return () => {
+            document.removeEventListener("pointerdown", closeOutside);
+            document.removeEventListener("keydown", closeEscape);
+        };
+    }, [open]);
+
+    async function toggle() {
+        if (open) {
+            setOpen(false);
+            return;
+        }
+        setOpen(true);
+        setLoading(true);
+        try {
+            const data = await loadPromoConfig();
+            setContacts(data.contacts);
+            setAvailable(data.contacts.length > 0);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("navigation.contactFetchError"));
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    if (!available) return null;
+
+    return (
+        <div ref={wrapperRef} className="relative">
+            <button type="button" className={variant === "topbar" ? "promo-contact-link is-topbar" : "promo-contact-link mb-1"} onClick={() => void toggle()} aria-expanded={open}>
+                <MessageCircle className="size-4 shrink-0" />
+                <span>{t("navigation.contact")}</span>
+            </button>
+            {open ? (
+                <div className={variant === "topbar" ? "promo-community-popover is-topbar" : "promo-community-popover"} role="dialog" aria-label={t("navigation.communityTitle")}>
+                    <div className="promo-community-head">
+                        <div>
+                            <strong>{t("navigation.communityTitle")}</strong>
+                            <span>{t("navigation.communitySubtitle")}</span>
+                        </div>
+                        <button type="button" className="promo-community-close" onClick={() => setOpen(false)} aria-label={t("navigation.close")}>
+                            <X className="size-3.5" />
+                        </button>
+                    </div>
+                    {loading ? (
+                        <div className="grid min-h-32 place-items-center"><Spin size="small" /></div>
+                    ) : (
+                        <div className={contacts.length === 1 ? "promo-community-grid is-single" : "promo-community-grid"}>
+                            {contacts.map((contact) => {
+                                const Icon = ICONS[contact.channel] ?? QrCode;
+                                return (
+                                    <div key={contact.id} className="promo-community-card">
+                                        <div className="promo-community-qr">
+                                            {contact.qrUrl ? (
+                                                <Image
+                                                    src={contact.qrUrl}
+                                                    alt={`${contact.name} 二维码`}
+                                                    width="100%"
+                                                    height="100%"
+                                                    className="promo-community-image"
+                                                    preview={{ mask: t("navigation.viewQr") }}
+                                                />
+                                            ) : (
+                                                <span className="promo-community-placeholder"><Icon className="size-8" /></span>
+                                            )}
+                                        </div>
+                                        <div className="promo-community-meta">
+                                            <strong>{contact.name || t(`navigation.contactChannels.${contact.channel}`)}</strong>
+                                            <span>{t(`navigation.contactChannels.${contact.channel}`)}</span>
+                                            {contact.description ? <small>{contact.description}</small> : null}
+                                        </div>
+                                        {!contact.qrUrl ? (
+                                            <button type="button" className="promo-community-action" onClick={() => activate(contact)}>
+                                                {t("navigation.contactAction")}
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                    <div className="promo-community-foot">{t("navigation.communityFooter")}</div>
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/promo/promo-contact-dialog.tsx
+LINES: 1-112
+========================================================================
+import { useEffect, useState } from "react";
+import { App, Image, Modal, Spin } from "antd";
+import { Link2, Mail, MessageCircle, Phone, QrCode, Send, UsersRound } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { loadPromoConfig, type PromoContact, type PromoContactChannel } from "@/services/api/promo";
+import { usePromoContactStore } from "@/stores/use-promo-contact-store";
+import { usePromoContactAction } from "./use-promo-contact-action";
+import "./promo.css";
+
+const ICONS: Record<PromoContactChannel, typeof MessageCircle> = {
+    wechat: MessageCircle,
+    wechat_group: UsersRound,
+    wecom: UsersRound,
+    qq: MessageCircle,
+    qq_group: UsersRound,
+    email: Mail,
+    phone: Phone,
+    telegram: Send,
+    whatsapp: MessageCircle,
+    link: Link2,
+};
+
+export function PromoContactDialog() {
+    const { t } = useTranslation();
+    const { message } = App.useApp();
+    const activate = usePromoContactAction();
+    const open = usePromoContactStore((state) => state.open);
+    const closeDialog = usePromoContactStore((state) => state.closeDialog);
+    const [contacts, setContacts] = useState<PromoContact[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!open) return;
+        setLoading(true);
+        void loadPromoConfig()
+            .then((data) => setContacts(data.contacts))
+            .catch((error) => message.error(error instanceof Error ? error.message : t("navigation.contactFetchError")))
+            .finally(() => setLoading(false));
+    }, [open, message]);
+
+    return (
+        <Modal
+            title={t("navigation.contact")}
+            open={open}
+            onCancel={closeDialog}
+            footer={null}
+            width={780}
+            centered
+            className="promo-contact-modal"
+            styles={{ body: { paddingTop: 4 } }}
+        >
+            {loading ? (
+                <div className="flex min-h-36 items-center justify-center">
+                    <Spin size="small" />
+                </div>
+            ) : contacts.length ? (
+                <>
+                    <p className="promo-contact-lead">{t("navigation.contactDialogHint")}</p>
+                    <div className="promo-contact-grid">
+                        {contacts.map((contact) => {
+                            const Icon = ICONS[contact.channel] ?? QrCode;
+                            return (
+                                <div
+                                    key={contact.id}
+                                    className="promo-contact-card"
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => activate(contact)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === "Enter" || event.key === " ") {
+                                            event.preventDefault();
+                                            activate(contact);
+                                        }
+                                    }}
+                                >
+                                    <span className="promo-contact-card-main">
+                                        <span className="promo-contact-card-head">
+                                            <span className="promo-contact-icon"><Icon className="size-[17px]" /></span>
+                                            <span className="promo-contact-head-text">
+                                                <span className="promo-contact-name">{contact.name}</span>
+                                                <span className="promo-contact-channel">{t(`navigation.contactChannels.${contact.channel}`)}</span>
+                                            </span>
+                                        </span>
+                                        {contact.value || contact.description ? (
+                                            <span className="promo-contact-meta">
+                                                {contact.value ? <span className="promo-contact-value">{contact.value}</span> : null}
+                                                {contact.description ? <span className="promo-contact-description">{contact.description}</span> : null}
+                                            </span>
+                                        ) : null}
+                                    </span>
+                                    {contact.qrUrl ? (
+                                        <span
+                                            className="promo-contact-qr"
+                                            role="presentation"
+                                            onClick={(event) => event.stopPropagation()}
+                                            onKeyDown={(event) => event.stopPropagation()}
+                                        >
+                                            <Image src={contact.qrUrl} alt={`${contact.name} 二维码`} preview={{ mask: t("navigation.viewQr") }} />
+                                        </span>
+                                    ) : null}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </>
+            ) : (
+                <div className="py-12 text-center text-sm text-muted-foreground">{t("navigation.noContacts")}</div>
+            )}
+        </Modal>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/promo/promo-corner.tsx
+LINES: 1-65
+========================================================================
+import { useEffect, useState } from "react";
+import { Gift, X } from "lucide-react";
+
+import { trackPromoClick, type PromoItem } from "@/services/api/promo";
+import { canShowPromo, markPromoShown } from "./promo-frequency";
+import { usePromoAction } from "./use-promo-action";
+import "./promo.css";
+
+const STORAGE_PREFIX = "sundas:promo:corner:";
+
+/**
+ * 右下角浮动卡片：只有文字和按钮的轻量引导位。
+ * 频率按浏览器本地记录，和居中弹窗相互独立。
+ * 关闭（X）只隐藏当次页面，不写入任何记录 —— 刷新后只要没到频率上限还会出现；
+ * 频率只在用户真正点击（卡片主体 / CTA 按钮）时才写入。
+ */
+export function PromoCorner({ item, workbench = false }: { item: PromoItem | null; workbench?: boolean }) {
+    const action = usePromoAction();
+    const [open, setOpen] = useState(false);
+
+    useEffect(() => {
+        setOpen(false);
+        if (!item || !canShowPromo(STORAGE_PREFIX, item)) return;
+        const timer = window.setTimeout(() => setOpen(true), 900);
+        return () => window.clearTimeout(timer);
+    }, [item]);
+
+    if (!item) return null;
+
+    const clickable = item.actionType !== "none";
+
+    const run = () => {
+        markPromoShown(STORAGE_PREFIX, item);
+        void trackPromoClick({ placement: "corner", itemId: item.id });
+        if (clickable) action(item);
+        setOpen(false);
+    };
+
+    return (
+        <div className={`promo-corner${workbench ? " promo-corner--workbench" : ""}${open ? " is-open" : ""}`} role="dialog" aria-label={item.title || "活动提醒"}>
+            <button
+                type="button"
+                className="promo-corner-close"
+                onClick={() => setOpen(false)}
+                aria-label="关闭"
+            >
+                <X className="size-3.5" />
+            </button>
+            <button type="button" className="promo-corner-body" onClick={run} disabled={!clickable}>
+                <span className="promo-corner-icon" aria-hidden="true">
+                    <Gift className="size-[19px]" strokeWidth={2.1} />
+                </span>
+                <span className="promo-corner-text">
+                    <strong className="promo-corner-title">{item.title || "活动提醒"}</strong>
+                    {item.description ? <span className="promo-corner-note">{item.description}</span> : null}
+                </span>
+            </button>
+            {item.ctaLabel ? (
+                <button type="button" className="promo-corner-cta" onClick={run} disabled={!clickable}>
+                    {item.ctaLabel}
+                </button>
+            ) : null}
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/promo/promo-frequency.ts
+LINES: 1-26
+========================================================================
+import type { PromoItem } from "@/services/api/promo";
+
+/**
+ * 按浏览器本地记录判断是否应该展示。
+ * visit = 每次都展示；session = 每个会话一次；daily = 每天一次；24h = 距上次至少 24 小时。
+ */
+export function canShowPromo(storagePrefix: string, item: PromoItem) {
+    if (item.frequency === "visit") return true;
+    if (item.frequency === "session") return sessionStorage.getItem(`${storagePrefix}${item.id}:session`) !== "1";
+    if (item.frequency === "daily") return localStorage.getItem(`${storagePrefix}${item.id}:day`) !== new Date().toDateString();
+    const last = Number(localStorage.getItem(`${storagePrefix}${item.id}:time`) ?? 0);
+    return !last || Date.now() - last >= 24 * 60 * 60 * 1000;
+}
+
+export function markPromoShown(storagePrefix: string, item: PromoItem) {
+    if (item.frequency === "visit") return;
+    if (item.frequency === "session") {
+        sessionStorage.setItem(`${storagePrefix}${item.id}:session`, "1");
+        return;
+    }
+    if (item.frequency === "daily") {
+        localStorage.setItem(`${storagePrefix}${item.id}:day`, new Date().toDateString());
+        return;
+    }
+    localStorage.setItem(`${storagePrefix}${item.id}:time`, String(Date.now()));
+}
+
+
+========================================================================
+FILE: web/src/components/promo/promo-popup.tsx
+LINES: 1-128
+========================================================================
+import { useEffect, useState } from "react";
+import { Modal } from "antd";
+import { ArrowRight, X } from "lucide-react";
+
+import { trackPromoClick, type PromoItem } from "@/services/api/promo";
+import { canShowPromo, markPromoShown } from "./promo-frequency";
+import { useCountdown } from "./use-countdown";
+import { usePromoAction } from "./use-promo-action";
+import "./promo.css";
+
+const STORAGE_PREFIX = "sundas:promo:popup:";
+
+function pad(value: number) {
+    return String(value).padStart(2, "0");
+}
+
+export function PromoPopup({ item }: { item: PromoItem | null }) {
+    const action = usePromoAction();
+    const [open, setOpen] = useState(false);
+    const [imageFailed, setImageFailed] = useState(false);
+    const countdown = useCountdown(open ? (item?.countdownAt ?? null) : null);
+    const lines = (item?.description ?? "")
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    const clickable = Boolean(item && item.ctaLabel.trim() && item.actionType !== "none");
+    const hasBody = lines.length > 0 || clickable;
+
+    useEffect(() => {
+        setOpen(false);
+        setImageFailed(false);
+        if (!item || !canShowPromo(STORAGE_PREFIX, item)) return;
+        if (item.countdownAt && new Date(item.countdownAt).getTime() <= Date.now()) return;
+        const timer = window.setTimeout(() => {
+            markPromoShown(STORAGE_PREFIX, item);
+            setOpen(true);
+        }, 1200);
+        return () => window.clearTimeout(timer);
+    }, [item]);
+
+    useEffect(() => {
+        if (countdown?.expired) setOpen(false);
+    }, [countdown?.expired]);
+
+    if (!item) return null;
+
+    const showImage = Boolean(item.imageUrl) && !imageFailed;
+    const showCard = showImage || hasBody;
+
+    const run = () => {
+        void trackPromoClick({ placement: "popup", itemId: item.id });
+        action(item);
+        setOpen(false);
+    };
+
+    return (
+        <Modal
+            open={open && showCard}
+            onCancel={() => setOpen(false)}
+            footer={null}
+            centered
+            width={520}
+            closable={false}
+            className="promo-popup-modal"
+            styles={{
+                container: { padding: 0, background: "transparent", boxShadow: "none" },
+                body: { padding: 0 },
+                mask: { background: "rgba(8, 7, 6, 0.66)", backdropFilter: "blur(6px)" },
+            }}
+        >
+            <div className={`promo-popup-card${showImage ? "" : " is-text-only"}`}>
+                <button type="button" className="promo-popup-close" onClick={() => setOpen(false)} aria-label="关闭">
+                    <X className="size-4" />
+                </button>
+                {showImage ? (
+                    <div className={`promo-popup-hero${item.mobileImageUrl ? " has-mobile-art" : ""}`}>
+                        <picture>
+                            {item.mobileImageUrl ? <source media="(max-width: 760px)" srcSet={item.mobileImageUrl} /> : null}
+                            <img
+                                src={item.imageUrl}
+                                alt={item.alt || item.title}
+                                onError={() => {
+                                    setImageFailed(true);
+                                    if (!hasBody) setOpen(false);
+                                }}
+                            />
+                        </picture>
+                    </div>
+                ) : null}
+                {hasBody ? (
+                    <div className="promo-popup-body">
+                        {countdown && !countdown.expired ? (
+                            <div className="promo-popup-timer" aria-label="活动倒计时">
+                                <span>距结束</span>
+                                <b>{pad(countdown.days)}</b>
+                                <i>:</i>
+                                <b>{pad(countdown.hours)}</b>
+                                <i>:</i>
+                                <b>{pad(countdown.minutes)}</b>
+                                <i>:</i>
+                                <b>{pad(countdown.seconds)}</b>
+                            </div>
+                        ) : null}
+                        {item.title ? <h2 className="promo-popup-title">{item.title}</h2> : null}
+                        {lines.length > 1 ? (
+                            <ul className="promo-popup-points">
+                                {lines.map((line) => (
+                                    <li key={line}>
+                                        <span className="promo-popup-point-mark" aria-hidden />
+                                        {line}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : lines.length === 1 ? (
+                            <p className="promo-popup-description">{lines[0]}</p>
+                        ) : null}
+                        {clickable ? (
+                            <button type="button" className="promo-popup-cta" onClick={run}>
+                                <span>{item.ctaLabel}</span>
+                                <ArrowRight className="size-4" />
+                            </button>
+                        ) : null}
+                    </div>
+                ) : null}
+            </div>
+        </Modal>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/promo/promo-top-bar.tsx
+LINES: 1-68
+========================================================================
+import { useEffect, useState } from "react";
+import { X } from "lucide-react";
+
+import { trackPromoClick, type PromoItem } from "@/services/api/promo";
+import { useCountdown } from "./use-countdown";
+import { usePromoAction } from "./use-promo-action";
+import "./promo.css";
+
+export function PromoTopBar({ item }: { item: PromoItem | null }) {
+    const action = usePromoAction();
+    const [closed, setClosed] = useState(false);
+    const countdown = useCountdown(item?.countdownAt ?? null);
+
+    useEffect(() => {
+        if (!item) return;
+        setClosed(sessionStorage.getItem(`sundas:promo:topbar:${item.id}`) === "1");
+    }, [item]);
+
+    if (!item || closed || countdown?.expired) return null;
+
+    const clickable = item.actionType !== "none";
+    const run = () => {
+        if (!clickable) return;
+        void trackPromoClick({ placement: "topbar", itemId: item.id });
+        action(item);
+    };
+
+    return (
+        <div className={clickable ? "promo-topbar is-clickable" : "promo-topbar"}>
+            <div
+                className="promo-topbar-inner"
+                role={clickable ? "link" : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                onClick={run}
+                onKeyDown={(event) => {
+                    if (!clickable) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        run();
+                    }
+                }}
+            >
+                {countdown ? (
+                    <span className="promo-topbar-countdown" aria-label="活动倒计时">
+                        <b key={`d-${countdown.days}`}>{String(countdown.days).padStart(2, "0")}</b><em>:</em>
+                        <b key={`h-${countdown.hours}`}>{String(countdown.hours).padStart(2, "0")}</b><em>:</em>
+                        <b key={`m-${countdown.minutes}`}>{String(countdown.minutes).padStart(2, "0")}</b><em>:</em>
+                        <b key={`s-${countdown.seconds}`}>{String(countdown.seconds).padStart(2, "0")}</b>
+                    </span>
+                ) : null}
+                <span className="promo-topbar-text">{item.title}</span>
+                {item.ctaLabel && clickable ? <span className="promo-topbar-cta">{item.ctaLabel}</span> : null}
+            </div>
+            <button
+                type="button"
+                className="promo-topbar-close"
+                aria-label="关闭活动条"
+                onClick={(event) => {
+                    event.stopPropagation();
+                    sessionStorage.setItem(`sundas:promo:topbar:${item.id}`, "1");
+                    setClosed(true);
+                }}
+            >
+                <X className="size-3.5" />
+            </button>
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/promo/promo.css
+LINES: 1-1397
+========================================================================
+.promo-topbar {
+    position: relative;
+    z-index: 10;
+    overflow: hidden;
+    background: #1a1a1a;
+    color: rgba(255, 255, 255, 0.88);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.promo-topbar-inner {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 1400px);
+    min-height: 38px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 7px 12px;
+    padding: 6px 52px;
+    text-align: center;
+    color: inherit;
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.promo-topbar.is-clickable .promo-topbar-inner {
+    cursor: pointer;
+}
+
+.promo-topbar.is-clickable .promo-topbar-inner:hover .promo-topbar-text {
+    opacity: 0.76;
+}
+
+.promo-topbar-text {
+    min-width: 0;
+    max-width: 700px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    transition: opacity 160ms ease;
+}
+
+.promo-topbar-countdown {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    color: #E56603;
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.promo-topbar-countdown b {
+    display: inline-grid;
+    min-width: 25px;
+    height: 26px;
+    place-items: center;
+    border: 1px solid rgba(229, 102, 3, 0.24);
+    border-radius: 4px;
+    background: rgba(229, 102, 3, 0.12);
+    color: #E56603;
+    box-shadow: none;
+    font-weight: 600;
+    animation: promo-tick 220ms ease-out;
+}
+
+.promo-topbar-countdown em {
+    color: rgba(229, 102, 3, 0.6);
+    font-style: normal;
+    font-weight: 600;
+}
+
+.promo-topbar-cta {
+    display: inline-flex;
+    min-height: 28px;
+    flex: 0 0 auto;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0 12px;
+    background: var(--brand);
+    color: var(--brand-ink);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    transition: background-color 160ms ease;
+}
+
+.promo-topbar.is-clickable .promo-topbar-inner:hover .promo-topbar-cta {
+    background: var(--accent-hover);
+}
+
+.promo-topbar-close {
+    position: absolute;
+    z-index: 2;
+    right: 16px;
+    top: 50%;
+    display: grid;
+    width: 25px;
+    height: 25px;
+    place-items: center;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.4);
+    transform: translateY(-50%);
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease;
+}
+
+.promo-topbar-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+
+@keyframes promo-tick {
+    from {
+        opacity: 0;
+        transform: translateY(-35%);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .promo-topbar-countdown b {
+        animation: none;
+    }
+}
+
+.promo-carousel {
+    position: relative;
+    overflow: hidden;
+    margin: 0 0 18px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--muted);
+    aspect-ratio: 3 / 1;
+}
+
+.promo-carousel-slide {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+.promo-carousel-media {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.promo-carousel-arrow {
+    position: absolute;
+    top: 50%;
+    z-index: 4;
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    background: rgba(10, 10, 12, 0.62);
+    color: #fff;
+    transform: translateY(-50%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    cursor: pointer;
+    transition: background 200ms ease, color 200ms ease, border-color 200ms ease, transform 200ms ease;
+}
+
+.promo-carousel-arrow:hover {
+    border-color: var(--brand);
+    background: var(--brand);
+    color: var(--brand-ink);
+}
+
+.promo-carousel-arrow:active {
+    transform: translateY(-50%) scale(0.94);
+}
+
+.promo-carousel-arrow:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 3px;
+}
+
+.promo-carousel-arrow.is-prev {
+    left: 14px;
+}
+
+.promo-carousel-arrow.is-next {
+    right: 14px;
+}
+
+/* 右下角分页器：02 / 03 计数 + 短横线指示条 */
+.promo-carousel-pager {
+    position: absolute;
+    right: 18px;
+    bottom: 14px;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    pointer-events: none;
+}
+
+.promo-carousel-count {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+
+.promo-carousel-count b {
+    color: #fff;
+    font-weight: 700;
+}
+
+.promo-carousel-count-sep {
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.promo-carousel-dashes {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: auto;
+}
+
+.promo-carousel-dash {
+    width: 16px;
+    height: 4px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.28);
+    cursor: pointer;
+    transition: width 200ms ease, background 200ms ease;
+}
+
+.promo-carousel-dash:hover {
+    background: rgba(255, 255, 255, 0.55);
+}
+
+.promo-carousel-dash:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 3px;
+}
+
+.promo-carousel-dash.is-active {
+    width: 26px;
+    background: var(--brand);
+}
+
+/* 右下角浮动卡片：品牌绿细描边 + 渐变 CTA，外发光已去掉，仅保留柔和投影，避免边框外侧泛光 */
+.promo-corner {
+    position: fixed;
+    z-index: 45;
+    right: 20px;
+    bottom: 20px;
+    display: flex;
+    width: min(344px, calc(100vw - 32px));
+    flex-direction: column;
+    gap: 12px;
+    border: 1px solid rgba(216, 255, 62, 0.32);
+    border-radius: 18px;
+    padding: 16px;
+    background:
+        radial-gradient(130% 112% at 2% -6%, rgba(216, 255, 62, 0.13), transparent 56%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 44%),
+        var(--card);
+    color: var(--foreground);
+    box-shadow:
+        0 22px 52px -22px rgba(0, 0, 0, 0.78),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+    transform-origin: 100% 100%;
+    pointer-events: none;
+    transition:
+        opacity 240ms ease,
+        transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+        border-color 220ms ease,
+        box-shadow 220ms ease;
+}
+
+.promo-corner.is-open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+/* Creation pages keep their composer at the bottom of the viewport. */
+.promo-corner--workbench {
+    top: 72px;
+    bottom: auto;
+    transform-origin: 100% 0;
+}
+
+.promo-corner.is-open:hover {
+    border-color: rgba(216, 255, 62, 0.46);
+    box-shadow:
+        0 26px 58px -22px rgba(0, 0, 0, 0.82),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.promo-corner-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    display: grid;
+    width: 22px;
+    height: 22px;
+    place-items: center;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+}
+
+.promo-corner-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--foreground);
+}
+
+.promo-corner-close:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+}
+
+.promo-corner-body {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 12px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0 22px 0 0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.promo-corner-body:disabled {
+    cursor: default;
+}
+
+/* 图标块：即梦功能卡式蓝渐变底 + 1px 内描边，无外发光 */
+.promo-corner-icon {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 12px;
+    background: linear-gradient(106.25deg, rgba(216, 255, 62, 0.24) 0%, rgba(216, 255, 62, 0.12) 100%);
+    color: #D8FF3E;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.promo-corner-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.promo-corner-title {
+    display: block;
+    color: var(--foreground);
+    font-family: var(--font-heading);
+    font-size: 15.5px;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+}
+
+.promo-corner-note {
+    display: block;
+    color: var(--muted-foreground);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.promo-corner-cta {
+    display: flex;
+    min-height: 44px;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--brand);
+    color: var(--brand-ink);
+    font-family: var(--font-heading);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0;
+    cursor: pointer;
+    box-shadow: none;
+    transition: background 160ms ease, transform 160ms ease;
+}
+
+.promo-corner-cta:hover {
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+    box-shadow:
+        0 16px 32px -12px rgba(216, 255, 62, 0.85),
+        inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.promo-corner-cta:active {
+    transform: translateY(0);
+    filter: brightness(0.98);
+}
+
+.promo-corner-cta:disabled {
+    opacity: 0.7;
+    cursor: default;
+    transform: none;
+}
+
+.promo-corner-cta:focus-visible {
+    outline: 2px solid var(--foreground);
+    outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+    .promo-corner {
+        right: 12px;
+        bottom: 12px;
+        width: calc(100vw - 24px);
+        padding: 14px;
+        gap: 10px;
+    }
+
+    .promo-corner-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+    }
+
+    .promo-corner-cta {
+        min-height: 42px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .promo-corner {
+        transition: none;
+        transform: none;
+    }
+}
+
+.promo-popup-modal .ant-modal-container,
+.promo-popup-modal .ant-modal-body {
+    padding: 0 !important;
+    background: transparent;
+    box-shadow: none;
+}
+
+.promo-popup-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 20px;
+    background: var(--card);
+    box-shadow: 0 40px 90px -28px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    animation: promo-popup-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.promo-popup-hero {
+    position: relative;
+    background: #0c0a09;
+}
+
+.promo-popup-hero picture {
+    display: block;
+}
+
+.promo-popup-hero img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.promo-popup-timer {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+    margin-bottom: 12px;
+    color: var(--muted-foreground);
+    font-size: 11px;
+    letter-spacing: 0.01em;
+}
+
+.promo-popup-timer span {
+    margin-right: 5px;
+}
+
+.promo-popup-timer b {
+    color: var(--foreground);
+    font-family: var(--font-heading);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.promo-popup-timer i {
+    padding: 0 1px;
+    color: var(--muted-foreground);
+    font-style: normal;
+    opacity: 0.8;
+}
+
+.promo-popup-close {
+    position: absolute;
+    z-index: 4;
+    top: 12px;
+    right: 12px;
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(8, 7, 6, 0.52);
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    transition: background 150ms ease;
+}
+
+.promo-popup-close:hover {
+    background: rgba(8, 7, 6, 0.8);
+}
+
+.promo-popup-close:focus-visible {
+    outline: 2px solid #D8FF3E;
+    outline-offset: 2px;
+}
+
+.promo-popup-body {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 20px 24px 24px;
+}
+
+.promo-popup-card.is-text-only .promo-popup-body {
+    border-top: 0;
+}
+
+.promo-popup-title {
+    display: -webkit-box;
+    overflow: hidden;
+    margin: 0 0 12px;
+    color: var(--foreground);
+    font-family: var(--font-heading);
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.promo-popup-description {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: 13.5px;
+    line-height: 1.62;
+}
+
+.promo-popup-points {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.promo-popup-points li {
+    display: flex;
+    gap: 10px;
+    color: var(--foreground);
+    font-size: 13.5px;
+    line-height: 1.55;
+}
+
+.promo-popup-point-mark {
+    width: 6px;
+    height: 6px;
+    flex: 0 0 auto;
+    margin-top: 7px;
+    background: #0c0a09;
+    transform: rotate(45deg);
+}
+
+.dark .promo-popup-point-mark {
+    background: #D8FF3E;
+}
+
+.promo-popup-cta {
+    display: flex;
+    width: 100%;
+    min-height: 48px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 18px;
+    border: 0;
+    border-radius: 12px;
+    background: #D8FF3E;
+    color: #0c0a09;
+    font-family: var(--font-heading);
+    font-size: 14.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    transition: filter 150ms ease;
+}
+
+.promo-popup-cta svg {
+    transition: transform 150ms ease;
+}
+
+.promo-popup-cta:hover {
+    filter: brightness(1.04);
+}
+
+.promo-popup-cta:hover svg {
+    transform: translateX(3px);
+}
+
+.promo-popup-cta:focus-visible {
+    outline: 2px solid var(--foreground);
+    outline-offset: 3px;
+}
+
+@keyframes promo-popup-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .promo-popup-card {
+        animation: none;
+    }
+}
+
+.promo-contact-link {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 9px;
+    border: 0;
+    border-radius: 7px;
+    padding: 8px 10px;
+    background: transparent;
+    color: var(--muted-foreground);
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease;
+}
+
+.promo-contact-link:hover {
+    background: var(--muted);
+    color: var(--foreground);
+}
+
+.promo-contact-link.is-topbar {
+    width: auto;
+    height: 32px;
+    flex: 0 0 auto;
+    gap: 6px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.promo-contact-link.is-topbar:hover {
+    background: var(--muted);
+}
+
+/* ===== 联系弹窗：更宽的画布 + 大二维码 ===== */
+.promo-contact-modal {
+    max-width: calc(100vw - 24px);
+}
+
+/* antd 的 .ant-modal 自带 max-width（100vw - 16px），用双类名提优先级 */
+.ant-modal.promo-contact-modal {
+    max-width: calc(100vw - 24px);
+}
+
+.promo-contact-modal .ant-modal-container,
+.promo-contact-modal .ant-modal-content {
+    border-radius: 18px;
+    padding: 22px 24px 24px;
+}
+
+.promo-contact-modal .ant-modal-header {
+    margin-bottom: 6px;
+}
+
+.promo-contact-modal .ant-modal-title {
+    font-family: var(--font-heading);
+    font-size: 17px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+}
+
+.promo-contact-lead {
+    margin: 0 0 16px;
+    color: var(--muted-foreground);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.promo-contact-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+    max-height: min(64vh, 620px);
+    overflow-y: auto;
+    padding: 2px;
+}
+
+.promo-contact-card {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px 18px;
+    background:
+        radial-gradient(120% 100% at 0% 0%, rgba(216, 255, 62, 0.06), transparent 58%),
+        var(--card);
+    color: var(--foreground);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.promo-contact-card:hover {
+    border-color: rgba(216, 255, 62, 0.5);
+    box-shadow:
+        0 18px 40px -28px rgba(0, 0, 0, 0.7),
+        0 0 0 1px rgba(216, 255, 62, 0.14);
+    transform: translateY(-1px);
+}
+
+.promo-contact-card:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+}
+
+.promo-contact-card-main {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 11px;
+}
+
+.promo-contact-card-head {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+}
+
+.promo-contact-icon {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid rgba(216, 255, 62, 0.18);
+    border-radius: 11px;
+    background: rgba(216, 255, 62, 0.09);
+    color: var(--brand);
+}
+
+.promo-contact-head-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.promo-contact-name {
+    display: block;
+    overflow: hidden;
+    color: var(--foreground);
+    font-family: var(--font-heading);
+    font-size: 14.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.promo-contact-channel {
+    display: block;
+    color: var(--muted-foreground);
+    font-size: 11.5px;
+    letter-spacing: 0.02em;
+}
+
+.promo-contact-meta {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.promo-contact-value {
+    display: block;
+    overflow-wrap: anywhere;
+    color: var(--foreground);
+    font-size: 12.5px;
+    line-height: 1.55;
+}
+
+.promo-contact-description {
+    display: block;
+    color: var(--muted-foreground);
+    font-size: 12px;
+    line-height: 1.6;
+    opacity: 0.88;
+}
+
+/* 二维码：白底留静默区 + 细边框，确保任何深色背景下都能扫 */
+.promo-contact-qr {
+    --qr-size: 116px;
+    display: block;
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 7px;
+    background: #fff;
+    box-shadow: 0 10px 26px -18px rgba(0, 0, 0, 0.65);
+    line-height: 0;
+    transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.promo-contact-qr:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 30px -16px rgba(0, 0, 0, 0.7);
+}
+
+.promo-contact-qr .ant-image {
+    display: block;
+    width: var(--qr-size);
+    height: var(--qr-size);
+}
+
+.promo-contact-qr img {
+    display: block;
+    width: var(--qr-size);
+    height: var(--qr-size);
+    border-radius: 8px;
+    object-fit: contain;
+    background: #fff;
+}
+
+@media (max-width: 560px) {
+    .promo-contact-modal .ant-modal-container,
+    .promo-contact-modal .ant-modal-content {
+        padding: 18px 16px 20px;
+    }
+
+    .promo-contact-grid {
+        gap: 12px;
+    }
+
+    .promo-contact-card {
+        padding: 14px;
+        gap: 12px;
+    }
+
+    .promo-contact-qr {
+        --qr-size: 92px;
+        padding: 5px;
+        border-radius: 12px;
+    }
+}
+
+.promo-community-popover {
+    position: absolute;
+    z-index: 60;
+    left: 0;
+    bottom: calc(100% + 8px);
+    width: 400px;
+    max-width: calc(100vw - 24px);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: 0 22px 56px rgba(0, 0, 0, 0.36);
+    animation: promo-contact-in 160ms ease-out;
+}
+
+.promo-community-popover.is-topbar {
+    top: calc(100% + 8px);
+    right: 0;
+    bottom: auto;
+    left: auto;
+}
+
+.promo-community-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 15px 14px 12px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.promo-community-head strong {
+    display: block;
+    color: var(--foreground);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.promo-community-head span {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted-foreground);
+    font-size: 10px;
+    line-height: 1.4;
+}
+
+.promo-community-close {
+    display: grid;
+    width: 25px;
+    height: 25px;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted-foreground);
+    cursor: pointer;
+}
+
+.promo-community-close:hover {
+    background: var(--muted);
+    color: var(--foreground);
+}
+
+.promo-community-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    max-height: min(430px, calc(100vh - 250px));
+    overflow-y: auto;
+    padding: 14px;
+}
+
+.promo-community-grid.is-single {
+    grid-template-columns: minmax(0, 230px);
+    justify-content: center;
+}
+
+.promo-community-card {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    padding: 11px;
+    background: var(--card);
+    text-align: center;
+}
+
+.promo-community-qr {
+    display: grid;
+    width: 100%;
+    aspect-ratio: 1;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.promo-community-qr > .ant-image {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.promo-community-qr .ant-image-img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover;
+}
+
+.promo-community-image {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover;
+    object-position: center;
+}
+
+.promo-community-placeholder {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    place-items: center;
+    background: var(--muted);
+    color: var(--muted-foreground);
+}
+
+.promo-community-meta {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding-top: 10px;
+}
+
+.promo-community-meta strong {
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--foreground);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.promo-community-meta span {
+    color: var(--muted-foreground);
+    font-size: 9.5px;
+    line-height: 1.4;
+}
+
+.promo-community-meta small {
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--muted-foreground);
+    font-size: 9px;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.8;
+}
+
+.promo-community-action {
+    margin-top: 7px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 9px;
+    background: transparent;
+    color: var(--foreground);
+    font: inherit;
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.promo-community-action:hover {
+    background: var(--muted);
+}
+
+.promo-community-foot {
+    border-top: 1px solid var(--border);
+    padding: 8px 14px 9px;
+    color: var(--muted-foreground);
+    font-size: 9px;
+    text-align: center;
+}
+
+@media (max-width: 767px) {
+    .promo-community-popover {
+        width: 340px;
+    }
+
+    .promo-community-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding: 10px;
+    }
+
+    .promo-community-grid.is-single {
+        grid-template-columns: minmax(0, 200px);
+    }
+}
+
+@keyframes promo-contact-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .promo-community-popover {
+        animation: none;
+    }
+}
+
+.promo-carousel.is-hero {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    aspect-ratio: auto;
+    margin: 0;
+}
+
+.promo-carousel-stage {
+    position: relative;
+    width: 100%;
+}
+
+.promo-carousel-main {
+    position: relative;
+    z-index: 2;
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 0;
+    background: var(--muted);
+    cursor: pointer;
+    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.22);
+}
+
+.promo-carousel-hero-media {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* 轮播图加载失败时的兜底占位：保证切换有可见反馈，而不是静默跳回上一张 */
+.promo-carousel-fallback {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #191b10 0%, #0d0f09 62%);
+    color: rgba(216, 255, 62, 0.85);
+    font-size: clamp(18px, 2.2vw, 30px);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-align: center;
+    padding: 0 32px;
+}
+
+.promo-carousel-peek {
+    position: absolute;
+    top: 9%;
+    z-index: 0;
+    width: 13%;
+    height: 82%;
+    overflow: hidden;
+    border-radius: 12px;
+    opacity: 0.5;
+    filter: saturate(0.8) brightness(0.65);
+}
+
+.promo-carousel-peek.is-prev {
+    left: -30px;
+}
+
+.promo-carousel-peek.is-next {
+    right: -30px;
+}
+
+.promo-carousel-peek img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.promo-carousel.is-hero .promo-carousel-arrow {
+    z-index: 3;
+    width: 34px;
+    height: 34px;
+    opacity: 0;
+    border-color: rgba(255, 255, 255, 0.24);
+    background: rgba(12, 10, 9, 0.38);
+}
+
+.promo-carousel.is-hero:hover .promo-carousel-arrow,
+.promo-carousel.is-hero:focus-within .promo-carousel-arrow {
+    opacity: 1;
+}
+
+/* 参照稿：左右箭头骑跨在轮播边缘（34px 圆钮中心对齐边缘线） */
+.promo-carousel.is-hero .promo-carousel-arrow.is-prev {
+    left: -17px;
+}
+
+.promo-carousel.is-hero .promo-carousel-arrow.is-next {
+    right: -17px;
+}
+
+.promo-carousel.is-hero .promo-carousel-dots {
+    position: static;
+    justify-content: center;
+    margin-top: 12px;
+    gap: 6px;
+}
+
+.promo-carousel.is-hero .promo-carousel-dot {
+    width: 5px;
+    height: 5px;
+    background: var(--border);
+}
+
+.promo-carousel.is-hero .promo-carousel-dot.is-active {
+    width: 20px;
+    background: #D8FF3E;
+}
+
+@media (max-width: 760px) {
+    .promo-topbar-inner {
+        justify-content: flex-start;
+        gap: 8px 10px;
+        min-height: 56px;
+        padding: 7px 36px 8px 14px;
+        text-align: left;
+        font-size: 10.5px;
+    }
+
+    .promo-topbar-countdown {
+        font-size: 12px;
+    }
+
+    .promo-topbar-countdown b {
+        min-width: 23px;
+        height: 24px;
+    }
+
+    .promo-topbar-text {
+        order: 3;
+        width: 100%;
+        max-width: none;
+        white-space: normal;
+        line-height: 1.5;
+    }
+
+    .promo-topbar-cta {
+        order: 2;
+        min-height: 25px;
+        padding-inline: 11px;
+        font-size: 10px;
+    }
+
+    .promo-topbar-close {
+        right: 8px;
+    }
+
+    .promo-carousel {
+        aspect-ratio: 4 / 3;
+        margin-bottom: 14px;
+    }
+
+    .promo-carousel.is-hero {
+        aspect-ratio: auto;
+        margin-bottom: 0;
+    }
+
+    .promo-carousel.is-hero .promo-carousel-peek {
+        display: none;
+    }
+
+    .promo-carousel.is-hero .promo-carousel-main {
+        border-radius: 13px;
+    }
+
+    .promo-carousel.is-hero .promo-carousel-arrow {
+        width: 30px;
+        height: 30px;
+        opacity: 1;
+    }
+
+    /* 窄屏收进容器内，避免骑跨按钮被屏幕边缘裁掉 */
+    .promo-carousel.is-hero .promo-carousel-arrow.is-prev {
+        left: 8px;
+    }
+
+    .promo-carousel.is-hero .promo-carousel-arrow.is-next {
+        right: 8px;
+    }
+
+    .promo-carousel-arrow {
+        opacity: 1;
+        width: 28px;
+        height: 28px;
+    }
+
+    .promo-contact-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .promo-popup-body {
+        padding: 16px 18px 18px;
+    }
+
+    .promo-popup-title {
+        font-size: 20px;
+    }
+
+}
+
+@media (hover: none) {
+    .promo-carousel.is-hero .promo-carousel-arrow {
+        opacity: 1;
+    }
+}
+
+.promo-crop-frame {
+    position: relative;
+    width: min(100%, 420px);
+    overflow: hidden;
+    border: 1px solid var(--admin-line, var(--border));
+    border-radius: 10px;
+    background: #111;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+.promo-crop-frame:active {
+    cursor: grabbing;
+}
+
+.promo-crop-frame img {
+    position: absolute;
+    display: block;
+    max-width: none;
+    pointer-events: none;
+    user-select: none;
+}
+
+.promo-crop-grid {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.7);
+    background:
+        linear-gradient(to right, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.2) 33.333%, transparent calc(33.333% + 0.5px)),
+        linear-gradient(to right, transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.2) 66.666%, transparent calc(66.666% + 0.5px)),
+        linear-gradient(to bottom, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.2) 33.333%, transparent calc(33.333% + 0.5px)),
+        linear-gradient(to bottom, transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.2) 66.666%, transparent calc(66.666% + 0.5px));
+}
+
+
+========================================================================
+FILE: web/src/components/promo/use-countdown.ts
+LINES: 1-24
+========================================================================
+import { useEffect, useMemo, useState } from "react";
+
+/** Live countdown for promo campaigns; returns null when no deadline is configured. */
+export function useCountdown(value: string | null) {
+    const end = useMemo(() => (value ? new Date(value).getTime() : null), [value]);
+    const [now, setNow] = useState(() => Date.now());
+
+    useEffect(() => {
+        if (!end) return;
+        setNow(Date.now());
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, [end]);
+
+    if (!end) return null;
+    const remaining = Math.max(0, end - now);
+    return {
+        expired: remaining <= 0,
+        days: Math.floor(remaining / 86_400_000),
+        hours: Math.floor((remaining % 86_400_000) / 3_600_000),
+        minutes: Math.floor((remaining % 3_600_000) / 60_000),
+        seconds: Math.floor((remaining % 60_000) / 1000),
+    };
+}
+
+
+========================================================================
+FILE: web/src/components/promo/use-promo-action.ts
+LINES: 1-32
+========================================================================
+import copy from "copy-to-clipboard";
+import { App } from "antd";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+
+import { usePromoContactStore } from "@/stores/use-promo-contact-store";
+import type { PromoItem } from "@/services/api/promo";
+
+export function usePromoAction() {
+    const navigate = useNavigate();
+    const { message } = App.useApp();
+    const { t } = useTranslation();
+    const openContact = usePromoContactStore((state) => state.openDialog);
+
+    return (item: Pick<PromoItem, "actionType" | "actionValue">) => {
+        if (item.actionType === "none") return;
+        if (item.actionType === "internal") {
+            navigate(item.actionValue);
+            return;
+        }
+        if (item.actionType === "external") {
+            window.open(item.actionValue, "_blank", "noopener,noreferrer");
+            return;
+        }
+        if (item.actionType === "contact") {
+            openContact();
+            return;
+        }
+        copy(item.actionValue);
+        message.success(t("common.copied"));
+    };
+}
+
+
+========================================================================
+FILE: web/src/components/promo/use-promo-contact-action.ts
+LINES: 1-35
+========================================================================
+import copy from "copy-to-clipboard";
+import { App } from "antd";
+
+import { trackPromoClick, type PromoContact } from "@/services/api/promo";
+
+export function usePromoContactAction() {
+    const { message } = App.useApp();
+
+    return (contact: PromoContact) => {
+        void trackPromoClick({ placement: "contact", contactId: contact.id });
+        if (!contact.value) return;
+        if (contact.channel === "email") {
+            window.location.href = `mailto:${contact.value}`;
+            return;
+        }
+        if (contact.channel === "phone") {
+            window.location.href = `tel:${contact.value.replace(/[^\d+]/g, "")}`;
+            return;
+        }
+        if (contact.channel === "link") {
+            window.open(contact.value, "_blank", "noopener,noreferrer");
+            return;
+        }
+        if (contact.channel === "whatsapp" && !contact.value.startsWith("http")) {
+            window.open(`https://wa.me/${contact.value.replace(/\D/g, "")}`, "_blank", "noopener,noreferrer");
+            return;
+        }
+        if (contact.channel === "telegram" && !contact.value.startsWith("http") && !contact.value.startsWith("@")) {
+            window.open(`https://t.me/${contact.value}`, "_blank", "noopener,noreferrer");
+            return;
+        }
+        copy(contact.value);
+        message.success("已复制");
+    };
+}
+
+
+========================================================================
+FILE: web/src/components/prompt-optimize-button.tsx
+LINES: 1-99
+========================================================================
+import type { CSSProperties } from "react";
+import { useEffect, useRef } from "react";
+import { App, Button, Tooltip } from "antd";
+import { Sparkle } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { usePromptOptimizer } from "@/hooks/use-prompt-optimizer";
+import { modelOptionName } from "@/stores/use-config-store";
+import { ApiError } from "@/services/api/client";
+import { cn } from "@/lib/utils";
+import type { PromptOptimizerCapability } from "@/services/api/prompt-optimizer";
+
+type Props = {
+    prompt: string;
+    model: string;
+    capability: PromptOptimizerCapability;
+    onOptimized: (next: string) => void;
+    disabled?: boolean;
+    className?: string;
+    style?: CSSProperties;
+};
+
+export function PromptOptimizeButton({ prompt, model, capability, onOptimized, disabled, className, style }: Props) {
+    const { t } = useTranslation();
+    const { message } = App.useApp();
+    const { optimize, optimizing, cancel } = usePromptOptimizer();
+    const promptRef = useRef(prompt);
+    promptRef.current = prompt;
+
+    useEffect(() => {
+        cancel();
+    }, [prompt, model, capability, cancel]);
+
+    const run = async () => {
+        const original = prompt.trim();
+        if (!original || !model || optimizing) return;
+        try {
+            const result = await optimize({ prompt: original, model: modelOptionName(model), capability });
+            if (promptRef.current.trim() !== original) {
+                message.warning(t("common.optimizePromptChanged"));
+                return;
+            }
+            onOptimized(result.prompt);
+            message.open({
+                type: "success",
+                duration: 6,
+                content: (
+                    <span className="inline-flex items-center gap-2">
+                        {t("common.optimizePromptApplied", { credits: result.creditsCharged })}
+                        <Button
+                            type="link"
+                            size="small"
+                            className="!h-auto !p-0"
+                            onClick={() => {
+                                if (promptRef.current === result.prompt) onOptimized(original);
+                            }}
+                        >
+                            {t("common.optimizePromptUndo")}
+                        </Button>
+                    </span>
+                ),
+            });
+        } catch (error) {
+            if (error instanceof Error && error.name === "AbortError") return;
+            if (error instanceof ApiError && error.status === 402) {
+                message.error(t("common.optimizePromptInsufficientCredits"));
+            } else if (error instanceof ApiError && error.status === 503) {
+                message.error(t("common.optimizePromptUnavailable"));
+            } else if (error instanceof ApiError && error.status === 429) {
+                message.error(t("common.optimizePromptRateLimited"));
+            } else {
+                message.error(error instanceof Error ? error.message : t("common.optimizePromptFailed"));
+            }
+        }
+    };
+
+    const blocked = disabled || !prompt.trim() || !model || optimizing;
+    return (
+        <Tooltip title={blocked && !optimizing ? t("common.optimizePromptHint") : t("common.optimizePrompt")}>
+            <Button
+                type="text"
+                shape="circle"
+                size="small"
+                loading={optimizing}
+                disabled={blocked}
+                aria-label={t("common.optimizePrompt")}
+                className={cn(
+                    "!absolute !bottom-2 !right-2 z-10 !h-7 !w-7 !min-w-7 !rounded-full !p-0 border border-border/60 bg-background/80 shadow-sm backdrop-blur transition hover:bg-muted",
+                    className,
+                )}
+                style={style}
+                icon={optimizing ? undefined : <Sparkle className="size-3.5" />}
+                onMouseDown={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => void run()}
+            />
+        </Tooltip>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/prompts/prompt-card.tsx
+LINES: 1-63
+========================================================================
+import { Copy, PlayCircle } from "lucide-react";
+import type { ReactNode } from "react";
+import { Button, Card, Tag } from "antd";
+import { useTranslation } from "react-i18next";
+
+import { PromptCover } from "./prompt-cover";
+import { formatPromptDate, type Prompt } from "@/services/api/prompts";
+
+export function PromptCard({
+    item,
+    onOpen,
+    onCopy,
+    actionLabel,
+    actionIcon = <Copy className="size-3.5" />,
+    actionType = "text",
+    extraAction,
+    compact = false,
+}: {
+    item: Prompt;
+    onOpen: () => void;
+    onCopy: () => void;
+    actionLabel?: string;
+    actionIcon?: ReactNode;
+    actionType?: "text" | "primary";
+    extraAction?: ReactNode;
+    compact?: boolean;
+}) {
+    const { i18n, t } = useTranslation();
+    return (
+        <Card
+            hoverable
+            className={compact ? "group cursor-pointer overflow-hidden transition-transform duration-200 hover:-translate-y-1" : "flex h-full flex-col overflow-hidden"}
+            styles={{ body: compact ? { padding: 0 } : { display: "flex", flex: 1, flexDirection: "column", padding: 0 } }}
+            cover={
+                <button type="button" className="relative block w-full cursor-pointer text-left" onClick={onOpen}>
+                    <PromptCover
+                        src={item.coverUrl}
+                        alt={item.title}
+                        compact={compact}
+                        className={compact ? "aspect-square w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" : "aspect-[4/3] w-full object-cover"}
+                    />
+                    {item.previewVideoUrl ? (
+                        <span className="pointer-events-none absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5 text-[10px] font-medium text-white">
+                            <PlayCircle className="size-3" />
+                            视频
+                        </span>
+                    ) : null}
+                </button>
+            }
+        >
+            <button type="button" className={compact ? "block w-full cursor-pointer text-left" : "block w-full flex-1 cursor-pointer text-left"} onClick={onOpen}>
+                <div className={compact ? "px-3 py-2.5" : "p-4"}>
+                    <div className="flex items-start justify-between gap-3">
+                        <h2 className="line-clamp-1 text-sm font-semibold text-foreground">{item.title}</h2>
+                        {!compact ? <span className="shrink-0 text-xs text-muted-foreground">{formatPromptDate(item.updatedAt, i18n.resolvedLanguage)}</span> : null}
+                    </div>
+                    {!compact ? <><p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">{item.description || item.prompt}</p><div className="mt-3 flex flex-wrap gap-1.5">{item.tags.map((tag) => <Tag key={tag} className="m-0 text-[11px]">{tag}</Tag>)}</div></> : null}
+                </div>
+            </button>
+            {!compact ? <div className="mt-auto flex items-center gap-2 px-4 pb-4"><Button block={actionType === "primary"} type={actionType} size="small" icon={actionIcon} onClick={onCopy}>{actionLabel || t("common.copy")}</Button>{extraAction}</div> : null}
+        </Card>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/prompts/prompt-cover.tsx
+LINES: 1-48
+========================================================================
+import { useEffect, useMemo, useState } from "react";
+import { ImageOff } from "lucide-react";
+
+import { BrandName } from "@/components/brand/brand-wordmark";
+import { promptImageUrl } from "@/lib/prompt-image";
+
+// 封面占位：只用四档深灰 + 极弱蓝色倾向，避免彩虹渐变（即梦规范）
+const GRADIENTS = [
+    "linear-gradient(135deg, #232323 0%, #1a1a1a 62%, #151515 100%)",
+    "linear-gradient(160deg, #1f1f1f 0%, #191919 55%, #212121 100%)",
+    "linear-gradient(120deg, rgba(216,255,62,0.10) 0%, #1a1a1a 58%, #141414 100%)",
+    "linear-gradient(200deg, #202020 0%, #171717 60%, #1f1f1f 100%)",
+    "linear-gradient(135deg, rgba(0,202,224,0.08) 0%, #1b1b1b 60%, #131313 100%)",
+    "linear-gradient(180deg, #222222 0%, #181818 70%, #121212 100%)",
+    "linear-gradient(115deg, #1d1d1d 0%, #232323 50%, #171717 100%)",
+    "linear-gradient(150deg, rgba(255,255,255,0.06) 0%, #1a1a1a 55%, #141414 100%)",
+];
+
+export function PromptCover({ src, alt, className = "", compact = false }: { src?: string; alt: string; className?: string; compact?: boolean }) {
+    const [failed, setFailed] = useState(false);
+    useEffect(() => setFailed(false), [src]);
+
+    const url = promptImageUrl(src);
+    const gradient = useMemo(() => {
+        const seed = Array.from(alt).reduce((sum, char) => sum + (char.codePointAt(0) ?? 0), 0);
+        return GRADIENTS[seed % GRADIENTS.length];
+    }, [alt]);
+
+    if (!url || failed) {
+        return (
+            <div className={`relative grid w-full place-items-center overflow-hidden ${className}`} style={{ backgroundImage: gradient }} role="img" aria-label={alt}>
+                <div
+                    className="absolute inset-0 opacity-40"
+                    style={{
+                        backgroundImage:
+                            "radial-gradient(circle at 20% 15%, rgba(255,255,255,.55), transparent 42%), radial-gradient(circle at 85% 80%, rgba(255,255,255,.35), transparent 45%)",
+                    }}
+                />
+                <div className="relative flex flex-col items-center gap-1 px-3 text-center">
+                    {compact ? <ImageOff className="size-4 text-white/70" /> : <span className="text-3xl font-semibold text-white/85">{alt.slice(0, 1)}</span>}
+                    {compact ? null : <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.25em] text-white/60"><BrandName text="sundas" imageClassName="opacity-60" imageHeight="0.95em" />prompt</span>}
+                </div>
+            </div>
+        );
+    }
+
+    return <img src={url} alt={alt} className={className} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+}
+
+
+========================================================================
+FILE: web/src/components/prompts/prompt-detail-dialog.tsx
+LINES: 1-67
+========================================================================
+import { ArrowUpRight, Copy, FolderPlus } from "lucide-react";
+import { Button, Modal, Space, Tag } from "antd";
+import { useTranslation } from "react-i18next";
+
+import { PromptCover } from "@/components/prompts/prompt-cover";
+import { promptImageUrl } from "@/lib/prompt-image";
+import { formatPromptDate, type Prompt } from "@/services/api/prompts";
+
+export function PromptDetailDialog({ prompt, onClose, onCopy, onUsePrompt, onSaveAsset }: { prompt: Prompt | null; onClose: () => void; onCopy: (prompt: string) => void; onUsePrompt?: (prompt: Prompt) => void; onSaveAsset?: (prompt: Prompt) => void }) {
+    const { i18n, t } = useTranslation();
+
+    return (
+        <Modal title={prompt?.title} open={Boolean(prompt)} onCancel={onClose} footer={null} width={720} centered destroyOnHidden styles={{ body: { height: "calc(85vh - 55px)", overflow: "hidden" } }}>
+            {prompt ? (
+                <div className="flex h-full min-h-0 flex-col">
+                    <div className="shrink-0 space-y-3 pb-4">
+                        {prompt.previewVideoUrl ? (
+                            // 视频条目只显示播放器（poster 走站内图片代理，失败时退到首帧），不再额外叠封面大图
+                            <video
+                                key={prompt.id}
+                                src={prompt.previewVideoUrl}
+                                poster={promptImageUrl(prompt.coverUrl) || undefined}
+                                controls
+                                playsInline
+                                preload="metadata"
+                                className="h-48 w-full rounded-lg bg-black object-contain sm:h-56"
+                            />
+                        ) : (
+                            <PromptCover src={prompt.coverUrl} alt={prompt.title} className="h-48 w-full rounded-lg object-cover sm:h-56" />
+                        )}
+                        {prompt.referenceImageUrls.length > 1 ? <div className="grid grid-cols-6 gap-2">{prompt.referenceImageUrls.filter((url) => url !== prompt.coverUrl).slice(0, 6).map((url) => <PromptCover key={url} src={url} alt="" compact className="aspect-square w-full rounded-md object-cover" />)}</div> : null}
+                    </div>
+                    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto border-y border-border py-4 pr-2 dark:border-border">
+                        <div className="flex flex-wrap gap-1.5">
+                            {prompt.tags.map((tag) => (
+                                <Tag key={tag} className="m-0">
+                                    {tag}
+                                </Tag>
+                            ))}
+                        </div>
+                        {prompt.description ? <p className="mt-4 text-sm leading-6 text-muted-foreground">{prompt.description}</p> : null}
+                        {prompt.preview ? <pre className="mt-4 whitespace-pre-wrap rounded-lg bg-muted p-3 text-xs leading-5 text-muted-foreground dark:bg-muted dark:text-foreground/80">{prompt.preview}</pre> : null}
+                        <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-foreground dark:text-foreground/80">{prompt.prompt}</p>
+                        {prompt.createdAt || prompt.updatedAt ? <div className="mt-4 text-xs text-muted-foreground">{prompt.createdAt ? t("common.created", { date: formatPromptDate(prompt.createdAt, i18n.resolvedLanguage) }) : null}{prompt.createdAt && prompt.updatedAt ? " · " : null}{prompt.updatedAt ? t("common.updated", { date: formatPromptDate(prompt.updatedAt, i18n.resolvedLanguage) }) : null}</div> : null}
+                    </div>
+                    <div className="shrink-0 pt-4">
+                        <Space wrap>
+                            {onUsePrompt ? (
+                                <Button type="primary" icon={<ArrowUpRight className="size-4" />} onClick={() => onUsePrompt(prompt)}>
+                                    {t("home.usePrompt")}
+                                </Button>
+                            ) : null}
+                            <Button icon={<Copy className="size-4" />} onClick={() => onCopy(prompt.prompt)}>
+                                {t("common.copyPrompt")}
+                            </Button>
+                            {onSaveAsset ? (
+                                <Button icon={<FolderPlus className="size-4" />} onClick={() => onSaveAsset(prompt)}>
+                                    {t("common.addToAssets")}
+                                </Button>
+                            ) : null}
+                        </Space>
+                    </div>
+                </div>
+            ) : null}
+        </Modal>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/prompts/prompt-select-dialog.tsx
+LINES: 1-84
+========================================================================
+import { Search } from "lucide-react";
+import { type UIEvent, useEffect, useState } from "react";
+import { App, Button, Empty, Input, Modal, Spin, Tag } from "antd";
+import { useTranslation } from "react-i18next";
+
+import { ALL_PROMPTS_OPTION } from "@/services/api/prompts";
+import { cn } from "@/lib/utils";
+import { PromptCard } from "./prompt-card";
+import { usePromptList } from "./use-prompt-list";
+
+export function PromptSelectDialog({ open, onOpenChange, onSelect }: { open: boolean; onOpenChange: (open: boolean) => void; onSelect: (prompt: string) => void }) {
+    const { message } = App.useApp();
+    const { t } = useTranslation();
+    const [keyword, setKeyword] = useState("");
+    const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const [selectedCategory, setSelectedCategory] = useState(ALL_PROMPTS_OPTION);
+    const { query, items, tags: promptTags, categories: promptCategories } = usePromptList({ keyword, tags: selectedTags, category: selectedCategory, enabled: open });
+    const toggleTag = (tag: string) => {
+        if (tag === ALL_PROMPTS_OPTION) return setSelectedTags([]);
+        setSelectedTags((items) => (items.includes(tag) ? items.filter((item) => item !== tag) : [...items, tag]));
+    };
+    const selectPrompt = (prompt: string) => {
+        onSelect(prompt);
+        onOpenChange(false);
+    };
+
+    useEffect(() => {
+        if (query.isError) message.error(query.error instanceof Error ? query.error.message : t("prompts.loadFailed"));
+    }, [message, query.error, query.isError, t]);
+
+    const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
+        const target = event.currentTarget;
+        if (query.hasNextPage && !query.isFetching && !query.isFetchNextPageError && target.scrollTop + target.clientHeight >= target.scrollHeight - 160) void query.fetchNextPage();
+    };
+
+    return (
+        <Modal title={t("prompts.library")} open={open} onCancel={() => onOpenChange(false)} footer={null} width={880} centered>
+            <div className="grid h-[62dvh] min-h-0 gap-5 sm:grid-cols-[200px_minmax(0,1fr)]" data-canvas-no-zoom onWheelCapture={(event) => event.stopPropagation()}>
+                <aside className="thin-scrollbar min-h-0 overflow-y-auto border-r border-border pr-4 dark:border-border">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("prompts.category")}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {promptCategories.map((category) => (
+                            <Tag.CheckableTag key={category} checked={selectedCategory === category} className={cn("prompt-filter-tag", selectedCategory === category && "is-active")} onChange={() => setSelectedCategory(category)}>
+                                {category === ALL_PROMPTS_OPTION ? t("common.all") : category}
+                            </Tag.CheckableTag>
+                        ))}
+                    </div>
+                    <div className="mb-2 mt-5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("prompts.tags")}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {promptTags.map((tag) => {
+                            const active = tag === ALL_PROMPTS_OPTION ? selectedTags.length === 0 : selectedTags.includes(tag);
+                            return (
+                                <Tag.CheckableTag key={tag} checked={active} className={cn("prompt-filter-tag", active && "is-active")} onChange={() => toggleTag(tag)}>
+                                    {tag === ALL_PROMPTS_OPTION ? t("common.all") : tag}
+                                </Tag.CheckableTag>
+                            );
+                        })}
+                    </div>
+                </aside>
+                <section className="flex min-h-0 min-w-0 flex-col">
+                    <Input size="large" prefix={<Search className="size-4 text-muted-foreground" />} value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={t("prompts.searchTitle")} />
+                    <div className="thin-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto pr-2" data-canvas-no-zoom onScroll={handleListScroll} onWheelCapture={(event) => event.stopPropagation()}>
+                        {query.isLoading ? (
+                            <div className="flex h-40 items-center justify-center">
+                                <Spin />
+                            </div>
+                        ) : null}
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                            {items.map((item) => (
+                                <PromptCard key={item.id} item={item} onOpen={() => selectPrompt(item.prompt)} onCopy={() => selectPrompt(item.prompt)} compact />
+                            ))}
+                        </div>
+                        {!query.isLoading && items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("prompts.empty")} className="py-8" /> : null}
+                        {query.hasNextPage ? (
+                            <div className="py-4 text-center">
+                                <Button type="text" loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{query.isFetchNextPageError ? t("canvas.sidePanel.loadFailedRetry") : t("prompts.loadMore")}</Button>
+                            </div>
+                        ) : null}
+                    </div>
+                </section>
+            </div>
+        </Modal>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/prompts/prompt-video-cover.tsx
+LINES: 1-66
+========================================================================
+import { useEffect, useRef, useState } from "react";
+
+/**
+ * 视频封面：默认显示视频首帧（#t=0.5 避免黑帧），hover 时静音自动播放，移开后暂停并回到封面帧。
+ * 用于灵感大厅等卡片场景，无需额外点击即可预览。
+ */
+export function PromptVideoCover({ src, poster, alt, className = "" }: { src: string; poster?: string; alt: string; className?: string }) {
+    const ref = useRef<HTMLVideoElement>(null);
+    const hovered = useRef(false);
+    const [loadedSrc, setLoadedSrc] = useState<string>();
+    // #t=0.5：让 preload="metadata" 停在前半秒，避免部分视频首帧为黑屏
+    const srcWithFrame = src.includes("#") ? src : `${src}#t=0.5`;
+
+    useEffect(() => {
+        const video = ref.current;
+        if (!video) return;
+        const observer = new IntersectionObserver(entries => {
+            if (entries.some(entry => entry.isIntersecting)) {
+                setLoadedSrc(src);
+                observer.disconnect();
+            }
+        }, { rootMargin: "200px" });
+        observer.observe(video);
+        return () => {
+            observer.disconnect();
+            hovered.current = false;
+            video.pause();
+        };
+    }, [src]);
+
+    const start = () => {
+        const video = ref.current;
+        if (!video || !hovered.current) return;
+        // 浏览器只允许静音自动播放；这里再强制一次，避免 muted 未生效导致 play() 被拒绝
+        video.muted = true;
+        void video.play()?.catch(() => undefined);
+    };
+
+    return (
+        <video
+            ref={ref}
+            src={loadedSrc === src ? srcWithFrame : undefined}
+            poster={poster || undefined}
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            aria-label={alt}
+            className={className}
+            onMouseEnter={() => { hovered.current = true; setLoadedSrc(src); start(); }}
+            onLoadedData={start}
+            onPlay={() => { if (!hovered.current) ref.current?.pause(); }}
+            onMouseLeave={() => {
+                hovered.current = false;
+                const video = ref.current;
+                if (!video) return;
+                video.pause();
+                try {
+                    video.currentTime = 0.5;
+                } catch {
+                    /* metadata 未就绪时忽略 */
+                }
+            }}
+        />
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/prompts/use-prompt-list.ts
+LINES: 1-29
+========================================================================
+import { useEffect, useMemo, useState } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
+
+import { ALL_PROMPTS_OPTION, fetchPrompts } from "@/services/api/prompts";
+
+export const PROMPT_PAGE_SIZE = 20;
+
+export function usePromptList({ keyword, tags = [], category = ALL_PROMPTS_OPTION, sourceId, metadata = true, enabled = true }: { keyword: string; tags?: string[]; category?: string; sourceId?: string; metadata?: boolean; enabled?: boolean }) {
+    const [debouncedKeyword, setDebouncedKeyword] = useState(keyword);
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedKeyword(keyword), 300);
+        return () => clearTimeout(timer);
+    }, [keyword]);
+    const query = useInfiniteQuery({
+        queryKey: ["prompts", debouncedKeyword, [...tags].sort(), category, sourceId, metadata],
+        queryFn: ({ pageParam, signal }) => fetchPrompts({ keyword: debouncedKeyword, tag: tags, category, sourceId, page: pageParam, pageSize: PROMPT_PAGE_SIZE, metadata: metadata && pageParam === 1, signal }),
+        initialPageParam: 1,
+        getNextPageParam: (lastPage) => (lastPage.hasMore && lastPage.items.length ? lastPage.page + 1 : undefined),
+        enabled: enabled && keyword.trim() === debouncedKeyword.trim(),
+    });
+    const firstPage = query.data?.pages[0];
+    return {
+        query,
+        items: useMemo(() => query.data?.pages.flatMap((page) => page.items) || [], [query.data?.pages]),
+        tags: useMemo(() => [ALL_PROMPTS_OPTION, ...(firstPage?.tags || [])], [firstPage?.tags]),
+        categories: useMemo(() => [ALL_PROMPTS_OPTION, ...(firstPage?.categories || [])], [firstPage?.categories]),
+        total: firstPage?.total || 0,
+    };
+}
+
+
+========================================================================
+FILE: web/src/components/text-settings-panel.tsx
+LINES: 1-57
+========================================================================
+import { type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+
+import i18n from "@/i18n";
+import { ImageSettingsTheme } from "@/components/image-settings-panel";
+import { type CanvasTheme } from "@/lib/canvas-theme";
+import type { AiConfig, ReasoningEffort } from "@/stores/use-config-store";
+
+const reasoningEffortOptions: ReasoningEffort[] = ["auto", "low", "medium", "high", "xhigh"];
+
+type TextSettingsPanelProps = {
+    config: AiConfig;
+    onConfigChange: (key: "reasoningEffort", value: ReasoningEffort) => void;
+    theme: CanvasTheme;
+    className?: string;
+};
+
+export function TextSettingsPanel({ config, onConfigChange, theme, className = "space-y-4" }: TextSettingsPanelProps) {
+    const { t } = useTranslation();
+    return (
+        <ImageSettingsTheme theme={theme}>
+            <div className={className} style={{ color: theme.node.text }} onMouseDown={(event) => event.stopPropagation()}>
+                <div className="text-lg font-semibold">{t("settingsPanels.text.title")}</div>
+                <div className="space-y-2.5">
+                    <div className="text-sm font-medium" style={{ color: theme.node.muted }}>
+                        {t("settingsPanels.text.reasoning")}
+                    </div>
+                    <div className="grid grid-cols-5 gap-2">
+                        {reasoningEffortOptions.map((value) => (
+                            <OptionPill key={value} selected={config.reasoningEffort === value} theme={theme} onClick={() => onConfigChange("reasoningEffort", value)}>
+                                {t(`settingsPanels.common.${value}`)}
+                            </OptionPill>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </ImageSettingsTheme>
+    );
+}
+
+export function reasoningEffortLabel(value: ReasoningEffort) {
+    return reasoningEffortOptions.includes(value) ? i18n.t(`settingsPanels.common.${value}`) : value;
+}
+
+function OptionPill({ selected, theme, onClick, children }: { selected: boolean; theme: CanvasTheme; onClick: () => void; children: ReactNode }) {
+    return (
+        <button
+            type="button"
+            className="h-9 cursor-pointer rounded-full border px-2 text-sm transition hover:opacity-80"
+            style={{ background: "transparent", borderColor: selected ? theme.node.text : theme.node.stroke, color: theme.node.text }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={onClick}
+        >
+            {children}
+        </button>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/ui/base/switch/index.ts
+LINES: 1-1
+========================================================================
+export { Switch, type SwitchProps } from "./switch";
+
+
+========================================================================
+FILE: web/src/components/ui/base/switch/switch.tsx
+LINES: 1-124
+========================================================================
+import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+
+import { cn } from "@/lib/utils";
+
+/**
+ * Switch — 开关（自研，button role=switch，无依赖）。
+ *
+ * 设计约束（对齐 ui/README 与 ADR-0008）：
+ * - <button type="button" role="switch" aria-checked> 承载语义与键盘（Space/Enter 原生），
+ *   :focus-visible outline 落自身；无裸色、只消费三层 token。
+ * - 开 = bg-foreground + 反色 thumb（bg-background 语义对齐 Checkbox 选中态），
+ *   关 = bg-surface-tertiary + 发丝内描边 + surface-strong 抬升 thumb（同 SegmentedControl 选中面）。
+ * - thumb 滑动用 translate-x 位移（尺寸档固定行程），motion-reduce 关闭过渡。
+ * - data-state="on|off" 暴露给上下文 CSS 覆盖（admin 语义绿等保留于页面层，不侵入组件）。
+ * - API 对齐 AntD Switch：checked/defaultChecked/onChange/disabled/size/checkedChildren/
+ *   unCheckedChildren/loading + aria-* 透传；受控与否由 checked 是否传入决定，
+ *   onChange(checked) 单参。顶层组件接收 checked/onChange → Form.Item valuePropName="checked" 注入兼容。
+ * 对标：AntD Switch；boardui base/switch。
+ */
+
+export interface SwitchProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "size" | "onChange"> {
+    /** 开关尺寸。默认 md；AntD small → sm 映射。 */
+    size?: "sm" | "md";
+    /** 受控：是否开启 */
+    checked?: boolean;
+    /** 非受控初始值 */
+    defaultChecked?: boolean;
+    /** loading：拇指位换转圈，忽略点击（视觉保留 checked 态） */
+    loading?: boolean;
+    /** 开启时轨道内左侧文案（2 字宽度档） */
+    checkedChildren?: ReactNode;
+    /** 关闭时轨道内右侧文案 */
+    unCheckedChildren?: ReactNode;
+    /** 变化回调（AntD 同签名：仅布尔参） */
+    onChange?: (checked: boolean) => void;
+}
+
+/** 几何档：轨道尺寸与 thumb 行程（thumb 用 left-0.5 起始 + translate-x 档位） */
+const SWITCH_SIZE: Record<"sm" | "md", { root: string; thumbPlain: string; thumbText: string; hasTextRoot: string }> = {
+    sm: {
+        root: "h-5 w-8 rounded-full",
+        thumbPlain: "size-3.5 data-[state=on]:translate-x-3.5",
+        thumbText: "size-3.5 data-[state=on]:translate-x-3.5",
+        hasTextRoot: "",
+    },
+    md: {
+        root: "h-6 w-11 rounded-full",
+        thumbPlain: "size-4 data-[state=on]:translate-x-6",
+        thumbText: "size-4 data-[state=on]:translate-x-9",
+        hasTextRoot: "w-14",
+    },
+};
+
+export function Switch({ size = "md", checked: checkedProp, defaultChecked = false, loading = false, checkedChildren, unCheckedChildren, onChange, disabled, className, "aria-label": ariaLabel, ...props }: SwitchProps) {
+    const [innerChecked, setInnerChecked] = useState(defaultChecked);
+    const controlled = checkedProp !== undefined;
+    const checked = controlled ? checkedProp : innerChecked;
+    const hasText = checkedChildren !== undefined || unCheckedChildren !== undefined;
+
+    const handleClick = () => {
+        if (disabled || loading) {
+            return;
+        }
+        const next = !checked;
+        if (!controlled) {
+            setInnerChecked(next);
+        }
+        onChange?.(next);
+    };
+
+    const geometry = SWITCH_SIZE[size];
+    const thumbClass = hasText ? geometry.thumbText : geometry.thumbPlain;
+
+    return (
+        <button
+            type="button"
+            role="switch"
+            data-slot="switch"
+            data-state={checked ? "on" : "off"}
+            aria-checked={checked}
+            aria-label={ariaLabel}
+            aria-busy={loading || undefined}
+            disabled={disabled}
+            onClick={handleClick}
+            className={cn(
+                "relative inline-flex shrink-0 select-none items-center align-middle transition-colors motion-reduce:transition-none",
+                "data-[state=on]:bg-foreground",
+                "data-[state=off]:bg-surface-tertiary data-[state=off]:ring-1 data-[state=off]:ring-inset data-[state=off]:ring-foreground/15",
+                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                "disabled:cursor-not-allowed disabled:opacity-45",
+                geometry.root,
+                hasText && size === "md" && geometry.hasTextRoot,
+                className,
+            )}
+            {...props}
+        >
+            {/* 关态文案（右侧） */}
+            {unCheckedChildren !== undefined ? (
+                <span
+                    aria-hidden="true"
+                    className={cn("absolute top-1/2 right-1.5 -translate-y-1/2 text-xs leading-none font-medium transition-opacity motion-reduce:transition-none", checked ? "text-foreground/55 opacity-0" : "text-foreground/55 opacity-100")}
+                >
+                    {unCheckedChildren}
+                </span>
+            ) : null}
+            {/* 开态文案（左侧，反色） */}
+            {checkedChildren !== undefined ? (
+                <span aria-hidden="true" className={cn("absolute top-1/2 left-1.5 -translate-y-1/2 text-xs leading-none font-medium transition-opacity motion-reduce:transition-none", checked ? "text-background opacity-100" : "text-background opacity-0")}>
+                    {checkedChildren}
+                </span>
+            ) : null}
+            {/* thumb / loading 转圈 */}
+            {loading ? (
+                <span aria-hidden="true" className={cn("absolute inset-0 m-auto size-3.5 animate-spin rounded-full border-[1.5px] border-current border-t-transparent", checked ? "text-background" : "text-foreground/60")} />
+            ) : (
+                <span
+                    aria-hidden="true"
+                    data-state={checked ? "on" : "off"}
+                    className={cn("sc-switch-thumb absolute left-0.5 top-1/2 -translate-y-1/2 rounded-full border border-border/80 bg-surface-strong transition-transform duration-200 ease-out motion-reduce:transition-none", thumbClass)}
+                />
+            )}
+        </button>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/ui/base/tooltip/index.ts
+LINES: 1-1
+========================================================================
+export { Tooltip, type TooltipPlacement, type TooltipProps } from "./tooltip";
+
+
+========================================================================
+FILE: web/src/components/ui/base/tooltip/tooltip.tsx
+LINES: 1-26
+========================================================================
+import type { ReactNode } from "react";
+import { Tooltip as AntTooltip } from "antd";
+
+export type TooltipPlacement = "top" | "bottom" | "left" | "right" | "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
+
+export type TooltipProps = {
+    title?: ReactNode;
+    placement?: TooltipPlacement;
+    children: ReactNode;
+};
+
+/**
+ * Tooltip — 气泡提示（sundas 版）。
+ *
+ * BeefTV 用的是 react-aria-components 自研浮层；sundas 没有这个依赖，
+ * 这里落到已有的 antd Tooltip 上，保持同名同 props（title / placement / children），
+ * 调用方零改动。title 为空时不渲染浮层，与 BeefTV 行为一致。
+ */
+export function Tooltip({ title, placement = "top", children }: TooltipProps) {
+    if (title === undefined || title === null || title === "") return <>{children}</>;
+    return (
+        <AntTooltip title={title} placement={placement} mouseEnterDelay={0.2}>
+            {children}
+        </AntTooltip>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/ui/dia-text-reveal.tsx
+LINES: 1-226
+========================================================================
+import { useEffect, useRef, useState } from "react";
+import { animate, motion, useInView, useMotionValue, useReducedMotion, useTransform, type HTMLMotionProps } from "motion/react";
+
+import { cn } from "@/lib/utils";
+
+const DEFAULT_COLORS = ["#c679c4", "#fa3d1d", "#ffb005", "#e1e1fe", "#0358f7"];
+const BAND_HALF = 17;
+const SWEEP_START = -BAND_HALF;
+const SWEEP_END = 100 + BAND_HALF;
+
+const sweepEase = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);
+
+function buildGradient(pos: number, colors: string[], textColor: string) {
+    const bandStart = pos - BAND_HALF;
+    const bandEnd = pos + BAND_HALF;
+
+    if (bandStart >= 100) {
+        return `linear-gradient(90deg, ${textColor}, ${textColor})`;
+    }
+    const n = colors.length;
+    const parts: string[] = [];
+
+    if (bandStart > 0) parts.push(`${textColor} 0%`, `${textColor} ${bandStart.toFixed(2)}%`);
+
+    colors.forEach((c, i) => {
+        const pct = n === 1 ? pos : bandStart + (i / (n - 1)) * BAND_HALF * 2;
+        parts.push(`${c} ${pct.toFixed(2)}%`);
+    });
+
+    if (bandEnd < 100) parts.push(`transparent ${bandEnd.toFixed(2)}%`, `transparent 100%`);
+
+    return `linear-gradient(90deg, ${parts.join(", ")})`;
+}
+
+function measureWidths(el: HTMLElement, texts: string[]) {
+    const ghost = el.cloneNode() as HTMLElement;
+    Object.assign(ghost.style, {
+        position: "absolute",
+        visibility: "hidden",
+        pointerEvents: "none",
+        width: "auto",
+        whiteSpace: "nowrap",
+    });
+    el.parentElement!.appendChild(ghost);
+    const widths = texts.map((t) => {
+        ghost.textContent = t;
+        return ghost.getBoundingClientRect().width;
+    });
+    ghost.remove();
+    return widths;
+}
+
+/**
+ * Props for {@link DiaTextReveal}.
+ */
+export interface DiaTextRevealProps extends Omit<HTMLMotionProps<"span">, "ref" | "children" | "style" | "animate" | "transition" | "color"> {
+    /**
+     * Text to reveal. Pass multiple strings to rotate when {@link DiaTextRevealProps.repeat} is `true`.
+     */
+    text: string | string[];
+    /**
+     * Colors sampled across the moving gradient band. Defaults to a built-in palette.
+     */
+    colors?: string[];
+    /**
+     * CSS color for revealed text after the sweep and for leading/trailing regions during the animation.
+     * @defaultValue `"var(--foreground)"`
+     */
+    textColor?: string;
+    /**
+     * Duration of one sweep pass, in seconds.
+     * @defaultValue `1.5`
+     */
+    duration?: number;
+    /**
+     * Delay before the sweep starts, in seconds.
+     * @defaultValue `0`
+     */
+    delay?: number;
+    /**
+     * When `text` is an array, replay the sweep and advance to the next string after each completion.
+     * @defaultValue `false`
+     */
+    repeat?: boolean;
+    /**
+     * Pause between cycles when {@link DiaTextRevealProps.repeat} is `true`, in seconds.
+     * @defaultValue `0.5`
+     */
+    repeatDelay?: number;
+    /**
+     * If `true`, the animation starts only after the element enters the viewport.
+     * @defaultValue `true`
+     */
+    startOnView?: boolean;
+    /**
+     * Passed to `useInView`: if `true`, in-view detection fires at most once (no replay on scroll-back).
+     * @defaultValue `true`
+     */
+    once?: boolean;
+    /**
+     * Additional class names for the animated `span` (e.g. typography utilities).
+     */
+    className?: string;
+    /**
+     * When `text` has multiple entries, use the widest string’s width for layout instead of animating width per line.
+     * @defaultValue `false`
+     */
+    fixedWidth?: boolean;
+}
+
+export function DiaTextReveal({ text, colors = DEFAULT_COLORS, textColor = "var(--foreground)", duration = 1.5, delay = 0, repeat = false, repeatDelay = 0.5, startOnView = true, once = true, className, fixedWidth = false, ...props }: DiaTextRevealProps) {
+    const texts = Array.isArray(text) ? text : [text];
+    const isMulti = texts.length > 1;
+    const prefersReducedMotion = useReducedMotion();
+
+    const spanRef = useRef<HTMLSpanElement>(null);
+    const optsRef = useRef({
+        colors,
+        textColor,
+        duration,
+        delay,
+        repeat,
+        repeatDelay,
+        texts,
+    });
+    optsRef.current = {
+        colors,
+        textColor,
+        duration,
+        delay,
+        repeat,
+        repeatDelay,
+        texts,
+    };
+
+    const indexRef = useRef(0);
+    const hasPlayedRef = useRef(false);
+    const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+    const playRef = useRef<() => void>(null!);
+    const stopRef = useRef<(() => void) | null>(null);
+
+    const [activeIndex, setActiveIndex] = useState(0);
+    const [measuredWidths, setMeasuredWidths] = useState<number[]>([]);
+
+    const sweepPos = useMotionValue(SWEEP_START);
+
+    const backgroundImage = useTransform(sweepPos, (pos) => buildGradient(pos, optsRef.current.colors, optsRef.current.textColor));
+
+    const isInView = useInView(spanRef, { once, amount: 0.1 });
+
+    useEffect(() => {
+        const el = spanRef.current;
+        if (!el || !isMulti) return;
+        setMeasuredWidths(measureWidths(el, texts));
+    }, [Array.isArray(text) ? text.join("\0") : text]);
+
+    playRef.current = () => {
+        const { duration, delay, repeat, repeatDelay, texts } = optsRef.current;
+
+        sweepPos.set(SWEEP_START);
+
+        const controls = animate(sweepPos, SWEEP_END, {
+            duration,
+            delay,
+            ease: sweepEase,
+            onComplete() {
+                if (!repeat) return;
+                timerRef.current = setTimeout(() => {
+                    const next = (indexRef.current + 1) % texts.length;
+                    indexRef.current = next;
+                    setActiveIndex(next);
+                    playRef.current();
+                }, repeatDelay * 1000);
+            },
+        });
+
+        stopRef.current = () => controls.stop();
+    };
+
+    useEffect(() => {
+        if (prefersReducedMotion) {
+            sweepPos.set(SWEEP_END);
+            return;
+        }
+        if (startOnView && !isInView) return;
+        if (once && hasPlayedRef.current) return;
+        hasPlayedRef.current = true;
+        playRef.current();
+
+        return () => {
+            stopRef.current?.();
+            clearTimeout(timerRef.current);
+        };
+    }, [isInView, startOnView, once, prefersReducedMotion, sweepPos]);
+
+    const fixedW = isMulti && fixedWidth && measuredWidths.length > 0 ? Math.max(...measuredWidths) : undefined;
+
+    const animatedW = isMulti && !fixedWidth && measuredWidths[activeIndex] != null ? measuredWidths[activeIndex] : undefined;
+
+    return (
+        <motion.span
+            ref={spanRef}
+            className={cn("align-bottom leading-[100%] text-inherit", className)}
+            style={{
+                transform: "translateY(-2px)",
+                color: "transparent",
+                backgroundClip: "text",
+                WebkitBackgroundClip: "text",
+                backgroundSize: "100% 100%",
+                backgroundImage,
+                ...(isMulti && {
+                    display: "inline-block",
+                    overflow: "hidden",
+                    whiteSpace: "nowrap",
+                    verticalAlign: "text-center",
+                    ...(fixedW != null && { width: fixedW }),
+                }),
+            }}
+            animate={animatedW != null ? { width: animatedW } : undefined}
+            transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+            {...props}
+        >
+            {texts[activeIndex]}
+        </motion.span>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/ui/optimized-image.tsx
+LINES: 1-74
+========================================================================
+/**
+ * 优化后的图片组件 - 带懒加载和骨架屏
+ */
+import { useState } from "react";
+import "../loading/skeleton.css";
+
+interface OptimizedImageProps {
+    src: string;
+    alt: string;
+    className?: string;
+    width?: number;
+    height?: number;
+    aspectRatio?: string;
+}
+
+export function OptimizedImage({
+    src,
+    alt,
+    className = "",
+    width,
+    height,
+    aspectRatio = "16/9"
+}: OptimizedImageProps) {
+    const [loaded, setLoaded] = useState(false);
+    const [error, setError] = useState(false);
+
+    return (
+        <div
+            className={`relative overflow-hidden ${className}`}
+            style={{ aspectRatio }}
+        >
+            {/* 骨架屏 - 图片加载时显示 */}
+            {!loaded && !error && (
+                <div className="skeleton skeleton-media absolute inset-0" />
+            )}
+
+            {/* 错误状态 */}
+            {error && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <span className="text-xs text-white/60">加载失败</span>
+                </div>
+            )}
+
+            {/* 实际图片 */}
+            <img
+                src={src}
+                alt={alt}
+                width={width}
+                height={height}
+                loading="lazy"
+                decoding="async"
+                className={`w-full h-full object-cover transition-opacity duration-300 ${
+                    loaded ? "opacity-100" : "opacity-0"
+                }`}
+                onLoad={() => setLoaded(true)}
+                onError={() => {
+                    setLoaded(false);
+                    setError(true);
+                }}
+            />
+        </div>
+    );
+}
+
+/**
+ * 使用示例：
+ *
+ * <OptimizedImage
+ *     src={item.coverUrl}
+ *     alt={item.title}
+ *     className="home-prompt-cover"
+ *     aspectRatio="16/9"
+ * />
+ */
+

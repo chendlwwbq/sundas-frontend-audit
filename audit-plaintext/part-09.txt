@@ -1,0 +1,2674 @@
+SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
+This is uncompressed source text, not a directory index or archive.
+Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
+Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+
+========================================================================
+FILE: web/src/components/canvas/nodes/builtin-nodes.tsx
+LINES: 1-39
+========================================================================
+import { FileText, Group, Image as ImageIcon, Music2, Settings2, Video } from "lucide-react";
+
+import i18n from "@/i18n";
+
+import { NODE_SPECS } from "@/constant/canvas";
+import { registerNodeDefinitions } from "@/lib/canvas/node-registry";
+import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
+import type { CanvasNodeDefinition, CanvasNodeResource } from "@/types/canvas-plugin";
+
+// Extensible metadata for built-in nodes, reusing NODE_SPECS for size and initial metadata.
+// Rendering remains in canvas-node's internal renderer, so no Content component is provided.
+function builtinResource(node: CanvasNodeData): CanvasNodeResource | null {
+    if (node.type === CanvasNodeType.Image && node.metadata?.content) return { kind: "image", url: node.metadata.content };
+    if (node.type === CanvasNodeType.Video && node.metadata?.content) return { kind: "video", url: node.metadata.content };
+    if (node.type === CanvasNodeType.Audio && node.metadata?.content) return { kind: "audio", url: node.metadata.content };
+    if (node.type === CanvasNodeType.Text && (node.metadata?.content || node.metadata?.prompt)) return { kind: "text", text: node.metadata.content || node.metadata.prompt };
+    return null;
+}
+
+const iconClass = "size-4";
+
+const BUILTIN_DEFINITIONS: CanvasNodeDefinition[] = [
+    { type: CanvasNodeType.Text, title: i18n.t("assets.kinds.text"), icon: <FileText className={iconClass} />, minimapColor: undefined, resource: builtinResource },
+    { type: CanvasNodeType.Image, title: i18n.t("assets.kinds.image"), icon: <ImageIcon className={iconClass} />, minimapColor: "#10b981", keepAspectRatio: (node: CanvasNodeData) => !node.metadata?.freeResize, resource: builtinResource },
+    { type: CanvasNodeType.Video, title: i18n.t("assets.kinds.video"), icon: <Video className={iconClass} />, minimapColor: "#f97316", keepAspectRatio: () => true, resource: builtinResource },
+    { type: CanvasNodeType.Audio, title: i18n.t("assets.kinds.audio"), icon: <Music2 className={iconClass} />, minimapColor: "#a855f7", resource: builtinResource },
+    { type: CanvasNodeType.Config, title: i18n.t("canvas.configNode.title"), icon: <Settings2 className={iconClass} />, minimapColor: "#60a5fa", hasSourceHandle: false },
+    { type: CanvasNodeType.Group, title: i18n.t("canvas.node.group"), icon: <Group className={iconClass} />, minimapColor: "#94a3b8" },
+].map((def) => {
+    const spec = NODE_SPECS[def.type];
+    return { ...def, title: spec.title, defaultSize: { width: spec.width, height: spec.height }, defaultMetadata: spec.metadata };
+});
+
+let registered = false;
+export function registerBuiltinNodes() {
+    if (registered) return;
+    registered = true;
+    registerNodeDefinitions(BUILTIN_DEFINITIONS, "builtin");
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/production-audio.tsx
+LINES: 1-44
+========================================================================
+import { useState } from 'react';
+import { Button, Checkbox, Input, InputNumber, Popconfirm, Select, Tag, theme } from 'antd';
+import { Play, Plus, Trash2 } from 'lucide-react';
+import type { ProductionNarration, ProductionSubtitle } from '../../../../shared/production';
+import { nodeProductionMedia, useProduction, useProductionModels } from './production-context';
+import { ProductionMediaPreview, ProductionMediaUpload } from './production-media';
+
+export function ProductionAudio() {
+    const { production, nodes, edit, request, busy } = useProduction(), { token } = theme.useToken();
+    const models = useProductionModels('audio'), [model, setModel] = useState(''), [voice, setVoice] = useState(''), [sample, setSample] = useState('');
+    const [seek, setSeek] = useState<{ lineId: string; timeMs: number; nonce: number } | null>(null);
+    const voices = models.find(item => item.id === model)?.voices || [];
+    const update = (line: ProductionNarration, changes: Partial<ProductionNarration>) => {
+        const changedInput = (['text', 'model', 'voice', 'speed'] as const).some(key => key in changes && changes[key] !== line[key]);
+        edit({ type: 'narration.upsert', narration: { ...line, ...changes, revision: line.revision + (changedInput ? 1 : 0) } });
+    };
+    const cuesFor = (id: string) => production.subtitles.filter(cue => cue.narrationId === id);
+    const replaceCue = (cue: ProductionSubtitle, changes: Partial<ProductionSubtitle>) => edit({ type: 'subtitles.replace', narrationId: cue.narrationId, subtitles: cuesFor(cue.narrationId).map(item => item.id === cue.id ? { ...item, ...changes, source: 'startMs' in changes || 'endMs' in changes ? 'manual' : item.source } : item) });
+    const estimate = (line: ProductionNarration) => {
+        if (!line.media?.durationMs) return;
+        const texts = line.text.split(/(?<=[。！？!?；;])\s*|\n+/u).map(item => item.trim()).filter(Boolean);
+        const total = texts.reduce((sum, item) => sum + [...item].length, 0); let cursor = 0;
+        const subtitles = texts.map((text, index) => { const startMs = cursor; cursor = index === texts.length - 1 ? line.media!.durationMs! : cursor + Math.round(line.media!.durationMs! * [...text].length / total); return { id: crypto.randomUUID(), narrationId: line.id, text, startMs, endMs: cursor, source: 'estimated' as const, reviewed: false }; });
+        edit({ type: 'subtitles.replace', narrationId: line.id, subtitles });
+    };
+    return <div className="space-y-4">
+        <Select className="w-full" aria-label="旁白模型" placeholder="选择配音模型" value={model || undefined} options={models.map(item => ({ value: item.id, label: item.name }))} onChange={value => { setModel(value); setVoice(''); }} />
+        {voices.length ? <Select className="w-full" aria-label="试听音色" placeholder="选择已配置音色" value={voice || undefined} options={voices.map(value => ({ value, label: value }))} onChange={setVoice} /> : <Input aria-label="试听音色标识" placeholder="填写此模型支持的音色标识，提交前由服务端校验" value={voice} onChange={event => setVoice(event.target.value)} />}
+        <Input.TextArea aria-label="同文案试听" value={sample} onChange={event => setSample(event.target.value)} placeholder="使用同一段文案比较音色" autoSize={{ minRows: 2, maxRows: 5 }} />
+        <div className="flex flex-wrap gap-1"><Button type="text" disabled={busy || !model || !voice || !sample.trim()} onClick={() => void request({ kind: 'audition', modelId: model, voice, prompt: sample })}>预检试听费用</Button><Button type="text" icon={<Plus size={14} />} onClick={() => edit({ type: 'narration.upsert', narration: { id: crypto.randomUUID(), shotIds: [], text: '', revision: 1, ...(model ? { model } : {}), ...(voice ? { voice } : {}) } })}>新增旁白段</Button></div>
+        <p className="text-xs" style={{ color: token.colorTextSecondary }}>一次生成一段连贯旁白。字幕的起止时间均相对于该段音频；按文本比例估算后需要试听校对。</p>
+        {production.narration.map((line, index) => <section key={line.id} className="space-y-2 border-b pb-4" style={{ borderColor: token.colorBorderSecondary }}>
+            <div className="flex items-center justify-between"><span className="text-sm">旁白 {index + 1} · v{line.revision}</span><Popconfirm title="删除此段旁白及其字幕？" onConfirm={() => edit({ type: 'narration.remove', id: line.id })}><Button type="text" size="small" icon={<Trash2 size={14} />} aria-label="删除旁白" /></Popconfirm></div>
+            <Select mode="multiple" className="w-full" aria-label="旁白关联镜头" placeholder="选择连续镜头，按分镜顺序排列" value={line.shotIds} options={production.shots.map(shot => ({ value: shot.shotId, label: shot.title }))} onChange={ids => update(line, { shotIds: production.shots.filter(shot => ids.includes(shot.shotId)).map(shot => shot.shotId) })} />
+            <Input.TextArea aria-label="旁白文本" value={line.text} autoSize={{ minRows: 3, maxRows: 8 }} onChange={event => update(line, { text: event.target.value })} />
+            <div className="flex flex-wrap items-center gap-1"><span className="text-xs">{models.find(item => item.id === line.model)?.name || '未设置模型'} · {line.voice || '未设置音色'}</span><Button type="text" size="small" disabled={!model || !voice} onClick={() => update(line, { model, voice })}>使用上方音色</Button><Button type="text" size="small" disabled={busy || !line.model || !line.voice || !line.text.trim()} onClick={() => void request({ kind: 'narration', modelId: line.model, narrationIds: [line.id], voice: line.voice, ...(line.speed ? { speed: line.speed } : {}) })}>预检本段配音</Button></div>
+            <div className="flex gap-1"><Select className="min-w-0 flex-1" value={undefined} aria-label="采用已有音频" placeholder="从画布采用音频" options={nodes.filter(node => nodeProductionMedia(node)?.kind === 'audio').map(node => ({ value: node.id, label: node.title }))} onChange={id => update(line, { media: nodeProductionMedia(nodes.find(node => node.id === id)), mediaRevision: line.revision })} /><ProductionMediaUpload kind="audio" onMedia={media => update(line, { media, mediaRevision: line.revision })} /></div>
+            {line.media && line.mediaRevision !== undefined && line.mediaRevision !== line.revision && <div className="space-y-1"><p className="text-xs" style={{ color: token.colorWarning }}>当前音频对应旧文本或音色。请重配，或核对声音后明确采用原音频。</p><Popconfirm title="确认继续使用原音频？" description="音频内容不会随新文稿改变，请同步检查字幕。" onConfirm={() => update(line, { mediaRevision: line.revision })}><Button type="text" size="small">保留采用原音频</Button></Popconfirm></div>}
+            <ProductionMediaPreview media={line.media} seek={seek?.lineId === line.id ? seek : undefined} onDuration={durationMs => line.media && update(line, { media: { ...line.media, durationMs } })} />
+            <div className="flex gap-1"><Popconfirm title="按文本长度重新估算字幕？" description="将替换此段当前字幕，包括人工修订；估算结果仍需校对。" disabled={!line.media?.durationMs || !line.text.trim()} onConfirm={() => estimate(line)}><Button type="text" size="small" disabled={!line.media?.durationMs || !line.text.trim()}>估算短字幕</Button></Popconfirm><Button type="text" size="small" onClick={() => edit({ type: 'subtitles.replace', narrationId: line.id, subtitles: [...cuesFor(line.id), { id: crypto.randomUUID(), narrationId: line.id, text: '', startMs: 0, endMs: 0, source: 'manual', reviewed: false }] })}>添加字幕</Button></div>
+            {cuesFor(line.id).map(cue => <div key={cue.id} className="space-y-1 py-1"><Input.TextArea aria-label="字幕文字" autoSize={{ minRows: 1, maxRows: 3 }} value={cue.text} onChange={event => replaceCue(cue, { text: event.target.value, reviewed: false })} /><div className="flex flex-wrap items-center gap-1"><InputNumber aria-label="字幕开始毫秒" value={cue.startMs} min={0} addonAfter="ms" onChange={value => replaceCue(cue, { startMs: value ?? 0, reviewed: false })} /><InputNumber aria-label="字幕结束毫秒" value={cue.endMs} min={0} addonAfter="ms" onChange={value => replaceCue(cue, { endMs: value ?? 0, reviewed: false })} /><Tag color={cue.source === 'estimated' ? 'warning' : undefined}>{cue.source === 'estimated' ? '估算' : cue.source === 'model' ? '模型时间戳' : '人工'}</Tag><Checkbox checked={cue.reviewed} onChange={event => replaceCue(cue, { reviewed: event.target.checked })}>已校对</Checkbox><Button type="text" size="small" icon={<Play size={12} />} disabled={!line.media} aria-label="从此字幕播放" onClick={() => setSeek(value => ({ lineId: line.id, timeMs: cue.startMs, nonce: (value?.nonce || 0) + 1 }))} /><Button type="text" size="small" icon={<Trash2 size={12} />} aria-label="删除字幕" onClick={() => edit({ type: 'subtitles.replace', narrationId: line.id, subtitles: cuesFor(line.id).filter(item => item.id !== cue.id) })} /></div></div>)}
+        </section>)}
+    </div>;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/production-composition.tsx
+LINES: 1-32
+========================================================================
+import { Button, Checkbox, InputNumber, Select, theme } from 'antd';
+import { ArrowDown, ArrowUp, Download } from 'lucide-react';
+import { saveAs } from 'file-saver';
+import { compileProductionTimeline, defaultShotComposition, productionSrt, type ProductionComposition, type ShotComposition } from '../../../../shared/production';
+import { nodeProductionMedia, useProduction } from './production-context';
+import { ProductionMediaPreview, ProductionMediaUpload } from './production-media';
+
+export function ProductionCompositionEditor() {
+    const { production, nodes, edit, request, busy, error } = useProduction(), { token } = theme.useToken();
+    const plan = compileProductionTimeline(production), c = production.composition;
+    const update = (changes: Partial<ProductionComposition>) => edit({ type: 'composition.replace', composition: { ...c, ...changes } });
+    const shotSetting = (shotId: string, changes: Partial<ShotComposition>) => update({ shots: { ...c.shots, [shotId]: { ...(c.shots[shotId] || defaultShotComposition()), ...changes } } });
+    const move = (index: number, delta: number) => { const ids = production.shots.map(shot => shot.shotId); [ids[index], ids[index + delta]] = [ids[index + delta], ids[index]]; edit({ type: 'shot.reorder', shotIds: ids }); };
+    return <div className="space-y-5">
+        <p className="text-xs leading-relaxed" style={{ color: token.colorTextSecondary }}>成片使用分镜的顺序与当前采用画面。排序也会修改分镜表；已导出的成片保留原快照。</p>
+        <Select className="w-full" aria-label="输出规格预设" placeholder="明确选择输出规格" value={undefined} options={[{ value: 'landscape', label: '横屏 · 1920 × 1080 · 30 fps' }, { value: 'portrait', label: '竖屏 · 1080 × 1920 · 30 fps' }]} onChange={value => update({ output: { width: value === 'landscape' ? 1920 : 1080, height: value === 'landscape' ? 1080 : 1920, fps: 30 } })} />
+        {c.output && <div className="flex flex-wrap gap-2"><label className="space-y-1 text-xs">宽<InputNumber className="block" aria-label="输出宽度" min={1} value={c.output.width} onChange={value => value && update({ output: { ...c.output!, width: value } })} /></label><label className="space-y-1 text-xs">高<InputNumber className="block" aria-label="输出高度" min={1} value={c.output.height} onChange={value => value && update({ output: { ...c.output!, height: value } })} /></label><label className="space-y-1 text-xs">帧率<InputNumber className="block" aria-label="输出帧率" min={1} value={c.output.fps} onChange={value => value && update({ output: { ...c.output!, fps: value } })} /></label></div>}
+        {production.shots.map((shot, index) => { const settings = c.shots[shot.shotId] || defaultShotComposition(); return <section key={shot.shotId} className="space-y-2 border-b pb-3" style={{ borderColor: token.colorBorderSecondary }}>
+            <div className="flex items-center gap-1"><Checkbox checked={settings.included} onChange={event => shotSetting(shot.shotId, { included: event.target.checked })}>{index + 1}. {shot.title}</Checkbox><span className="flex-1" /><Button type="text" size="small" aria-label="成片镜头前移" icon={<ArrowUp size={14} />} disabled={index === 0} onClick={() => move(index, -1)} /><Button type="text" size="small" aria-label="成片镜头后移" icon={<ArrowDown size={14} />} disabled={index === production.shots.length - 1} onClick={() => move(index, 1)} /></div>
+            {!shot.adoptedMedia ? <p className="text-xs" style={{ color: token.colorWarning }}>请先在分镜或生产记录中采用画面。</p> : <>
+                <div className="flex flex-wrap gap-2">{shot.adoptedMedia.kind === 'image' ? <label className="text-xs">停留时长（毫秒）<InputNumber className="block" aria-label="图片时长毫秒" min={0} value={settings.durationMs} onChange={value => shotSetting(shot.shotId, { durationMs: value ?? undefined })} /></label> : <><label className="text-xs">入点（毫秒）<InputNumber className="block" aria-label="视频入点毫秒" min={0} value={settings.inMs ?? 0} onChange={value => shotSetting(shot.shotId, { inMs: value ?? 0 })} /></label><label className="text-xs">出点（毫秒）<InputNumber className="block" aria-label="视频出点毫秒" min={0} value={settings.outMs ?? shot.adoptedMedia.durationMs} onChange={value => shotSetting(shot.shotId, { outMs: value ?? undefined })} /></label><label className="text-xs">原声音量<InputNumber className="block" aria-label="视频原声音量" min={0} step={0.1} value={settings.originalAudioVolume} onChange={value => shotSetting(shot.shotId, { originalAudioVolume: value ?? 0 })} /></label></>}</div>
+                <div className="flex gap-2"><Select className="flex-1" aria-label="画面适配" value={settings.fit} options={[{ value: 'contain', label: '完整显示' }, { value: 'cover', label: '铺满并裁切' }]} onChange={fit => shotSetting(shot.shotId, { fit })} /><Select className="flex-1" aria-label="画面运动" value={settings.motion} disabled={shot.adoptedMedia.kind === 'video'} options={[{ value: 'none', label: '静止' }, { value: 'zoom-in', label: '缓慢推进' }, { value: 'zoom-out', label: '缓慢拉远' }]} onChange={motion => shotSetting(shot.shotId, { motion })} /></div>
+                {shot.adoptedMedia.kind === 'image' && <div className="flex gap-2"><label className="text-xs">焦点 X（0–1）<InputNumber className="block" aria-label="焦点横坐标" min={0} max={1} step={0.05} value={settings.focusX ?? 0.5} onChange={value => shotSetting(shot.shotId, { focusX: value ?? 0.5 })} /></label><label className="text-xs">焦点 Y（0–1）<InputNumber className="block" aria-label="焦点纵坐标" min={0} max={1} step={0.05} value={settings.focusY ?? 0.5} onChange={value => shotSetting(shot.shotId, { focusY: value ?? 0.5 })} /></label></div>}
+                <label className="block text-xs">入场淡入淡出重叠（毫秒；0 为硬切）<InputNumber className="mt-1" aria-label="入场转场毫秒" min={0} value={settings.transitionMs} disabled={index === 0} onChange={value => shotSetting(shot.shotId, { transitionMs: value ?? 0 })} /></label>
+            </>}
+        </section>; })}
+        <section className="space-y-2"><h3 className="text-sm font-medium">旁白位置</h3>{production.narration.map((line, index) => { const placement = c.narration[line.id]; const patch = (changes: Partial<NonNullable<typeof placement>>) => update({ narration: { ...c.narration, [line.id]: { ...(placement ?? { anchorShotId: line.shotIds[0] || '', offsetMs: 0, volume: 1, enabled: true }), ...changes } } }); return <div key={line.id} className="space-y-2 py-2"><div className="flex gap-2"><Checkbox checked={placement?.enabled !== false} onChange={event => patch({ enabled: event.target.checked })}>旁白 {index + 1}</Checkbox><span className="truncate text-xs">{line.text.slice(0, 32)}</span></div><Select className="w-full" aria-label="旁白起始镜头" placeholder="选择关联镜头中的第一个镜头" value={placement?.anchorShotId || undefined} options={production.shots.filter(shot => line.shotIds.includes(shot.shotId)).map(shot => ({ value: shot.shotId, label: shot.title }))} onChange={anchorShotId => patch({ anchorShotId })} /><div className="flex gap-2"><label className="text-xs">相对镜头偏移（毫秒）<InputNumber className="block" aria-label="旁白偏移毫秒" min={0} value={placement?.offsetMs ?? 0} onChange={value => patch({ offsetMs: value ?? 0 })} /></label><label className="text-xs">旁白音量<InputNumber className="block" aria-label="旁白音量" min={0} step={0.1} value={placement?.volume ?? 1} onChange={value => patch({ volume: value ?? 0 })} /></label></div></div>; })}</section>
+        <section className="space-y-2"><h3 className="text-sm font-medium">背景音乐（可选）</h3><Select className="w-full" value={undefined} aria-label="选择背景音乐" placeholder="从已有音频选择" options={nodes.filter(node => nodeProductionMedia(node)?.kind === 'audio').map(node => ({ value: node.id, label: node.title }))} onChange={id => { const media = nodeProductionMedia(nodes.find(node => node.id === id)); if (media) update({ bgm: { media, inMs: 0, loop: false, volume: 1 } }); }} /><ProductionMediaUpload kind="audio" onMedia={media => update({ bgm: { media, inMs: 0, loop: false, volume: 1 } })} />{c.bgm && <><ProductionMediaPreview media={c.bgm.media} onDuration={durationMs => update({ bgm: { ...c.bgm!, media: { ...c.bgm!.media, durationMs } } })} /><div className="flex flex-wrap gap-2"><label className="text-xs">入点（毫秒）<InputNumber className="block" min={0} aria-label="音乐入点" value={c.bgm.inMs} onChange={value => update({ bgm: { ...c.bgm!, inMs: value ?? 0 } })} /></label><label className="text-xs">出点（毫秒）<InputNumber className="block" min={0} aria-label="音乐出点" value={c.bgm.outMs ?? c.bgm.media.durationMs} onChange={value => update({ bgm: { ...c.bgm!, outMs: value ?? undefined } })} /></label><label className="text-xs">音量<InputNumber className="block" min={0} step={0.1} aria-label="背景音乐音量" value={c.bgm.volume} onChange={value => update({ bgm: { ...c.bgm!, volume: value ?? 0 } })} /></label></div><Checkbox checked={c.bgm.loop} onChange={event => update({ bgm: { ...c.bgm!, loop: event.target.checked } })}>音乐不足时循环（不勾选则自然结束）</Checkbox><Button type="text" size="small" onClick={() => update({ bgm: undefined })}>移除背景音乐</Button></>}</section>
+        <section className="space-y-2"><Checkbox checked={c.subtitles.burnIn} onChange={event => update({ subtitles: { ...c.subtitles, burnIn: event.target.checked } })}>将字幕烧录到视频</Checkbox>{c.subtitles.burnIn && <><p className="text-xs" style={{ color: token.colorTextSecondary }}>使用服务端已配置的中文字体；请通过服务端预览核对实际显示。</p><InputNumber aria-label="字幕字号" placeholder="输出像素字号" min={1} value={c.subtitles.fontSize} onChange={value => update({ subtitles: { ...c.subtitles, fontSize: value ?? undefined } })} /></>}</section>
+        <div className="space-y-2"><p className="text-sm">时间线 {Math.max(0, plan.durationMs / 1000).toFixed(2)} 秒 · {plan.shots.length} 镜</p>{plan.errors.map(message => <p key={message} role="alert" className="text-xs" style={{ color: token.colorWarning }}>{message}</p>)}{!c.output && <p className="text-xs" style={{ color: token.colorWarning }}>请选择输出规格。</p>}<div className="flex flex-wrap gap-1"><Button type="text" icon={<Download size={14} />} disabled={!plan.valid} onClick={() => { try { saveAs(new Blob([productionSrt(plan)], { type: 'text/plain;charset=utf-8' }), `${production.title || '成片'}.srt`); } catch (e) { error(e instanceof Error ? e.message : '字幕导出失败'); } }}>导出 SRT</Button><Button type="text" disabled={busy || !plan.valid || !c.output} onClick={() => void request({ kind: 'preview' })}>预检服务端预览</Button><Button type="primary" disabled={busy || !plan.valid || !c.output} onClick={() => void request({ kind: 'render' })}>预检 MP4 导出</Button></div><p className="text-xs" style={{ color: token.colorTextSecondary }}>预览和成片采用同一时间编译结果。任务完成后在生产记录播放、下载。</p></div>
+    </div>;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/production-context.tsx
+LINES: 1-27
+========================================================================
+import { createContext, useContext } from 'react';
+import type { ProductionDocument, ProductionMedia, ProductionOperation } from '../../../../shared/production';
+import type { CanvasNodeData } from '@/types/canvas';
+import type { ProductionRequest } from '@/services/api/canvas-production';
+import { useProductionStore } from '@/stores/canvas/use-production-store';
+
+export type ProductionPanelContext = {
+    projectId: string; production: ProductionDocument; nodes: CanvasNodeData[]; busy: boolean;
+    edit: (operation: ProductionOperation) => void;
+    request: (input: Omit<ProductionRequest, 'expectedVersion'>) => Promise<void>;
+    locate: (nodeId: string) => void;
+    error: (message: string) => void;
+};
+export const ProductionContext = createContext<ProductionPanelContext | null>(null);
+export function useProduction() { const value = useContext(ProductionContext); if (!value) throw new Error('制作面板未初始化'); return value; }
+export function useProductionModels(kind: 'text' | 'image' | 'audio') { return useProductionStore(state => state.models).filter(model => model.capability === kind); }
+export function nodeProductionMedia(node?: CanvasNodeData): ProductionMedia | undefined {
+    if (!node || !['image', 'video', 'audio'].includes(node.type)) return undefined;
+    const primary = node.metadata?.images?.find(item => item.id === node.metadata?.primaryImageId) || node.metadata?.images?.[0];
+    const source = primary?.content || node.metadata?.content;
+    const storageKey = primary?.storageKey || node.metadata?.storageKey;
+    let url: string | undefined;
+    if (source?.startsWith('/media/')) url = source;
+    else if (source && typeof window !== 'undefined') { try { const parsed = new URL(source, window.location.origin); if (parsed.origin === window.location.origin && parsed.pathname.startsWith('/media/')) url = parsed.pathname; } catch { /* No stable remote identity. */ } }
+    if (!url && !storageKey) return undefined;
+    return { kind: node.type as ProductionMedia['kind'], ...(url ? { url } : {}), ...(storageKey ? { storageKey } : {}), ...(node.metadata?.durationMs ? { durationMs: node.metadata.durationMs } : {}) };
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/production-library.tsx
+LINES: 1-27
+========================================================================
+import { useState } from 'react';
+import { Button, Input, Popconfirm, Select, Tag, theme } from 'antd';
+import { Plus, Trash2 } from 'lucide-react';
+import { useProduction, useProductionModels, nodeProductionMedia } from './production-context';
+import { ProductionMediaPreview, ProductionMediaUpload } from './production-media';
+import type { ProductionAsset } from '../../../../shared/production';
+
+const kinds = [{ value: 'character', label: '角色' }, { value: 'scene', label: '场景' }, { value: 'prop', label: '道具' }, { value: 'style', label: '风格锚点' }];
+export function ProductionLibrary() {
+    const { production, nodes, edit, request, busy } = useProduction(), { token } = theme.useToken();
+    const models = useProductionModels('image'), [model, setModel] = useState('');
+    const update = (asset: ProductionAsset, changes: Partial<ProductionAsset>) => edit({ type: 'asset.upsert', asset: { ...asset, ...changes, revision: asset.revision + 1 } });
+    return <div className="space-y-4">
+        <div className="flex gap-2"><Select className="min-w-0 flex-1" aria-label="资料图模型" placeholder="选择设定图模型" value={model || undefined} options={models.map(item => ({ value: item.id, label: item.name }))} onChange={setModel} /><Button type="text" icon={<Plus size={16} />} onClick={() => edit({ type: 'asset.upsert', asset: { id: crypto.randomUUID(), kind: 'character', name: '新角色', aliases: [], description: '', revision: 1 } })}>新增资料</Button></div>
+        <p className="text-xs" style={{ color: token.colorTextSecondary }}>修改资料会产生新版本。已提交任务保留原参考；重新生成镜头前需明确更新引用版本。</p>
+        {production.library.map(asset => <section key={asset.id} className="space-y-2 border-b pb-4" style={{ borderColor: token.colorBorderSecondary }}>
+            <div className="flex gap-2"><Select aria-label="资料类型" className="w-28" value={asset.kind} options={kinds} onChange={kind => update(asset, { kind })} /><Input aria-label="资料名称" value={asset.name} onChange={event => update(asset, { name: event.target.value })} /><Tag>v{asset.revision}</Tag></div>
+            <Input key={asset.aliases.join('，')} aria-label="资料别名" placeholder="别名，用逗号分隔，离开输入框后保存" defaultValue={asset.aliases.join('，')} onBlur={event => { const aliases = event.target.value.split(/[,，]/).map(value => value.trim()).filter(Boolean); if (JSON.stringify(aliases) !== JSON.stringify(asset.aliases)) update(asset, { aliases }); }} />
+            <Input.TextArea aria-label="资料设定" placeholder="人物外貌、服装、场景或画风设定" value={asset.description} autoSize={{ minRows: 2, maxRows: 8 }} onChange={event => update(asset, { description: event.target.value })} />
+            <Select className="w-full" aria-label="绑定资料图片" placeholder="从画布绑定图片" value={undefined} options={nodes.filter(node => nodeProductionMedia(node)?.kind === 'image').map(node => ({ value: node.id, label: node.title }))} onChange={nodeId => update(asset, { media: nodeProductionMedia(nodes.find(node => node.id === nodeId)) })} />
+            <ProductionMediaPreview media={asset.media} />
+            <p className="text-xs" style={{ color: token.colorTextSecondary }}>使用镜头：{production.shots.filter(shot => shot.references.some(ref => ref.assetId === asset.id)).map(shot => shot.title).join('、') || '暂未引用'}</p>
+            <div className="flex flex-wrap gap-1"><ProductionMediaUpload kind="image" onMedia={media => update(asset, { media })} /><Button type="text" size="small" disabled={busy || !model || !asset.description.trim()} onClick={() => void request({ kind: 'images', modelId: model, assetIds: [asset.id] })}>预检生成设定图</Button><Popconfirm title="删除这份资料？" description="仍被镜头使用时需先调整引用。" onConfirm={() => edit({ type: 'asset.remove', id: asset.id })}><Button type="text" size="small" icon={<Trash2 size={14} />} aria-label={`删除${asset.name}`} /></Popconfirm></div>
+        </section>)}
+        {!production.library.length && <p className="text-sm">添加角色、场景或风格资料，再在分镜中复用。</p>}
+    </div>;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/production-media.tsx
+LINES: 1-49
+========================================================================
+import { useEffect, useRef, useState } from 'react';
+import { Button } from 'antd';
+import { Play } from 'lucide-react';
+import { resolveImageUrl } from '@/services/image-storage';
+import { resolveMediaUrl, uploadMediaFile } from '@/services/file-storage';
+import { uploadImage } from '@/services/image-storage';
+import { useAuthStore } from '@/stores/use-auth-store';
+import { useMediaPreview } from '@/hooks/use-media-preview';
+import type { ProductionMedia } from '../../../../shared/production';
+import { useProduction } from './production-context';
+
+export function ProductionMediaPreview({ media, onDuration, seek }: { media?: ProductionMedia; onDuration?: (durationMs: number) => void; seek?: { timeMs: number; nonce: number } }) {
+    const [url, setUrl] = useState(''), [active, setActive] = useState(false);
+    const [visible, setVisible] = useState(false), container = useRef<HTMLDivElement>(null);
+    const player = useRef<HTMLMediaElement | null>(null);
+    const owner = useAuthStore(state => state.user?.id), epoch = useAuthStore(state => state.sessionEpoch);
+    const thumbnail = useMediaPreview(visible && media?.kind !== 'audio' ? media?.url : undefined);
+    useEffect(() => { const element = container.current; if (!element) return; if (typeof IntersectionObserver === 'undefined') { setVisible(true); return; } const observer = new IntersectionObserver(entries => setVisible(entries.some(entry => entry.isIntersecting))); observer.observe(element); return () => observer.disconnect(); }, []);
+    useEffect(() => { setUrl(''); setActive(false); }, [media?.url, media?.storageKey, media?.kind, owner, epoch]);
+    useEffect(() => {
+        let mounted = true;
+        if (media && (visible || active)) void (media.kind === 'image' ? resolveImageUrl(media.storageKey, media.url) : resolveMediaUrl(media.storageKey, media.url)).then(value => { if (mounted) setUrl(value); }).catch(() => {});
+        return () => { mounted = false; };
+    }, [media?.url, media?.storageKey, media?.kind, owner, epoch, visible, active]);
+    useEffect(() => { const element = player.current; return () => { if (element) { element.pause(); element.removeAttribute('src'); element.load(); } }; }, [active, url]);
+    useEffect(() => { if (!seek) return; setActive(true); const element = player.current; if (element && element.readyState > 0) { element.currentTime = seek.timeMs / 1000; void element.play().catch(() => {}); } }, [seek?.nonce]);
+    if (!media) return <div ref={container} />;
+    const metadata = (element: HTMLMediaElement) => { if (seek) element.currentTime = seek.timeMs / 1000; if (Number.isFinite(element.duration) && element.duration > 0 && !media.durationMs) onDuration?.(Math.round(element.duration * 1000)); };
+    return <div ref={container} className="min-h-8">{media.kind === 'image' ? (visible && (thumbnail.url || (!thumbnail.cloud && url)) ? <img src={thumbnail.url || url} alt="画面预览" className="max-h-44 w-full rounded object-contain" loading="lazy" decoding="async" /> : thumbnail.error ? <Button type="text" size="small" onClick={thumbnail.retry}>重新加载缩略图</Button> : <span className="text-xs">画面预览</span>) : !active ? <div>{visible && thumbnail.url && <img src={thumbnail.url} alt="视频封面" className="max-h-40 w-full object-contain" loading="lazy" />}<Button type="text" icon={<Play size={14} />} disabled={!url} onClick={() => setActive(true)}>播放{media.kind === 'audio' ? '音频' : '视频'}{media.durationMs ? ` · ${(media.durationMs / 1000).toFixed(2)} 秒` : ''}</Button></div> : media.kind === 'audio' ? <audio ref={element => { player.current = element; }} src={url} controls autoPlay preload="none" className="w-full" onLoadedMetadata={event => metadata(event.currentTarget)} /> : <video ref={element => { player.current = element; }} src={url} controls autoPlay preload="none" className="max-h-56 w-full" onLoadedMetadata={event => metadata(event.currentTarget)} />}</div>;
+}
+
+export function ProductionMediaUpload({ kind, onMedia }: { kind: ProductionMedia['kind']; onMedia: (media: ProductionMedia) => void }) {
+    const { error } = useProduction();
+    const input = useRef<HTMLInputElement>(null), [busy, setBusy] = useState(false);
+    const callback = useRef(onMedia); callback.current = onMedia;
+    const scope = useRef(0);
+    useEffect(() => () => { scope.current++; }, []);
+    return <><input ref={input} className="hidden" type="file" accept={`${kind}/*`} onChange={async event => {
+        const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
+        const token = scope.current, auth = useAuthStore.getState(), owner = auth.user?.id, epoch = auth.sessionEpoch;
+        const current = () => token === scope.current && useAuthStore.getState().user?.id === owner && useAuthStore.getState().sessionEpoch === epoch;
+        setBusy(true);
+        try {
+            const result = kind === 'image' ? await uploadImage(file, { expectedOwner: owner }) : await uploadMediaFile(file, kind, { expectedOwner: owner });
+            if (current()) callback.current({ kind, ...(result.storageKey ? { storageKey: result.storageKey } : { url: result.url }), ...('durationMs' in result && result.durationMs ? { durationMs: result.durationMs } : {}) });
+        } catch (e) { if (current()) error(e instanceof Error ? e.message : '素材上传失败'); }
+        finally { if (current()) setBusy(false); }
+    }} /><Button type="text" size="small" loading={busy} onClick={() => input.current?.click()}>上传{kind === 'image' ? '图片' : kind === 'audio' ? '音频' : '视频'}</Button></>;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/production-script.tsx
+LINES: 1-18
+========================================================================
+import { useRef, useState } from 'react';
+import { Button, Input, Select, theme } from 'antd';
+import { useProduction, useProductionModels } from './production-context';
+
+export function ProductionScriptEditor() {
+    const { production, edit, request, error, busy } = useProduction(), { token } = theme.useToken();
+    const models = useProductionModels('text'), [model, setModel] = useState(''), input = useRef<HTMLInputElement>(null);
+    return <div className="space-y-4">
+        <p className="text-xs leading-relaxed" style={{ color: token.colorTextSecondary }}>先整理剧本草稿，再审核采用。AI 整理会进入生产记录，不会直接删除或替换现有镜头。</p>
+        <div className="flex flex-wrap gap-1"><Button type="text" onClick={() => input.current?.click()}>导入 UTF-8 TXT</Button><Button type="text" disabled={!production.script.draft.trim() || production.script.adoptedRevision === production.script.revision} onClick={() => edit({ type: 'script.adopt' })}>采用当前稿</Button></div>
+        <input ref={input} type="file" accept=".txt,text/plain" className="hidden" onChange={async event => { const file = event.target.files?.[0]; event.target.value = ''; if (!file) return; try { const text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()); edit({ type: 'script.edit', text, original: text }); } catch { error('无法按 UTF-8 读取，请将文件另存为 UTF-8 TXT'); } }} />
+        <label className="block space-y-2"><span className="text-sm">当前草稿 · v{production.script.revision}</span><Input.TextArea aria-label="剧本草稿" value={production.script.draft} autoSize={{ minRows: 12, maxRows: 24 }} onChange={event => edit({ type: 'script.edit', text: event.target.value })} placeholder="粘贴剧本，或导入 TXT。人物、场景和旁白都可以继续手工修改。" /></label>
+        {production.script.adopted !== undefined && <details><summary className="cursor-pointer text-sm">对照已采用稿 v{production.script.adoptedRevision}{production.script.adopted === production.script.draft ? '（内容一致）' : '（当前草稿有修改）'}</summary><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed" style={{ color: token.colorTextSecondary }}>{production.script.adopted}</p></details>}
+        {production.script.original && <details><summary className="cursor-pointer text-sm">查看导入原文</summary><p className="mt-2 whitespace-pre-wrap text-sm">{production.script.original}</p></details>}
+        <Select className="w-full" aria-label="剧本整理模型" placeholder="选择文本模型" value={model || undefined} onChange={setModel} options={models.map(item => ({ value: item.id, label: item.name }))} />
+        <Button type="primary" block disabled={busy || !model || !production.script.draft.trim()} onClick={() => void request({ kind: 'script', modelId: model, prompt: production.script.draft })}>预检 AI 整理费用</Button>
+    </div>;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/production-shots.tsx
+LINES: 1-37
+========================================================================
+import { useEffect, useRef, useState } from 'react';
+import { Button, Checkbox, Input, Popconfirm, Select, Tag, theme } from 'antd';
+import { ArrowDown, ArrowUp, Copy, Locate, Plus, Trash2 } from 'lucide-react';
+import type { ProductionShot } from '../../../../shared/production';
+import { nodeProductionMedia, useProduction, useProductionModels } from './production-context';
+import { ProductionMediaPreview, ProductionMediaUpload } from './production-media';
+import { useProductionStore } from '@/stores/canvas/use-production-store';
+
+export function ProductionShots() {
+    const { production, nodes, edit, request, locate, busy } = useProduction(), { token } = theme.useToken();
+    const models = useProductionModels('image'), [model, setModel] = useState(''), [selected, setSelected] = useState<string[]>([]);
+    const focused = useProductionStore(state => state.focusShotId), container = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!focused) return;
+        const row = [...(container.current?.querySelectorAll<HTMLElement>('[data-production-shot]') || [])].find(element => element.dataset.productionShot === focused);
+        row?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }); row?.focus({ preventScroll: true });
+    }, [focused]);
+    const update = (shot: ProductionShot, changes: Partial<ProductionShot>) => edit({ type: 'shot.upsert', shot: { ...shot, ...changes } });
+    const move = (index: number, delta: number) => { const ids = production.shots.map(item => item.shotId); [ids[index], ids[index + delta]] = [ids[index + delta], ids[index]]; edit({ type: 'shot.reorder', shotIds: ids }); };
+    return <div ref={container} className="space-y-4">
+        <div className="flex gap-2"><Select className="min-w-0 flex-1" aria-label="分镜图片模型" placeholder="选择生图模型" value={model || undefined} options={models.map(item => ({ value: item.id, label: item.name }))} onChange={setModel} /><Button type="text" icon={<Plus size={16} />} onClick={() => edit({ type: 'shot.upsert', shot: { shotId: crypto.randomUUID(), title: `镜头 ${production.shots.length + 1}`, description: '', action: '', prompt: '', references: [] } })}>新增镜头</Button></div>
+        <div className="flex items-center justify-between gap-2"><Checkbox checked={production.shots.length > 0 && production.shots.every(item => selected.includes(item.shotId))} onChange={event => setSelected(event.target.checked ? production.shots.map(item => item.shotId) : [])}>选择全部</Checkbox><Button type="primary" disabled={busy || !model || !selected.some(id => production.shots.some(shot => shot.shotId === id))} onClick={() => void request({ kind: 'images', modelId: model, shotIds: selected.filter(id => production.shots.some(shot => shot.shotId === id)) })}>预检所选镜头费用</Button></div>
+        {production.shots.map((shot, index) => <section key={shot.shotId} data-production-shot={shot.shotId} tabIndex={-1} aria-current={focused === shot.shotId ? 'true' : undefined} className="space-y-2 border-b pb-4" style={{ borderColor: token.colorBorderSecondary, backgroundColor: focused === shot.shotId ? token.colorFillAlter : undefined }}>
+            <div className="flex items-center gap-1"><Checkbox aria-label={`选择${shot.title}`} checked={selected.includes(shot.shotId)} onChange={event => setSelected(event.target.checked ? [...selected, shot.shotId] : selected.filter(id => id !== shot.shotId))} /><span className="px-1 text-xs">{index + 1}</span><Input aria-label="镜头名称" value={shot.title} onChange={event => update(shot, { title: event.target.value })} /><Button type="text" size="small" icon={<ArrowUp size={14} />} aria-label="镜头前移" disabled={index === 0} onClick={() => move(index, -1)} /><Button type="text" size="small" icon={<ArrowDown size={14} />} aria-label="镜头后移" disabled={index === production.shots.length - 1} onClick={() => move(index, 1)} /></div>
+            <Input.TextArea aria-label="镜头画面描述" placeholder="画面、景别与构图" value={shot.description} autoSize={{ minRows: 2, maxRows: 5 }} onChange={event => update(shot, { description: event.target.value })} />
+            <Input aria-label="镜头动作" placeholder="动作与表演" value={shot.action} onChange={event => update(shot, { action: event.target.value })} />
+            <Input.TextArea aria-label="镜头提示词" placeholder="镜头提示词补充" value={shot.prompt} autoSize={{ minRows: 2, maxRows: 6 }} onChange={event => update(shot, { prompt: event.target.value })} />
+            <Select mode="multiple" className="w-full" aria-label="镜头资料引用" placeholder="角色、场景、道具与风格" value={shot.references.map(ref => ref.assetId)} options={production.library.map(asset => ({ value: asset.id, label: `${asset.name} v${asset.revision}` }))} onChange={ids => update(shot, { references: ids.map(assetId => ({ assetId, revision: production.library.find(asset => asset.id === assetId)!.revision })) })} />
+            {shot.references.some(ref => production.library.find(asset => asset.id === ref.assetId)?.revision !== ref.revision) && <div className="flex items-center gap-1"><Tag color="warning">参考版本有更新</Tag><Button type="text" size="small" onClick={() => update(shot, { references: shot.references.map(ref => ({ ...ref, revision: production.library.find(asset => asset.id === ref.assetId)!.revision })) })}>采用最新参考版本</Button></div>}
+            <div className="flex gap-1"><Select className="min-w-0 flex-1" allowClear aria-label="绑定画布节点" placeholder="绑定画布节点" value={shot.nodeId} options={nodes.filter(node => ['image', 'video', 'config'].includes(node.type)).map(node => ({ value: node.id, label: node.title }))} onChange={nodeId => update(shot, { nodeId })} /><Button type="text" icon={<Locate size={15} />} aria-label="定位画布节点" disabled={!shot.nodeId} onClick={() => shot.nodeId && locate(shot.nodeId)} /></div>
+            <Select className="w-full" aria-label="采用画布画面" placeholder="从已有图片或视频采用画面" value={undefined} options={nodes.filter(node => ['image', 'video'].includes(nodeProductionMedia(node)?.kind || '')).map(node => ({ value: node.id, label: node.title }))} onChange={id => { const media = nodeProductionMedia(nodes.find(node => node.id === id)); if (media) edit({ type: 'shot.adopt', shotId: shot.shotId, media }); }} />
+            <ProductionMediaPreview media={shot.adoptedMedia} onDuration={durationMs => shot.adoptedMedia && update(shot, { adoptedMedia: { ...shot.adoptedMedia, durationMs } })} />
+            {shot.adoptedMedia && shot.mediaRevision !== undefined && shot.mediaRevision !== (shot.revision || 1) && <div className="space-y-1"><p className="text-xs" style={{ color: token.colorWarning }}>画面对应旧提示词或参考版本。</p><Popconfirm title="确认保留采用原画面？" description="新的镜头输入不会改变旧图，请核对画面后确认。" onConfirm={() => update(shot, { mediaRevision: shot.revision || 1 })}><Button type="text" size="small">保留采用原画面</Button></Popconfirm></div>}
+            <div className="flex flex-wrap gap-1"><ProductionMediaUpload kind="image" onMedia={media => edit({ type: 'shot.adopt', shotId: shot.shotId, media })} /><ProductionMediaUpload kind="video" onMedia={media => edit({ type: 'shot.adopt', shotId: shot.shotId, media })} /><Button type="text" size="small" icon={<Copy size={14} />} onClick={() => edit({ type: 'shot.upsert', shot: { ...shot, shotId: crypto.randomUUID(), nodeId: undefined, title: `${shot.title} 副本` } })}>复制镜头</Button><Popconfirm title="删除镜头？" description="关联旁白需要重新安排，原素材和已提交任务仍保留。" onConfirm={() => edit({ type: 'shot.remove', shotId: shot.shotId })}><Button type="text" size="small" icon={<Trash2 size={14} />} aria-label={`删除${shot.title}`} /></Popconfirm></div>
+        </section>)}
+    </div>;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/use-image-editor-viewport.ts
+LINES: 1-217
+========================================================================
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+
+type ImageSize = { width: number; height: number };
+
+const minZoom = 1;
+const maxZoom = 4;
+const zoomStep = 1.2;
+const viewportPadding = 16;
+
+export function useImageEditorViewport(image: ImageSize | null, open: boolean) {
+    const viewportNodeRef = useRef<HTMLDivElement>(null);
+    const stageRef = useRef<HTMLDivElement>(null);
+    const panRef = useRef<{ pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
+    const zoomAnchorRef = useRef<{ zoom: number; ratioX: number; ratioY: number; viewportX: number; viewportY: number } | null>(null);
+    const [viewportElement, setViewportElement] = useState<HTMLDivElement | null>(null);
+    const [viewportSize, setViewportSize] = useState<ImageSize>({ width: 0, height: 0 });
+    const [zoom, setZoom] = useState(minZoom);
+    const [isPanning, setIsPanning] = useState(false);
+    const [spacePressed, setSpacePressed] = useState(false);
+    const spacePressedRef = useRef(false);
+    const viewportRef = useCallback((node: HTMLDivElement | null) => {
+        viewportNodeRef.current = node;
+        setViewportElement(node);
+    }, []);
+
+    useEffect(() => {
+        if (!open) return;
+        zoomAnchorRef.current = null;
+        setZoom(minZoom);
+    }, [open, image?.width, image?.height]);
+
+    useEffect(() => {
+        if (!open) return;
+        const releaseSpace = () => {
+            spacePressedRef.current = false;
+            setSpacePressed(false);
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.code !== "Space" || event.repeat) return;
+            const target = event.target instanceof Element ? event.target : null;
+            if (target?.closest("input,textarea,[contenteditable='true']")) return;
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            if (document.activeElement instanceof HTMLElement && document.activeElement.matches("button,a,[role='button']")) document.activeElement.blur();
+            spacePressedRef.current = true;
+            setSpacePressed(true);
+        };
+        const handleKeyUp = (event: KeyboardEvent) => {
+            if (event.code !== "Space" || !spacePressedRef.current) return;
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            releaseSpace();
+        };
+        window.addEventListener("keydown", handleKeyDown, true);
+        window.addEventListener("keyup", handleKeyUp, true);
+        window.addEventListener("blur", releaseSpace);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown, true);
+            window.removeEventListener("keyup", handleKeyUp, true);
+            window.removeEventListener("blur", releaseSpace);
+            spacePressedRef.current = false;
+        };
+    }, [open]);
+
+    useEffect(() => {
+        if (!open || !viewportElement) return;
+        const updateSize = () => {
+            const width = viewportElement.clientWidth;
+            const height = viewportElement.clientHeight;
+            setViewportSize((current) => (current.width === width && current.height === height ? current : { width, height }));
+        };
+        updateSize();
+        const observer = new ResizeObserver(updateSize);
+        observer.observe(viewportElement);
+        return () => observer.disconnect();
+    }, [open, viewportElement]);
+
+    const baseSize = fitImage(image, viewportSize);
+    const stageSize = { width: baseSize.width * zoom, height: baseSize.height * zoom };
+    const contentSize = {
+        width: Math.max(viewportSize.width, stageSize.width),
+        height: Math.max(viewportSize.height, stageSize.height),
+    };
+    const stageOffset = {
+        left: Math.max(0, Math.round((contentSize.width - stageSize.width) / 2)),
+        top: Math.max(0, Math.round((contentSize.height - stageSize.height) / 2)),
+    };
+
+    useLayoutEffect(() => {
+        const viewport = viewportNodeRef.current;
+        const anchor = zoomAnchorRef.current;
+        if (!viewport || !anchor || Math.abs(anchor.zoom - zoom) > 0.001) return;
+        const nextWidth = baseSize.width * zoom;
+        const nextHeight = baseSize.height * zoom;
+        const nextLeft = Math.max(0, (Math.max(viewport.clientWidth, nextWidth) - nextWidth) / 2);
+        const nextTop = Math.max(0, (Math.max(viewport.clientHeight, nextHeight) - nextHeight) / 2);
+        viewport.scrollLeft = nextLeft + anchor.ratioX * nextWidth - anchor.viewportX;
+        viewport.scrollTop = nextTop + anchor.ratioY * nextHeight - anchor.viewportY;
+        zoomAnchorRef.current = null;
+    }, [baseSize.height, baseSize.width, zoom]);
+
+    const setZoomAround = useCallback(
+        (nextZoom: number, clientX?: number, clientY?: number) => {
+            const viewport = viewportNodeRef.current;
+            const stage = stageRef.current;
+            if (!viewport || !stage || !baseSize.width || !baseSize.height) return;
+
+            const boundedZoom = clamp(nextZoom, minZoom, maxZoom);
+            if (Math.abs(boundedZoom - zoom) < 0.001) return;
+
+            const viewportRect = viewport.getBoundingClientRect();
+            const stageRect = stage.getBoundingClientRect();
+            const pointerX = clientX ?? viewportRect.left + viewportRect.width / 2;
+            const pointerY = clientY ?? viewportRect.top + viewportRect.height / 2;
+            const ratioX = clamp((pointerX - stageRect.left) / Math.max(1, stageRect.width), 0, 1);
+            const ratioY = clamp((pointerY - stageRect.top) / Math.max(1, stageRect.height), 0, 1);
+            const viewportX = pointerX - viewportRect.left;
+            const viewportY = pointerY - viewportRect.top;
+
+            zoomAnchorRef.current = { zoom: boundedZoom, ratioX, ratioY, viewportX, viewportY };
+            setZoom(boundedZoom);
+        },
+        [baseSize.height, baseSize.width, zoom],
+    );
+
+    useEffect(() => {
+        if (!open || !viewportElement) return;
+        const handleWheel = (event: WheelEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setZoomAround(event.deltaY < 0 ? zoom * zoomStep : zoom / zoomStep, event.clientX, event.clientY);
+        };
+        viewportElement.addEventListener("wheel", handleWheel, { passive: false });
+        return () => viewportElement.removeEventListener("wheel", handleWheel);
+    }, [open, setZoomAround, viewportElement, zoom]);
+
+    const startPan = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+        if (event.button !== 1 && !(event.button === 0 && spacePressedRef.current)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const viewport = event.currentTarget;
+        panRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop };
+        viewport.setPointerCapture(event.pointerId);
+        setIsPanning(true);
+    }, []);
+    const movePan = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+        const pan = panRef.current;
+        if (!pan || event.pointerId !== pan.pointerId) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.scrollLeft = pan.scrollLeft - (event.clientX - pan.x);
+        event.currentTarget.scrollTop = pan.scrollTop - (event.clientY - pan.y);
+    }, []);
+    const stopPan = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+        const pan = panRef.current;
+        if (!pan || event.pointerId !== pan.pointerId) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        panRef.current = null;
+        setIsPanning(false);
+    }, []);
+    const preventAuxClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+        if (event.button !== 1) return;
+        event.preventDefault();
+        event.stopPropagation();
+    }, []);
+
+    return {
+        viewportRef,
+        stageRef,
+        zoom,
+        isPanning,
+        spacePressed,
+        scrollClassName: zoom > minZoom + 0.001 ? "overflow-scroll" : "overflow-hidden",
+        panHandlers: {
+            onPointerDownCapture: startPan,
+            onPointerMoveCapture: movePan,
+            onPointerUpCapture: stopPan,
+            onPointerCancelCapture: stopPan,
+            onAuxClick: preventAuxClick,
+        },
+        canZoomIn: zoom < maxZoom,
+        canZoomOut: zoom > minZoom,
+        imageScale: image ? stageSize.width / image.width : 0,
+        zoomIn: () => setZoomAround(zoom * zoomStep),
+        zoomOut: () => setZoomAround(zoom / zoomStep),
+        resetZoom: () => setZoomAround(minZoom),
+        contentStyle: { width: contentSize.width, height: contentSize.height } satisfies CSSProperties,
+        stageStyle: {
+            left: stageOffset.left,
+            top: stageOffset.top,
+            width: stageSize.width,
+            height: stageSize.height,
+        } satisfies CSSProperties,
+        mediaStyle: {
+            width: baseSize.width,
+            height: baseSize.height,
+            transform: `translateZ(0) scale(${zoom})`,
+            transformOrigin: "top left",
+        } satisfies CSSProperties,
+    };
+}
+
+function fitImage(image: ImageSize | null, viewport: ImageSize): ImageSize {
+    if (!image || !viewport.width || !viewport.height) return { width: 0, height: 0 };
+    const availableWidth = Math.max(1, viewport.width - viewportPadding * 2);
+    const availableHeight = Math.max(1, viewport.height - viewportPadding * 2);
+    const scale = Math.min(availableWidth / image.width, availableHeight / image.height, 1);
+    return { width: Math.max(1, Math.floor(image.width * scale)), height: Math.max(1, Math.floor(image.height * scale)) };
+}
+
+function clamp(value: number, min: number, max: number) {
+    return Math.min(max, Math.max(min, value));
+}
+
+
+========================================================================
+FILE: web/src/components/creation/creation-context.ts
+LINES: 1-7
+========================================================================
+export type CreationContextRecord = {
+    id: string; createdAt: number; prompt: string; status: string; model: string;
+    images?: { dataUrl?: string; url?: string; storageKey?: string }[];
+    references?: { dataUrl?: string; url?: string; storageKey?: string }[];
+    config?: object;
+    video?: { url: string }; error?: string;
+};
+
+
+========================================================================
+FILE: web/src/components/creation/creation-controls.css
+LINES: 1-28
+========================================================================
+.creation-shell { --creation-control-radius: 9px; }
+.creation-shell .creation-tool-button, .creation-shell .creation-icon-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 6px 9px; border: 1px solid transparent; border-radius: var(--creation-control-radius); color: var(--muted-foreground); background: transparent; font-size: 12px; cursor: pointer; transition: background 140ms, color 140ms; }
+.creation-shell .creation-icon-button { width: 32px; padding: 6px; }
+.creation-shell .creation-tool-button:hover, .creation-shell .creation-icon-button:hover { background: var(--muted); color: var(--foreground); }
+.creation-shell .creation-tool-button[aria-pressed=true] { background: var(--muted); color: var(--foreground); }
+.creation-shell :is(button, a, input, textarea):focus-visible { outline: 2px solid #D8FF3E; outline-offset: 3px; }
+/* Ant Design 复合输入框由外层显示焦点边框，内部 input 不重复描边。 */
+.creation-shell .ant-input-affix-wrapper > input.ant-input:focus-visible { outline: none; box-shadow: none; }
+/* 同理：胶囊搜索框（.jm-search）的外框负责焦点，内部裸 input 不画第二层矩形框。 */
+.creation-shell .jm-search input:focus,
+.creation-shell .jm-search input:focus-visible { outline: none; box-shadow: none; }
+.creation-shell button:disabled { cursor: not-allowed; }
+.creation-shell .astryx-button[data-variant="primary"] { background: var(--brand); color: var(--brand-ink); }
+.creation-shell .astryx-button[data-variant="primary"] span { color: inherit; }
+.creation-shell button[aria-disabled="true"] { cursor: not-allowed; }
+.creation-shell .record-actions { min-height: 40px; }
+.creation-shell .creation-actions { row-gap: 10px; }
+.creation-shell .creation-sidebar-link[aria-current=page] { background: var(--muted); color: var(--foreground) !important; }
+.creation-shell .creation-sidebar-link { min-height: 40px; }
+@media (pointer: coarse) { .creation-shell .creation-tool-button, .creation-shell .creation-icon-button, .creation-shell .record-actions button { min-height: 40px; } }
+@media (prefers-reduced-motion: reduce) { .creation-shell .creation-tool-button, .creation-shell .creation-icon-button { transition: none; } }
+
+.creation-shell .ant-btn { border-radius: var(--creation-control-radius); }
+.creation-shell .ant-btn:not(.ant-btn-icon-only) { gap: 6px; }
+.creation-shell .ant-input-affix-wrapper, .creation-shell .ant-input { border-radius: var(--creation-control-radius); }
+.creation-shell .record-actions .creation-icon-button { margin-left: auto; }
+.creation-shell .creation-top-actions { border-bottom: 1px solid var(--border); background: var(--background); }
+.creation-mobile-drawer .ant-drawer-body { overflow: hidden; }
+
+
+========================================================================
+FILE: web/src/components/creation/creation-conversation.tsx
+LINES: 1-20
+========================================================================
+import { useState } from "react";
+import type { Continuation } from "./creation-drafts";
+
+const separator = "\n\n本次修改要求：\n";
+export function continuationPrompt(prompt: string, continuation?: Continuation) {
+    const instruction = prompt.trim();
+    return instruction && continuation ? `原创作描述：\n${continuation.prompt}${separator}${instruction}\n请根据以上修改要求生成新版本，保留未要求改变的内容。` : instruction;
+}
+
+export function CreationRequest({ prompt }: { prompt: string }) {
+    const [expanded, setExpanded] = useState(false);
+    const instruction = prompt.includes(separator) ? prompt.slice(prompt.lastIndexOf(separator) + separator.length).replace(/\n请根据以上修改要求生成新版本，保留未要求改变的内容。$/, "") : prompt;
+    const expandable = instruction.length > 240 || instruction.split("\n").length > 6;
+    return <div className="mb-5 flex justify-end"><div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-sm bg-muted px-4 py-3 text-sm leading-6" aria-label="你的创作要求"><p className={expandable && !expanded ? "line-clamp-6" : ""}>{instruction}</p>{expandable && <button type="button" className="mt-2 text-xs text-muted-foreground hover:text-foreground" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? "收起描述" : "展开完整描述"}</button>}</div></div>;
+}
+
+export function ContinuationNotice({ value, mode, onCancel }: { value?: Continuation; mode: "image" | "video"; onCancel: () => void }) {
+    if (!value) return null;
+    return <div className="mb-2 flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-xs"><div className="min-w-0 flex-1"><p className="truncate font-medium">{mode === "image" ? "继续改图" : "调整后重新生成"} · {value.title}</p><p className="mt-1 text-muted-foreground">{mode === "image" ? "已引用选中图片，请输入修改要求" : "沿用原描述与参数，输入修改要求后生成新视频"}</p></div><button type="button" onClick={onCancel} className="shrink-0 text-muted-foreground hover:text-foreground">结束修改</button></div>;
+}
+
+
+========================================================================
+FILE: web/src/components/creation/creation-drafts.ts
+LINES: 1-29
+========================================================================
+import type { ReferenceImage } from "@/types/image";
+import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
+
+export type Continuation = { title: string; prompt: string };
+
+type Draft = { continuation?: Continuation; prompt: string; references: ReferenceImage[]; videos: ReferenceVideo[]; audios: ReferenceAudio[] };
+let session = "";
+const drafts: Partial<Record<"image" | "video", Draft>> = {};
+
+function forSession(owner: string, epoch: number) {
+    const current = `${owner}:${epoch}`;
+    if (session !== current) {
+        session = current;
+        delete drafts.image;
+        delete drafts.video;
+    }
+}
+
+export function readCreationDraft(mode: "image" | "video", owner: string, epoch: number) {
+    forSession(owner, epoch);
+    return drafts[mode];
+}
+
+export function saveCreationDraft(mode: "image" | "video", owner: string, epoch: number, draft: Draft) {
+    forSession(owner, epoch);
+    drafts[mode] = draft;
+}
+
+export function clearCreationDrafts() { delete drafts.image; delete drafts.video; }
+
+
+========================================================================
+FILE: web/src/components/creation/creation-history.ts
+LINES: 1-18
+========================================================================
+import { create } from "zustand";
+
+export type RecentCreation = { id: string; title: string; createdAt: number; mode: "image" | "video" };
+type State = {
+    session: string;
+    image: RecentCreation[];
+    video: RecentCreation[];
+    update: (session: string, mode: "image" | "video", items: RecentCreation[]) => void;
+};
+
+export const useCreationHistory = create<State>((set) => ({
+    session: "", image: [], video: [],
+    update: (session, mode, items) => set((state) => ({
+        ...(state.session === session ? {} : { image: [], video: [] }),
+        session,
+        [mode]: items,
+    })),
+}));
+
+
+========================================================================
+FILE: web/src/components/creation/creation-records-rail.css
+LINES: 1-129
+========================================================================
+/* 「生成记录」右侧停靠面板
+   收起 92px（只留「« 生成记录」），展开 372px；描边沿用 1px --line，
+   和左侧创作侧栏（#171717）对称，面板底色仍是内容区 #121212。 */
+
+.creation-records-rail {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    width: 92px;
+    min-height: 0;
+    overflow: hidden;
+    border-left: 1px solid var(--line);
+    background: var(--bg-page);
+    transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-records-rail.is-open {
+    width: 372px;
+}
+
+/* 头部：折叠按钮 + 计数，高度和创作区顶栏（60px）留出呼吸差 */
+.creation-records-rail .crec-head {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    height: 44px;
+    padding: 0 10px;
+}
+
+.creation-records-rail .crec-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-4);
+    font: inherit;
+    font-size: 12px;
+    line-height: 20px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        background-color 160ms cubic-bezier(0.4, 0, 0.2, 1),
+        color 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-records-rail .crec-toggle:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1);
+}
+
+.creation-records-rail .crec-count {
+    flex: 0 0 auto;
+    padding: 0 6px;
+    color: var(--text-5);
+    font-size: 11px;
+    line-height: 20px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* 展开态内容：自己滚，列表长了不撑高创作区 */
+.creation-records-rail .crec-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    padding: 2px 16px 20px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* 工具栏吸顶，滚动列表时「新增/全选/删除」始终可用 */
+.creation-records-rail .crec-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 8px 0 10px;
+    margin-bottom: 2px;
+    background: var(--bg-page);
+}
+
+.creation-records-rail .crec-toolbar .ant-btn {
+    padding-inline: 8px;
+}
+
+/* 收起态的竖向空位：整条就是一个展开按钮，一枚很淡的记录图标居中 */
+.creation-records-rail .crec-stub {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.16);
+    cursor: pointer;
+    transition: color 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-records-rail .crec-stub:hover {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.creation-records-rail .crec-stub:focus-visible {
+    outline: none;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* 窄屏沿用底部抽屉，停靠面板直接不占位 */
+@media (max-width: 1023px) {
+    .creation-records-rail {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .creation-records-rail {
+        transition: none;
+    }
+}
+
+
+========================================================================
+FILE: web/src/components/creation/creation-records-rail.tsx
+LINES: 1-50
+========================================================================
+import { useEffect, useState, type ReactNode } from "react";
+import { ChevronsLeft, ChevronsRight, History } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import "./creation-records-rail.css";
+
+/** 窄屏仍旧用底部抽屉，宽屏才把面板停靠到右侧 */
+export function useNarrowRecords() {
+    const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches);
+    useEffect(() => {
+        const query = window.matchMedia("(max-width: 1023px)");
+        const onChange = () => setNarrow(query.matches);
+        onChange();
+        query.addEventListener("change", onChange);
+        return () => query.removeEventListener("change", onChange);
+    }, []);
+    return narrow;
+}
+
+/**
+ * 「生成记录」停靠面板（参考即梦工作台右侧记录栏）：
+ * 收起是一条 92px 的竖向栏，只留「« 生成记录」；展开 372px，内容由调用方塞进来。
+ * 面板本身不覆盖合成器，创作区和记录区各滚各的。
+ */
+export function CreationRecordsRail({ open, count, onToggle, children }: {
+    open: boolean;
+    count: number;
+    onToggle: () => void;
+    children: ReactNode;
+}) {
+    const { t } = useTranslation();
+    const label = t("workbench.logs");
+    return (
+        <aside className={`creation-records-rail${open ? " is-open" : ""}`} aria-label={label}>
+            <header className="crec-head">
+                <button type="button" className="crec-toggle" onClick={onToggle} aria-expanded={open} title={label}>
+                    {open ? <ChevronsRight className="size-4 shrink-0" aria-hidden /> : <ChevronsLeft className="size-4 shrink-0" aria-hidden />}
+                    <span className="crec-title">{label}</span>
+                </button>
+                {open ? <span className="crec-count">{count}</span> : null}
+            </header>
+            {open ? <div className="crec-body thin-scrollbar">{children}</div> : (
+                /* 收起态没有顶栏按钮兜底，整条竖栏就是展开入口 */
+                <button type="button" className="crec-stub" onClick={onToggle} aria-expanded={false} aria-label={label} title={label}>
+                    <History className="size-4" aria-hidden />
+                </button>
+            )}
+        </aside>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/creation/creation-status.ts
+LINES: 1-3
+========================================================================
+export function creationStatus(status: "success" | "pending" | "failed" | "unavailable") {
+    return { success: "已完成", pending: "生成中", failed: "失败", unavailable: "结果暂不可用" }[status];
+}
+
+
+========================================================================
+FILE: web/src/components/creation/creation-stream.tsx
+LINES: 1-68
+========================================================================
+import { ChatLayout, ChatMessageList } from "@astryxdesign/core/Chat";
+import { InternationalizationProvider } from "@astryxdesign/core/i18n";
+import zhCN from "@astryxdesign/core/locales/zh-CN.generated.js";
+import coreCss from "@astryxdesign/core/astryx.css?inline";
+import themeCss from "@astryxdesign/theme-neutral/theme.css?inline";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+
+import { useThemeStore } from "@/stores/use-theme-store";
+
+// Keep Astryx's base tokens and atomic styles inside the workbench. Its normal
+// Theme provider also changes <html>; this scope keeps the canvas independent.
+const scopedCss = `@scope (.creation-stream) {\n${`${coreCss}\n${themeCss}`.replaceAll(":root", ":scope")}\n}
+    .creation-stream .astryx-chat-composer div:has(> .creation-actions) { min-width: 0; flex: 1; }
+    @media (max-width: 640px) {
+        .creation-stream .astryx-chat-composer div:has(> div > .creation-actions) { flex-wrap: wrap; }
+        .creation-stream .astryx-chat-composer div:has(> .creation-actions) { flex-basis: 100%; }
+    }`;
+
+export function CreationStream({ children, composer, onScrollTop, tasks = [] }: { children: ReactNode; composer: ReactNode; onScrollTop?: () => void; tasks?: { id: string; status: string }[] }) {
+    const theme = useThemeStore((state) => state.theme);
+    const layout = useRef<HTMLDivElement>(null);
+    const previousTasks = useRef(new Map<string, string>());
+    const [hasFinishedTasks, setHasFinishedTasks] = useState(false);
+    useEffect(() => {
+        const finished = tasks.some(task => previousTasks.current.get(task.id) === "pending" && task.status !== "pending");
+        previousTasks.current = new Map(tasks.map(task => [task.id, task.status]));
+        const element = layout.current;
+        if (finished && element && element.scrollHeight - element.scrollTop - element.clientHeight > 100) setHasFinishedTasks(true);
+    }, [tasks]);
+    const previousScrollTop = useRef(0);
+    const upwardIntent = useRef(false);
+    const touchY = useRef<number | null>(null);
+    const { i18n } = useTranslation();
+    useEffect(() => {
+        const style = document.createElement("style");
+        style.textContent = scopedCss;
+        document.head.appendChild(style);
+        return () => { style.remove(); };
+    }, []);
+    return (
+        <InternationalizationProvider locale={i18n.resolvedLanguage === "en" ? "en" : "zh-CN"} messages={{ "zh-CN": zhCN }}>
+            <div className="creation-stream flex min-h-0 flex-1 flex-col" data-astryx-theme="neutral" style={{ colorScheme: theme }}>
+                <ChatLayout ref={layout} density="spacious" composer={<>{hasFinishedTasks && <div className="mb-2 text-center"><button type="button" className="rounded-full border border-border bg-card px-4 py-2 text-sm text-foreground" onClick={() => { setHasFinishedTasks(false); layout.current?.scrollTo({ top: layout.current.scrollHeight, behavior: "smooth" }); }}>有新结果 · 查看</button></div>}{composer}</>} onWheel={(event) => {
+                    upwardIntent.current = event.deltaY < 0;
+                    if (upwardIntent.current && event.currentTarget.scrollTop <= 24) {
+                        upwardIntent.current = false;
+                        onScrollTop?.();
+                    }
+                }} onTouchStart={(event) => { touchY.current = event.touches[0]?.clientY ?? null; }} onTouchMove={(event) => {
+                    const nextY = event.touches[0]?.clientY;
+                    if (nextY != null && touchY.current != null) upwardIntent.current = nextY > touchY.current;
+                    touchY.current = nextY ?? null;
+                }} onKeyDown={(event) => {
+                    if (["ArrowUp", "PageUp", "Home"].includes(event.key)) upwardIntent.current = true;
+                }} onScroll={(event) => {
+                    const top = event.currentTarget.scrollTop;
+                    if (event.currentTarget.scrollHeight - top - event.currentTarget.clientHeight < 30) setHasFinishedTasks(false);
+                    if (upwardIntent.current && top <= 24 && top < previousScrollTop.current) {
+                        upwardIntent.current = false;
+                        onScrollTop?.();
+                    }
+                    previousScrollTop.current = top;
+                }}><ChatMessageList align="top" gap={0} aria-label="创作记录">{children}</ChatMessageList></ChatLayout>
+            </div>
+        </InternationalizationProvider>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/creation/creation-system.ts
+LINES: 1-5
+========================================================================
+import coreCss from "@astryxdesign/core/astryx.css?inline";
+import themeCss from "@astryxdesign/theme-neutral/theme.css?inline";
+
+// Scoped to the application shell, never the full-screen canvas editor.
+export const creationSystemCss = `@scope (.creation-shell) {${`${coreCss}\n${themeCss}`.replaceAll(":root", ":scope")}}`;
+
+
+========================================================================
+FILE: web/src/components/creation/creation-toolbar.tsx
+LINES: 1-171
+========================================================================
+import { Button } from "@astryxdesign/core/Button";
+import { App, Dropdown } from "antd";
+import { FolderOpen, ImagePlus, Video, MessageSquare, Plus, SlidersHorizontal, BookOpen, Paperclip, type LucideIcon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { useCreationChat } from "@/pages/chat/chat-store";
+
+export function CreationToolbar({ mode, busy, referencesOpen, onSettings, onUpload, onReferences, onPrompts, onAssets, modelPicker, onChat }: {
+    mode: "image" | "video"; busy: boolean; referencesOpen: boolean;
+    onSettings: () => void; onUpload: () => void; onReferences: () => void; onPrompts: () => void; onAssets: () => void;
+    modelPicker?: ReactNode; onChat?: () => Promise<string | undefined>;
+}) {
+    return <div className="flex min-w-0 flex-wrap items-center gap-2" role="group" aria-label="创作工具">
+        <CreationModeSwitch mode={mode} busy={busy} onChat={onChat} />
+        {modelPicker}
+        <Button label="创作设置" size="sm" variant="ghost" icon={<SlidersHorizontal className="size-3.5" />} onClick={onSettings} />
+        <Dropdown trigger={["click"]} menu={{ items: [
+            { key: "upload", label: "上传参考素材", icon: <Plus className="size-4" />, onClick: onUpload, disabled: busy },
+            { key: "assets", label: "从素材库选择", icon: <FolderOpen className="size-4" />, onClick: onAssets, disabled: busy },
+            { type: "divider" },
+            { key: "prompts", label: "提示词库", icon: <BookOpen className="size-4" />, onClick: onPrompts },
+        ] }}><button type="button" className="creation-tool-button" aria-label="添加素材或提示词"><Plus className="size-4" />添加</button></Dropdown>
+        <button type="button" className="creation-tool-button" aria-pressed={referencesOpen} onClick={onReferences}><Paperclip className="size-3.5" />参考素材</button>
+    </div>;
+}
+
+export type CreationModeOption = { value: string; label: string; icon?: LucideIcon };
+
+export const CREATION_MODES: readonly CreationModeOption[] = [
+    { value: "image", label: "图片", icon: ImagePlus },
+    { value: "video", label: "视频", icon: Video },
+    { value: "chat", label: "对话", icon: MessageSquare },
+];
+
+type CreationMode = "image" | "video" | "chat";
+
+/**
+ * 图片/视频/对话各自是独立页面（/create?mode=…），切换会重新挂载整页。
+ * 这里记住上一页的选中项与轨道横坐标，新页面挂载时先画在旧位置再滑到新位置，
+ * 视觉上就是一个框里的滑块在移动，而不是整块控件跳一下。
+ */
+let lastSwitchMemory: { mode: string; left: number } | null = null;
+
+/** 一整条描边轨道，选中项是轨道内的一块滑块；只暴露 value / onChange，交互与图标都在内部。 */
+export function CreationModeTrack({ value, options, onChange, disabled = false, busy = false, handoff = false }: {
+    value: string; options: readonly CreationModeOption[]; onChange: (value: string) => void;
+    disabled?: boolean; busy?: boolean; handoff?: boolean;
+}) {
+    const trackRef = useRef<HTMLDivElement | null>(null);
+    const [bar, setBar] = useState<{ left: number; width: number } | null>(null);
+    // 跨页面接力动画还在等第一帧时，不要被 ResizeObserver 直接拉到终点
+    const handoffPendingRef = useRef(false);
+
+    useLayoutEffect(() => {
+        const track = trackRef.current;
+        if (!track) return;
+        const current = track.querySelector<HTMLButtonElement>('[role="radio"][aria-checked="true"]');
+        if (!current) return;
+        const trackRect = track.getBoundingClientRect();
+        const rect = current.getBoundingClientRect();
+        const target = { left: rect.left - trackRect.left - track.clientLeft, width: rect.width };
+        const previous = lastSwitchMemory;
+        lastSwitchMemory = { mode: value, left: trackRect.left };
+        const previousButton = handoff && previous && previous.mode !== value
+            ? track.querySelector<HTMLButtonElement>(`[role="radio"][data-mode-value="${previous.mode}"]`)
+            : null;
+        // 只有轨道位置基本一致时才做跨页面接力，否则（例如对话页输入框更窄）直接从目标位置开始。
+        if (previousButton && Math.abs(previous!.left - trackRect.left) < 24) {
+            const from = previousButton.getBoundingClientRect();
+            setBar({ left: from.left - trackRect.left - track.clientLeft, width: from.width });
+            handoffPendingRef.current = true;
+            const timer = window.setTimeout(() => {
+                handoffPendingRef.current = false;
+                setBar(target);
+            }, 30);
+            return () => {
+                window.clearTimeout(timer);
+                handoffPendingRef.current = false;
+            };
+        }
+        setBar(target);
+    }, [handoff, value]);
+
+    // 容器尺寸变化时重新量一次，避免滑块和文字错位
+    useEffect(() => {
+        const track = trackRef.current;
+        if (!track) return;
+        const observer = new ResizeObserver(() => {
+            if (handoffPendingRef.current) return;
+            const current = track.querySelector<HTMLButtonElement>('[role="radio"][aria-checked="true"]');
+            if (!current) return;
+            const trackRect = track.getBoundingClientRect();
+            const rect = current.getBoundingClientRect();
+            setBar({ left: rect.left - trackRect.left - track.clientLeft, width: rect.width });
+        });
+        observer.observe(track);
+        return () => observer.disconnect();
+    }, []);
+
+    function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+        const index = options.findIndex(item => item.value === value);
+        if (index < 0) return;
+        let next = index;
+        if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + options.length) % options.length;
+        else if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % options.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = options.length - 1;
+        else return;
+        event.preventDefault();
+        if (next === index) return;
+        trackRef.current?.querySelector<HTMLButtonElement>(`[data-mode-value="${options[next].value}"]`)?.focus();
+        onChange(options[next].value);
+    }
+
+    return (
+        <div
+            ref={trackRef}
+            className="creation-mode-switch"
+            role="radiogroup"
+            aria-label="生成类型"
+            aria-busy={busy || disabled || undefined}
+            data-busy={busy || undefined}
+            data-count={options.length}
+            onKeyDown={handleKeyDown}
+        >
+            <span className="creation-mode-switch-bar" aria-hidden="true" style={bar ? { left: bar.left, width: bar.width } : { opacity: 0 }} />
+            {options.map(item => {
+                const active = item.value === value;
+                const Icon = item.icon;
+                return (
+                    <button
+                        key={item.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        data-mode-value={item.value}
+                        tabIndex={active ? 0 : -1}
+                        disabled={disabled}
+                        title={disabled && !busy ? "处理中，请稍候" : undefined}
+                        className="creation-mode-switch-item"
+                        onClick={() => { if (!active) onChange(item.value); }}
+                    >
+                        {Icon ? <Icon className="size-3.5" aria-hidden="true" /> : null}
+                        <span>{item.label}</span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+export function CreationModeSwitch({ mode, busy = false, onChat }: { mode: CreationMode; busy?: boolean; onChat?: () => Promise<string | undefined> }) {
+    const navigate = useNavigate();
+    const { message } = App.useApp();
+    const [switching, setSwitching] = useState(false);
+
+    const switchMode = useCallback(async (value: string) => {
+        if (value === mode || switching) return;
+        setSwitching(true);
+        try {
+            const id = value === "chat" ? await onChat?.() : undefined;
+            const store = useCreationChat.getState();
+            const threadId = id || (store.owner === useAuthStore.getState().user?.id ? store.activeId : "");
+            navigate(`/create?mode=${value}${threadId ? `&thread=${encodeURIComponent(threadId)}` : ""}`);
+        } catch (error) { message.error(error instanceof Error ? error.message : String(error)); }
+        finally { setSwitching(false); }
+    }, [message, mode, navigate, onChat, switching]);
+
+    return <CreationModeTrack value={mode} options={CREATION_MODES} onChange={value => void switchMode(value)} disabled={busy || switching} busy={busy} handoff />;
+}
+
+
+========================================================================
+FILE: web/src/components/creation/credit-estimate.tsx
+LINES: 1-17
+========================================================================
+import { useCreditEstimate } from "@/hooks/use-credit-estimate";
+import { inferMediaScale, parseVideoResolution } from "@/lib/media-size";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { modelOptionName, useEffectiveConfig } from "@/stores/use-config-store";
+
+export function CreditEstimate({ mode }: { mode: "image" | "video" }) {
+    const config = useEffectiveConfig();
+    const user = useAuthStore((state) => state.user);
+    const epoch = useAuthStore((state) => state.sessionEpoch);
+    const model = mode === "image" ? config.imageModel || config.model : config.videoModel || config.model;
+    const count = mode === "image" ? Math.max(1, Math.min(10, Number(config.count) || 1)) : 1;
+    const estimate = useCreditEstimate(modelOptionName(model), mode, mode === "video" ? Number(config.videoSeconds) : 1, mode === "video" ? parseVideoResolution(config.vquality) : inferMediaScale(config.size), `${user?.id ?? "guest"}:${epoch}`, 0, mode === "video" ? config.videoRouteId : "");
+    const min = (estimate.data?.minCredits ?? 0) * count;
+    const max = (estimate.data?.maxCredits ?? 0) * count;
+    const text = !estimate.hasModel ? "请选择模型" : estimate.loading ? "正在计算积分" : estimate.error || !estimate.data ? "暂无法估算积分" : `预计 ${min === max ? min : `${min}–${max}`} 积分`;
+    return <span role="status" className="text-xs text-muted-foreground" title="实际费用以服务端结算为准">{text}</span>;
+}
+
+
+========================================================================
+FILE: web/src/components/creation/mixed-creation-history.tsx
+LINES: 1-108
+========================================================================
+import { RecordActions } from "./record-actions";
+import { CreationRequest } from "./creation-conversation";
+import { useEffect, useRef, useState } from "react";
+import { App, Button, Drawer } from "antd";
+import { useNavigate } from "react-router-dom";
+import { GenerationHistoryPager, mergeGenerationHistory, type RestoredLog } from "@/services/api/generation-history";
+import { creationStatus } from "./creation-status";
+import { Lightbox } from "@astryxdesign/core/Lightbox";
+import { saveAs } from "file-saver";
+import { downloadCloudMedia, refreshExpiredMedia } from "@/services/media-download";
+import { imageLogStorage } from "@/lib/image-log-storage";
+import { videoLogStorage } from "@/lib/video-log-storage";
+import { resolveImageUrl } from "@/services/image-storage";
+import { resolveMediaUrl } from "@/services/file-storage";
+import { useAssetStore } from "@/stores/use-asset-store";
+
+async function mergedHistory(owner: string, mode: "image" | "video", cloud: ReturnType<GenerationHistoryPager["snapshot"]>) {
+    const store = mode === "image" ? imageLogStorage : videoLogStorage;
+    const local = await store.list<RestoredLog>(owner).catch(() => [] as RestoredLog[]);
+    const resolved = await Promise.all(local.map(async log => ({
+        ...log,
+        images: await Promise.all((log.images || []).map(async image => ({ ...image, dataUrl: await resolveImageUrl(image.storageKey, image.dataUrl) }))),
+        video: log.video ? { ...log.video, url: await resolveMediaUrl(log.video.storageKey, log.video.url) } : undefined,
+    })));
+    return mergeGenerationHistory(resolved, cloud.logs, cloud.hiddenTaskIds);
+}
+
+// The active page keeps its original submission engine and result actions.
+// The other media type is read-only until the user chooses to work with it.
+export function useOtherCreationHistory(owner: string | undefined, epoch: number, mode: "image" | "video") {
+    const [state, setState] = useState<{ owner?: string; epoch: number; logs: RestoredLog[]; more: boolean; error: string }>({ epoch, logs: [], more: false, error: "" });
+    const [pager, setPager] = useState<GenerationHistoryPager>();
+    const currentPager = useRef<GenerationHistoryPager | undefined>(undefined);
+    useEffect(() => {
+        if (!owner) return;
+        const next = new GenerationHistoryPager(owner, mode);
+        currentPager.current = next;
+        setPager(next);
+        setState({ owner, epoch, logs: [], more: false, error: "" });
+        let active = true;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const refresh = () => {
+            let error = "";
+            void next.refresh().catch(() => { error = "云端记录暂未加载，显示本地记录"; return next.snapshot(); }).then(async result => {
+            const logs = await mergedHistory(owner, mode, result);
+            if (active) {
+                setState({ owner, epoch, logs, more: result.hasMore, error });
+                clearTimeout(timer);
+                if (result.logs.some(log => log.status === "pending")) timer = setTimeout(refresh, 5000);
+            }
+        }).catch(() => { if (active) setState(current => ({ ...current, owner, epoch, error: "另一种创作记录暂未加载" })); }); };
+        refresh();
+        window.addEventListener("focus", refresh);
+        return () => { active = false; currentPager.current = undefined; clearTimeout(timer); window.removeEventListener("focus", refresh); };
+    }, [owner, epoch, mode]);
+    const current = state.owner === owner && state.epoch === epoch;
+    const loadMore = async () => {
+        if (!pager || !owner) return;
+        try {
+            const result = await pager.loadMore();
+            const logs = await mergedHistory(owner, mode, result);
+            if (currentPager.current !== pager) return;
+            setState({ owner, epoch, logs, more: result.hasMore, error: "" });
+        } catch (error) {
+            if (currentPager.current === pager) setState(value => ({ ...value, error: "加载更早记录失败，请重试" }));
+            throw error;
+        }
+    };
+    return { logs: current ? state.logs : [], more: current && state.more, error: current ? state.error : "", loadMore };
+}
+
+export function OtherCreationRecord({ log, mode, disabled, onUseImage }: { log: RestoredLog; mode: "image" | "video"; disabled?: boolean; onUseImage?: (image: RestoredLog["images"][number]) => void }) {
+    const navigate = useNavigate();
+    const { message } = App.useApp();
+    const addAsset = useAssetStore(state => state.addAsset);
+    const [detailsOpen, setDetailsOpen] = useState(false);
+    const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+    const download = (url: string, name: string) => {
+        if (!downloadCloudMedia(url, name)) saveAs(url, name);
+    };
+    return <article id={`creation-record-${log.id}`} className="astryx-chat-message mb-12 max-w-[620px]">
+        <CreationRequest prompt={log.prompt} />
+        <div className="mb-3 flex flex-wrap gap-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">{mode === "image" ? "图片生成" : "视频生成"}</span><span>{log.model}</span><span>{log.time}</span><span>{log.reconciliationRequired ? "待核对" : creationStatus(log.status)}</span></div>
+        {log.images.length > 0 && <div className={`grid gap-3 ${log.images.length > 1 ? "sm:grid-cols-2" : ""}`}>{log.images.map((image, index) => <div key={image.id}>
+            <button type="button" className="block w-full" aria-label={`预览图片 ${index + 1}`} onClick={() => setPreviewIndex(index)}><img src={image.dataUrl} alt={log.prompt} loading="lazy" onError={refreshExpiredMedia} className="max-h-[65vh] w-full rounded-lg object-contain" /></button>
+            <RecordActions primary={{ key: "continue", label: "继续改图", disabled, run: () => navigate(`/create?mode=image&record=${encodeURIComponent(log.id)}&action=continue&image=${index}`) }} secondary={onUseImage ? { key: "video", label: "用于视频", disabled, run: () => onUseImage(image) } : undefined} more={[
+                { key: "download", label: "下载图片", run: () => download(image.dataUrl, `image-${index + 1}.png`) },
+                { key: "asset", label: "加入素材库", run: () => { const id = addAsset({ kind: "image", title: log.title, coverUrl: image.dataUrl, tags: [], source: "创作记录", data: image, metadata: { prompt: log.prompt, source: "image-page" } }); if (id) message.success("已加入素材库"); } },
+            ]} />
+        </div>)}</div>}
+        {previewIndex != null && <Lightbox isOpen onOpenChange={open => { if (!open) setPreviewIndex(null); }} media={log.images.map(image => ({ src: image.dataUrl, alt: log.prompt }))} defaultIndex={previewIndex} hasZoom />}
+        {log.video && <><video src={log.video.url} onError={refreshExpiredMedia} controls playsInline preload="none" className="aspect-video w-full rounded-lg bg-black object-contain" onPlay={event => { const current = event.currentTarget; current.closest(".creation-stream")?.querySelectorAll("video").forEach(video => { if (video !== current) video.pause(); }); }} /><Button size="small" type="text" onClick={() => download(log.video!.url, "video.mp4")}>下载视频</Button></>}
+        {log.error && <p className="mt-2 text-sm text-muted-foreground">{log.error}</p>}
+        {log.video && <Button size="small" type="text" onClick={() => { const id = addAsset({ kind: "video", title: log.title, coverUrl: "", tags: [], source: "创作记录", data: log.video!, metadata: { prompt: log.prompt, source: "video-page" } }); if (id) message.success("已加入素材库"); }}>加入我的资产</Button>}
+        <RecordActions archiveUrl={log.video?.url} primary={mode === "video" ? { key: "continue", label: "调整后重生成", disabled, run: () => navigate(`/create?mode=video&record=${encodeURIComponent(log.id)}&action=continue`) } : undefined} secondary={{ key: "details", label: "生成详情", run: () => setDetailsOpen(true) }} label="更多生成记录操作" more={[
+            { key: "edit", label: "编辑原描述与参数", disabled, run: () => navigate(`/create?mode=${mode}&record=${encodeURIComponent(log.id)}&action=edit`) },
+        ]} />
+        <Drawer title="生成详情" open={detailsOpen} onClose={() => setDetailsOpen(false)}>
+            <dl className="space-y-4 text-sm">
+                <div><dt className="text-muted-foreground">提示词</dt><dd className="whitespace-pre-wrap break-words">{log.prompt}</dd></div>
+                <div><dt className="text-muted-foreground">模型与规格</dt><dd>{log.model} · {log.size || "比例未记录"} · {mode === "video" ? `${log.resolution || "清晰度未记录"} / ${log.seconds || "未记录"} 秒` : log.config.quality || "质量未记录"}</dd></div>
+                <div><dt className="text-muted-foreground">状态</dt><dd>{log.reconciliationRequired ? "待核对" : creationStatus(log.status)} · {log.time}</dd></div>
+                <div><dt className="text-muted-foreground">实际积分</dt><dd>{log.creditsCharged == null ? "尚未结算或暂不可用" : `${log.creditsCharged} 积分`}</dd></div>
+                {(log.referenceHistoryUnknown || !!log.referenceCount) && <p className="text-muted-foreground">云端历史未提供完整参考素材，重新编辑时请核对。</p>}
+            </dl>
+        </Drawer>
+    </article>;
+}
+
+
+========================================================================
+FILE: web/src/components/creation/mobile-creation-menu.tsx
+LINES: 1-18
+========================================================================
+import { Button, Dropdown } from "antd";
+import { MoreHorizontal } from "lucide-react";
+
+export function MobileCreationMenu({ onUpload, onReferences, onPrompts, onAssets }: {
+    onUpload: () => void;
+    onReferences: () => void;
+    onPrompts: () => void;
+    onAssets: () => void;
+}) {
+    return <Dropdown trigger={["click"]} menu={{ items: [
+        { key: "upload", label: "上传参考素材", onClick: onUpload },
+        { key: "references", label: "参考素材", onClick: onReferences },
+        { key: "prompts", label: "提示词库", onClick: onPrompts },
+        { key: "assets", label: "素材库", onClick: onAssets },
+    ] }}>
+        <Button size="small" type="text" className="!inline-flex sm:!hidden" icon={<MoreHorizontal className="size-4" />} aria-label="更多创作工具">更多</Button>
+    </Dropdown>;
+}
+
+
+========================================================================
+FILE: web/src/components/creation/prompt-optimization-estimate.tsx
+LINES: 1-23
+========================================================================
+import { useEffect, useState } from "react";
+import { estimatePromptOptimization } from "@/services/api/prompt-optimizer";
+import { useEffectiveConfig } from "@/stores/use-config-store";
+import { useAuthStore } from "@/stores/use-auth-store";
+
+export function PromptOptimizationEstimate({ mode }: { mode: "image" | "video" }) {
+    const config = useEffectiveConfig();
+    const user = useAuthStore(state => state.user);
+    const epoch = useAuthStore(state => state.sessionEpoch);
+    const model = (mode === "image" ? config.imageModel : config.videoModel) || config.model;
+    const key = JSON.stringify([user?.id, epoch, mode, model]);
+    const [quote, setQuote] = useState<{ key: string; credits?: number; error?: string }>();
+    useEffect(() => {
+        if (!user || !model) return;
+        const controller = new AbortController();
+        void estimatePromptOptimization(model, mode, controller.signal)
+            .then(result => { if (!controller.signal.aborted) setQuote({ key, credits: result.credits }); })
+            .catch(error => { if (!controller.signal.aborted) setQuote({ key, error: error instanceof Error ? error.message : "报价暂不可用" }); });
+        return () => controller.abort();
+    }, [key, model, mode]);
+    const current = quote?.key === key ? quote : undefined;
+    return <span className="text-xs text-muted-foreground" title={current?.error || "优化提示词单独计费，最终以提交时的价格为准"}>{!user || !model ? "提示词优化单独计费" : !current ? "正在查询优化费用" : current.credits == null ? "优化报价暂不可用" : `优化预计 ${current.credits} 积分/次`}</span>;
+}
+
+
+========================================================================
+FILE: web/src/components/creation/record-actions.tsx
+LINES: 1-18
+========================================================================
+import { Button } from "@astryxdesign/core/Button";
+import { Dropdown } from "antd";
+import { Ellipsis } from "lucide-react";
+import type { ReactNode } from "react";
+import { useMediaArchive } from "@/hooks/use-media-archive";
+
+type Action = { key: string; label: string; icon?: ReactNode; run: () => void; disabled?: boolean };
+export function RecordActions({ primary, secondary, more, archiveUrl, label = "更多作品操作" }: { primary?: Action; secondary?: Action; more: Action[]; archiveUrl?: string; label?: string }) {
+    const archive = useMediaArchive(archiveUrl);
+    const actions: Action[] = archive ? [...more, archive] : more;
+    return <div className="record-actions flex flex-wrap items-center gap-1.5 py-1" role="group" aria-label="作品操作">
+        {primary && <Button size="md" variant="secondary" label={primary.label} icon={primary.icon} isDisabled={primary.disabled} onClick={primary.run} />}
+        {secondary && <Button size="md" variant="ghost" label={secondary.label} icon={secondary.icon} isDisabled={secondary.disabled} onClick={secondary.run} />}
+        {!!actions.length && <Dropdown trigger={["click"]} placement="bottomRight" menu={{ items: actions.map(action => ({ key: action.key, label: action.label, icon: action.icon, disabled: action.disabled, onClick: action.run })) }}>
+            <button type="button" className="creation-icon-button" aria-label={label} title={label}><Ellipsis className="size-4" /></button>
+        </Dropdown>}
+    </div>;
+}
+
+
+========================================================================
+FILE: web/src/components/creation/use-reference-transfer.ts
+LINES: 1-22
+========================================================================
+import { App } from "antd";
+import { useEffect, useState } from "react";
+import { useBlocker } from "react-router-dom";
+
+// Keep the workbench mounted until selected media has finished uploading.
+export function useReferenceTransfer() {
+    const { message } = App.useApp();
+    const [pending, setPending] = useState(0);
+    const blocker = useBlocker(({ currentLocation, nextLocation }) => pending > 0 && currentLocation.pathname !== nextLocation.pathname);
+    useEffect(() => {
+        if (blocker.state !== "blocked") return;
+        message.warning("参考素材正在处理，请等待完成后再切换页面");
+        blocker.reset();
+    }, [blocker, message]);
+
+    const run = async <T,>(work: () => Promise<T>): Promise<T> => {
+        setPending((value) => value + 1);
+        try { return await work(); }
+        finally { setPending((value) => value - 1); }
+    };
+    return { run, isTransferring: pending > 0 };
+}
+
+
+========================================================================
+FILE: web/src/components/creation/use-visible-records.ts
+LINES: 1-27
+========================================================================
+import { useEffect, useState } from "react";
+
+const PAGE_SIZE = 30;
+
+// Render recent records first so long histories do not mount every media item.
+export function useVisibleRecords<T extends { id: string }>(logs: T[], owner: string | undefined, recordId: string | null) {
+    const [limit, setLimit] = useState(PAGE_SIZE);
+    useEffect(() => { setLimit(PAGE_SIZE); }, [owner]);
+    useEffect(() => {
+        if (!recordId) return;
+        const index = logs.findIndex((item) => item.id === recordId);
+        if (index >= 0) setLimit((current) => Math.max(current, index + 1));
+    }, [logs, recordId]);
+
+    const showEarlier = () => {
+        const anchor = logs[Math.min(limit, logs.length) - 1]?.id;
+        const element = anchor ? document.getElementById(`creation-record-${anchor}`) : null;
+        const top = element?.getBoundingClientRect().top;
+        let scroller = element?.parentElement ?? null;
+        while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+        setLimit((current) => current + PAGE_SIZE);
+        if (element && scroller && top != null) requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (element.isConnected) scroller.scrollTop += element.getBoundingClientRect().top - top;
+        }));
+    };
+    return { records: logs.slice(0, limit).reverse(), hasEarlier: logs.length > limit, showEarlier };
+}
+
+
+========================================================================
+FILE: web/src/components/home/landing-tool-icons.tsx
+LINES: 1-71
+========================================================================
+/**
+ * 首页「创作工具」四个入口的自绘图标。
+ *
+ * 不用 lucide 的通用线性图标：这里每个入口需要一眼分辨的「专属比喻」，
+ * 同时统一 24 网格 / 1.5 描边 / 白→品牌色的渐变描边语言，
+ * 保证四张卡片摆在一起像一套，而不是四个搜来的图标。
+ *
+ * 渐变必须用 userSpaceOnUse：横向直线（如一行文字）的包围盒高度为 0，
+ * 用默认的 objectBoundingBox 会让渐变退化，Chrome 直接不画这条线。
+ *
+ * 渐变 id 唯一且每个图标只渲染一次，不需要 useId。
+ */
+
+type IconProps = { className?: string };
+
+const gradient = (id: string, to: string) => (
+    <defs>
+        <linearGradient id={id} gradientUnits="userSpaceOnUse" x1="2" y1="1.5" x2="22" y2="22.5">
+            <stop offset="0" stopColor="#FFFFFF" stopOpacity="0.96" />
+            <stop offset="1" stopColor={to} stopOpacity="0.92" />
+        </linearGradient>
+    </defs>
+);
+
+/** 图片创作：画框 + 山峦 + 星芒（星芒用实心高光，代表「生成」而不是「相册」）。 */
+export function LandingImageIcon({ className }: IconProps) {
+    return <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+        {gradient("lt-icon-image", "#7EC0FF")}
+        <rect x="3" y="3" width="18" height="18" rx="5" stroke="url(#lt-icon-image)" strokeWidth="1.5" />
+        <path d="M4.4 17.9l4.5-4.6a2.1 2.1 0 0 1 3 0l2.6 2.7" stroke="url(#lt-icon-image)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M13.9 15.6l1.7-1.7a2.1 2.1 0 0 1 3 0l1.4 1.4" stroke="url(#lt-icon-image)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.5" />
+        <path d="M18.1 5.4a3.2 3.2 0 0 0 2.2 2.2 3.2 3.2 0 0 0-2.2 2.2 3.2 3.2 0 0 0-2.2-2.2 3.2 3.2 0 0 0 2.2-2.2Z" fill="#A6D6FF" />
+    </svg>;
+}
+
+/** 视频创作：取景屏 + 播放键。只留这两个元素，缩到 28px 也不会糊。 */
+export function LandingVideoIcon({ className }: IconProps) {
+    return <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+        {gradient("lt-icon-video", "#B2A0FF")}
+        <rect x="2.8" y="5.2" width="18.4" height="13.6" rx="4.2" stroke="url(#lt-icon-video)" strokeWidth="1.5" />
+        <path d="M10.4 9.4v5.2a.88.88 0 0 0 1.34.75l4.1-2.6a.88.88 0 0 0 0-1.5l-4.1-2.6a.88.88 0 0 0-1.34.75Z" fill="#CBBCFF" />
+    </svg>;
+}
+
+/** 无限画布：淡描边的画布框里放一枚无限符号，直接点题「无限延伸」。 */
+export function LandingCanvasIcon({ className }: IconProps) {
+    return <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+        {gradient("lt-icon-canvas", "#6FE3C8")}
+        <rect x="3" y="3" width="18" height="18" rx="5" stroke="url(#lt-icon-canvas)" strokeWidth="1.5" opacity="0.4" />
+        <path d="M12 12c-1.3-2-2.1-2.8-3.6-2.8a2.8 2.8 0 1 0 0 5.6c1.5 0 2.3-.8 3.6-2.8Zm0 0c1.3-2 2.1-2.8 3.6-2.8a2.8 2.8 0 1 1 0 5.6c-1.5 0-2.3-.8-3.6-2.8Z" stroke="url(#lt-icon-canvas)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="rgba(255,255,255,0.06)" />
+    </svg>;
+}
+
+/** 提示词库：文本卡片 + 三行描述 + 星芒，代表「可复用的描述」。 */
+export function LandingPromptIcon({ className }: IconProps) {
+    return <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+        {gradient("lt-icon-prompt", "#FFC98A")}
+        <rect x="3" y="3" width="18" height="18" rx="5" stroke="url(#lt-icon-prompt)" strokeWidth="1.5" />
+        <path d="M6.6 8.9h5.4" stroke="url(#lt-icon-prompt)" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M6.6 12.5h9.6" stroke="url(#lt-icon-prompt)" strokeWidth="1.5" strokeLinecap="round" opacity="0.72" />
+        <path d="M6.6 16.1h6.4" stroke="url(#lt-icon-prompt)" strokeWidth="1.5" strokeLinecap="round" opacity="0.48" />
+        <path d="M17.6 4.9a2.6 2.6 0 0 0 1.8 1.8 2.6 2.6 0 0 0-1.8 1.8 2.6 2.6 0 0 0-1.8-1.8 2.6 2.6 0 0 0 1.8-1.8Z" fill="#FFD9AC" />
+    </svg>;
+}
+
+export const LANDING_TOOL_ICONS = {
+    image: LandingImageIcon,
+    video: LandingVideoIcon,
+    canvas: LandingCanvasIcon,
+    prompts: LandingPromptIcon,
+} as const;
+
+
+========================================================================
+FILE: web/src/components/image-generation-pending.tsx
+LINES: 1-46
+========================================================================
+import { useEffect, useState } from "react";
+import { LoaderCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { formatDuration } from "@/lib/image-utils";
+import { cn } from "@/lib/utils";
+
+export function ImageGenerationPending({ className, label, compact = false }: { className?: string; label?: string; compact?: boolean }) {
+    const { t } = useTranslation();
+    const [tick, setTick] = useState(0);
+    const pendingMessages = t("generation.pending", { returnObjects: true }) as string[];
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setTick((value) => value + 1), 1000);
+        return () => window.clearInterval(timer);
+    }, []);
+
+    const index = Math.floor(tick / 2) % pendingMessages.length;
+    const progress = Math.min(98, 10 + (1 - Math.exp(-tick / 28)) * 88);
+
+    return (
+        <div className={cn("relative overflow-hidden bg-muted dark:bg-white/10", compact ? "min-h-24" : "aspect-[4/3]", className)}>
+            <div
+                className="absolute inset-0 opacity-60"
+                style={{
+                    backgroundImage: "radial-gradient(circle, rgba(120,113,108,0.35) 1.4px, transparent 1.6px)",
+                    backgroundSize: "16px 16px",
+                    maskImage: "radial-gradient(ellipse at 38% 68%, black 0%, black 28%, transparent 60%)",
+                }}
+            />
+            <div className="absolute left-4 top-4 flex items-center gap-2 text-[15px] font-medium text-muted-foreground dark:text-foreground/80">
+                <LoaderCircle className="size-4 animate-spin" />
+                <span>{label || pendingMessages[index]}</span>
+            </div>
+            <div className="absolute bottom-4 left-4 right-4">
+                <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{formatDuration(tick * 1000)}</span>
+                    <span>{Math.floor(progress)}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-muted dark:bg-white/12">
+                    <div className="h-full rounded-full bg-foreground dark:bg-muted" style={{ width: `${progress}%` }} />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/image-settings-panel.tsx
+LINES: 1-261
+========================================================================
+import { type ReactNode, useState } from "react";
+import { ConfigProvider, Switch } from "antd";
+import { useTranslation } from "react-i18next";
+
+import i18n from "@/i18n";
+import { type CanvasTheme } from "@/lib/canvas-theme";
+import { computeMediaSize, inferMediaRatio, inferMediaScale, mediaRatioOptions, mediaScaleOptions, readMediaDimensions } from "@/lib/media-size";
+import { modelOptionName, useConfigStore, type AiConfig } from "@/stores/use-config-store";
+
+const qualityOptions = [
+    { value: "auto", labelKey: "auto" },
+    { value: "low", labelKey: "low" },
+    { value: "medium", labelKey: "medium" },
+    { value: "high", labelKey: "high" },
+    { value: "xhigh", labelKey: "xhigh" },
+    { value: "max", labelKey: "max" },
+];
+const DIMENSION_STEP = 16;
+
+export const imageQualityOptions = qualityOptions.map((item) => ({ value: item.value, get label() { return i18n.t(`settingsPanels.common.${item.labelKey}`); } }));
+export const imageAspectOptions = mediaRatioOptions.map((item) => ({ value: item.value, label: item.value === "auto" ? i18n.t("settingsPanels.common.auto") : item.value }));
+export const imageScaleOptions = mediaScaleOptions.map((value) => ({ value, label: value === "auto" ? i18n.t("settingsPanels.common.auto") : value }));
+
+type ImageSettingsPanelProps = {
+    config: AiConfig;
+    onConfigChange: (key: "quality" | "size" | "count" | "background", value: string) => void;
+    theme: CanvasTheme;
+    showTitle?: boolean;
+    className?: string;
+    maxCount?: number;
+    quickCount?: number;
+};
+
+export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10 }: ImageSettingsPanelProps) {
+    const { t } = useTranslation();
+    const [snapDimensionToStep, setSnapDimensionToStep] = useState(true);
+    const quality = config.quality || "auto";
+    const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
+    const activeSize = config.size || "auto";
+    const transparentBackground = config.background === "transparent";
+    const selectedScale = inferMediaScale(activeSize);
+    const selectedRatio = inferMediaRatio(activeSize);
+    const model = useConfigStore((state) => state.serverModels.find((item) => item.id === modelOptionName(config.model || config.imageModel)));
+    const allowedScales = (model?.metadata?.imageCapabilities as { resolutions?: string[] } | undefined)?.resolutions?.map((value) => value.toLowerCase());
+    const dimensions = readMediaDimensions(activeSize, selectedScale, selectedRatio);
+    const applySize = (scale: string, ratio: string) => onConfigChange("size", computeMediaSize(scale, ratio));
+    const selectScale = (scale: string) => applySize(scale, selectedRatio === "auto" ? "1:1" : selectedRatio);
+    const selectRatio = (ratio: string) => applySize(selectedScale, ratio);
+    const updateDimension = (key: "width" | "height", value: number | null) => {
+        const next = Math.max(1, Math.floor(value || dimensions[key] || 1024));
+        const width = key === "width" ? next : dimensions.width;
+        const height = key === "height" ? next : dimensions.height;
+        onConfigChange("size", `${alignDimension(width, snapDimensionToStep)}x${alignDimension(height, snapDimensionToStep)}`);
+    };
+
+    return (
+        <ImageSettingsTheme theme={theme}>
+            <div
+                className={className}
+                style={{ color: theme.node.text }}
+                onMouseDown={(event) => {
+                    event.stopPropagation();
+                    if (event.target instanceof HTMLInputElement) return;
+                    if (document.activeElement instanceof HTMLInputElement && event.currentTarget.contains(document.activeElement)) document.activeElement.blur();
+                }}
+            >
+                {showTitle ? <div className="text-lg font-semibold">{t("settingsPanels.image.title")}</div> : null}
+                <div className="space-y-2.5">
+                    <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.quality")}</SettingTitle>
+                    <div className="grid grid-cols-3 gap-2.5">
+                        {qualityOptions.map((item) => (
+                            <OptionPill key={item.value} selected={quality === item.value} theme={theme} onClick={() => onConfigChange("quality", item.value)}>
+                                {t(`settingsPanels.common.${item.labelKey}`)}
+                            </OptionPill>
+                        ))}
+                    </div>
+                </div>
+                <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                        <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.size")}</SettingTitle>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium" style={{ color: theme.node.muted }}>
+                                {t("settingsPanels.image.align16")}
+                            </span>
+                            <span title={t("settingsPanels.image.align16Hint")} onMouseDown={(event) => event.stopPropagation()}>
+                                <Switch size="small" checked={snapDimensionToStep} onChange={setSnapDimensionToStep} />
+                            </span>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2.5">
+                        <DimensionInput prefix="W" value={dimensions.width} disabled={selectedRatio === "auto"} theme={theme} alignToStep={snapDimensionToStep} onChange={(value) => updateDimension("width", value)} />
+                        <span className="text-lg opacity-45">↔</span>
+                        <DimensionInput prefix="H" value={dimensions.height} disabled={selectedRatio === "auto"} theme={theme} alignToStep={snapDimensionToStep} onChange={(value) => updateDimension("height", value)} />
+                    </div>
+                </div>
+                <div className="space-y-2.5">
+                    <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.resolution")}</SettingTitle>
+                    <div className="grid grid-cols-4 gap-2.5">
+                        {mediaScaleOptions.filter((value) => value === 'auto' || !allowedScales?.length || allowedScales.includes(value)).map((value) => (
+                            <OptionPill key={value} selected={selectedScale === value} theme={theme} onClick={() => selectScale(value)}>
+                                {value === "auto" ? t("settingsPanels.common.auto") : value}
+                            </OptionPill>
+                        ))}
+                    </div>
+                </div>
+                <div className="space-y-2.5">
+                    <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.aspectRatio")}</SettingTitle>
+                    <div className="grid grid-cols-4 gap-2.5">
+                        {mediaRatioOptions.map((item) => (
+                            <button
+                                key={item.value}
+                                type="button"
+                                className="flex h-[72px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border bg-transparent text-sm transition hover:opacity-80"
+                                style={{ borderColor: selectedRatio === item.value ? theme.node.text : theme.node.stroke, background: "transparent", color: theme.node.text }}
+                                onMouseDown={(event) => event.stopPropagation()}
+                                onClick={() => selectRatio(item.value)}
+                            >
+                                <AspectIcon width={item.width} height={item.height} color={theme.node.text} />
+                                <span>{item.value === "auto" ? t("settingsPanels.common.auto") : item.value}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                        <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.transparent")}</SettingTitle>
+                        <div className="text-xs" style={{ color: theme.node.muted, opacity: 0.75 }}>
+                            {t("settingsPanels.image.transparentHint")}
+                        </div>
+                    </div>
+                    <span onMouseDown={(event) => event.stopPropagation()}>
+                        <Switch size="small" checked={transparentBackground} onChange={(checked) => onConfigChange("background", checked ? "transparent" : "")} />
+                    </span>
+                </div>
+                <div className="space-y-2.5">
+                    <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.count")}</SettingTitle>
+                    <div className="grid grid-cols-4 gap-2.5">
+                        {Array.from({ length: quickCount }, (_, index) => index + 1).map((value) => (
+                            <OptionPill key={value} selected={count === value} theme={theme} onClick={() => onConfigChange("count", String(value))}>
+                                {t("settingsPanels.image.images", { count: value })}
+                            </OptionPill>
+                        ))}
+                        <CountInput value={count} max={maxCount} theme={theme} onChange={(value) => onConfigChange("count", String(value || 1))} />
+                    </div>
+                </div>
+            </div>
+        </ImageSettingsTheme>
+    );
+}
+
+export function ImageSettingsTheme({ theme, children }: { theme: CanvasTheme; children: ReactNode }) {
+    return (
+        <ConfigProvider
+            theme={{
+                token: { colorBgContainer: theme.toolbar.panel, colorBgElevated: theme.toolbar.panel, colorBorder: theme.node.stroke, colorPrimary: theme.node.activeStroke, colorText: theme.node.text, colorTextLightSolid: theme.node.panel },
+                components: {
+                    Button: { defaultBg: theme.toolbar.panel, defaultBorderColor: theme.node.stroke, defaultColor: theme.node.text },
+                    Slider: { railBg: theme.node.stroke, railHoverBg: theme.node.stroke, trackBg: theme.node.activeStroke, handleColor: theme.node.text, handleActiveColor: theme.node.text },
+                },
+            }}
+        >
+            {children}
+        </ConfigProvider>
+    );
+}
+
+export function imageQualityLabel(value: string) {
+    return qualityOptions.some((item) => item.value === value) ? i18n.t(`settingsPanels.common.${value}`) : value;
+}
+
+export function imageSizeLabel(size: string) {
+    const scale = inferMediaScale(size);
+    const ratio = inferMediaRatio(size);
+    if (ratio === "auto" || size === "auto") return i18n.t("settingsPanels.common.auto");
+    if (scale === "auto") return ratio;
+    return `${scale} · ${ratio}`;
+}
+
+function OptionPill({ selected, theme, onClick, children }: { selected: boolean; theme: CanvasTheme; onClick: () => void; children: ReactNode }) {
+    return (
+        <button
+            type="button"
+            className="h-9 cursor-pointer rounded-full border px-2 text-sm transition hover:opacity-80"
+            style={{ background: "transparent", borderColor: selected ? theme.node.text : theme.node.stroke, color: theme.node.text }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={onClick}
+        >
+            {children}
+        </button>
+    );
+}
+
+function DimensionInput({ prefix, value, disabled, theme, alignToStep, onChange }: { prefix: string; value: number; disabled: boolean; theme: CanvasTheme; alignToStep: boolean; onChange: (value: number | null) => void }) {
+    const commit = (input: HTMLInputElement) => {
+        const next = alignDimension(Math.max(1, Math.floor(Number(input.value) || value || 1024)), alignToStep);
+        input.value = String(next);
+        onChange(next);
+    };
+
+    return (
+        <label className="flex h-9 overflow-hidden rounded-xl text-sm" style={{ background: theme.node.fill, color: theme.node.text, opacity: disabled ? 0.55 : 1 }}>
+            <span className="grid w-9 place-items-center" style={{ color: theme.node.muted }}>
+                {prefix}
+            </span>
+            <input
+                type="number"
+                min={1}
+                disabled={disabled}
+                className="min-w-0 flex-1 bg-transparent px-2 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                defaultValue={value || ""}
+                key={`${prefix}-${value}`}
+                onBlur={(event) => commit(event.currentTarget)}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+            />
+        </label>
+    );
+}
+
+function CountInput({ value, max, theme, onChange }: { value: number; max: number; theme: CanvasTheme; onChange: (value: number | null) => void }) {
+    return (
+        <label className="col-span-2 flex h-9 overflow-hidden rounded-full border text-sm" style={{ borderColor: theme.node.stroke, color: theme.node.text }}>
+            <input
+                type="number"
+                min={1}
+                max={max}
+                className="min-w-0 flex-1 bg-transparent px-3 text-center outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                style={{ color: theme.node.text, WebkitTextFillColor: theme.node.text }}
+                value={value || ""}
+                onChange={(event) => onChange(Number(event.target.value) || null)}
+                onMouseDown={(event) => event.stopPropagation()}
+            />
+        </label>
+    );
+}
+
+function AspectIcon({ width, height, color }: { width: number; height: number; color: string }) {
+    if (!width || !height) return null;
+    const ratio = width / height;
+    const boxWidth = ratio >= 1 ? 24 : Math.max(10, 24 * ratio);
+    const boxHeight = ratio >= 1 ? Math.max(10, 24 / ratio) : 24;
+    return (
+        <span className="grid h-7 w-9 place-items-center">
+            <span className="border-2" style={{ width: boxWidth, height: boxHeight, borderColor: color }} />
+        </span>
+    );
+}
+
+function SettingTitle({ children, color }: { children: string; color: string }) {
+    return (
+        <div className="text-xs font-medium" style={{ color }}>
+            {children}
+        </div>
+    );
+}
+
+function alignDimension(value: number, enabled: boolean) {
+    return enabled ? Math.ceil(value / DIMENSION_STEP) * DIMENSION_STEP : value;
+}
+
+
+========================================================================
+FILE: web/src/components/layout/account-menu.tsx
+LINES: 1-201
+========================================================================
+import { useEffect, useRef, useState } from "react";
+import { App, Avatar } from "antd";
+import dayjs from "dayjs";
+import { ChevronDown, CreditCard, Crown, HardDrive, Languages, LogOut, ReceiptText, Settings2, UserRound, Wallet } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Link, useNavigate } from "react-router-dom";
+
+import { changeAppLocale, listLocales, type AppLocale } from "@/i18n";
+import { UserStatusActions } from "@/components/layout/user-status-actions";
+import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { formatGenerationDiscount } from "@/lib/membership";
+import { useConfigStore } from "@/stores/use-config-store";
+import { useAuthDialogStore } from "@/stores/use-auth-dialog-store";
+
+function formatStorage(bytes: number) {
+    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(bytes % (1024 ** 3) === 0 ? 0 : 1)} GB`;
+    if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`;
+    return `${Math.round(bytes / 1024)} KB`;
+}
+
+export function UserAccountMenu() {
+    const { t, i18n } = useTranslation();
+    const { message, notification } = App.useApp();
+    const navigate = useNavigate();
+    const user = useAuthStore((state) => state.user);
+    const wallet = useAuthStore((state) => state.wallet);
+    const refreshWallet = useAuthStore((state) => state.refreshWallet);
+    const logout = useAuthStore((state) => state.logout);
+    const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const openAuthDialog = useAuthDialogStore((state) => state.open);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const [open, setOpen] = useState(false);
+    const warnedOwner = useRef<string | null>(null);
+
+    useEffect(() => {
+        const storage = wallet?.storage;
+        if (!user || !storage?.limitBytes || storage.usedBytes / storage.limitBytes < 0.9) {
+            warnedOwner.current = null;
+            notification.destroy("storage-low");
+            return;
+        }
+        if (warnedOwner.current === user.id) return;
+        warnedOwner.current = user.id;
+        notification.warning({
+            key: "storage-low",
+            message: t("account.storageNearlyFull"),
+            // 通知浮层挂在 antd App 子树（RouterProvider 之外），不能用 Link，否则 NavigationContext 为 null 导致整页崩溃。
+            description: <div>{t("account.storageNearlyFullDescription")} <a href="/assets?tab=history" onClick={() => notification.destroy("storage-low")} className="text-primary underline">{t("account.cleanStorage")}</a></div>,
+            duration: 0,
+        });
+    }, [notification, t, user?.id, wallet?.storage?.usedBytes, wallet?.storage?.limitBytes]);
+
+    useEffect(() => {
+        if (!open) return;
+        void refreshWallet().catch(() => undefined);
+        const closeOutside = (event: PointerEvent) => {
+            if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);
+        };
+        const closeEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setOpen(false);
+        };
+        document.addEventListener("pointerdown", closeOutside);
+        document.addEventListener("keydown", closeEscape);
+        return () => {
+            document.removeEventListener("pointerdown", closeOutside);
+            document.removeEventListener("keydown", closeEscape);
+        };
+    }, [open, refreshWallet]);
+
+    if (!user) {
+        return (
+            <div className="flex items-center gap-2">
+                <UserStatusActions showConfig={false} />
+                {/* 登录按钮：品牌青柠胶囊 + 深墨字，点击浮出登录弹窗 */}
+                <button
+                    type="button"
+                    onClick={() => openAuthDialog("login", { redirect: "/" })}
+                    className="inline-flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-[8px] !bg-[var(--brand)] px-3 text-[13px] font-medium !text-[var(--brand-ink)] transition-colors hover:!bg-[var(--accent-hover)]"
+                    aria-label={t("auth.login")}
+                >
+                    {t("auth.login")}
+                </button>
+            </div>
+        );
+    }
+
+    const planName = wallet?.member ? wallet.tierName || wallet.planName || t("account.member") : t("account.freePlan");
+    const memberUntil = wallet?.memberUntil ? dayjs(wallet.memberUntil).format("YYYY.MM.DD") : null;
+    const usedBytes = wallet?.storage?.usedBytes ?? 0;
+    const limitBytes = wallet?.storage?.limitBytes ?? 0;
+    const storagePercent = limitBytes ? Math.min(100, (usedBytes / limitBytes) * 100) : 0;
+    const locale = i18n.resolvedLanguage as AppLocale;
+    const menuLocales = listLocales();
+    const localeIndex = Math.max(0, menuLocales.findIndex((item) => item.code === locale));
+    const currentLocale = menuLocales[localeIndex];
+    const nextLocale = menuLocales[(localeIndex + 1) % menuLocales.length];
+    const close = () => setOpen(false);
+
+    return (
+        <div ref={wrapperRef} className="relative flex items-center gap-2">
+            <Link to="/account?tab=membership" title={wallet?.member ? `${planName} · 生成${formatGenerationDiscount(wallet.generationDiscount)}` : "查看会员权益"}
+                className={cn("inline-flex h-8 max-w-[76px] shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs transition hover:bg-accent sm:max-w-[144px]", wallet?.member ? "border-primary/30 bg-brand-soft !text-foreground" : "border-border !text-muted-foreground")}>
+                <Crown className="hidden size-3.5 shrink-0 sm:block" />
+                <span className="truncate">{wallet?.member && wallet.tierLevel ? `LV.${wallet.tierLevel} ` : ""}{wallet ? planName : "加载中"}</span>
+            </Link>
+            <Link to="/account" className="hidden h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-border px-3 text-xs !text-foreground transition hover:bg-muted sm:inline-flex">
+                <Wallet className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="font-semibold tabular-nums">{wallet?.availableCredits ?? wallet?.balance ?? 0}</span>
+                <span className="whitespace-nowrap text-muted-foreground">{t("account.credits")}</span>
+            </Link>
+            <button type="button" className="inline-flex shrink-0 items-center gap-1 rounded-full p-0.5 transition hover:bg-muted" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label={t("account.title")}>
+                <Avatar size={30} className="!bg-foreground text-xs !text-white dark:!bg-muted dark:!text-foreground">
+                    {(user.displayName || user.email).slice(0, 1).toUpperCase()}
+                </Avatar>
+                <ChevronDown className={cn("size-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
+            </button>
+
+            {open ? (
+                <div className="absolute right-0 top-full z-[80] mt-2 w-[344px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl">
+                    <div className="flex items-start gap-3 border-b border-border px-4 py-4">
+                        <Avatar size={38} className="!bg-foreground text-sm !text-white dark:!bg-muted dark:!text-foreground">
+                            {(user.displayName || user.email).slice(0, 1).toUpperCase()}
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-semibold text-foreground">{user.displayName || user.email}</div>
+                            <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{user.email}</div>
+                        </div>
+                        <span className="rounded-full border border-border px-2 py-1 text-[10px] text-muted-foreground">{planName}</span>
+                    </div>
+
+                    <div className="space-y-2 p-3">
+                        <div className="rounded-lg border border-border bg-muted/40 p-3">
+                            <div className="flex items-center justify-between gap-3 text-[11px]">
+                                <span className="inline-flex items-center gap-1.5 text-muted-foreground"><CreditCard className="size-3.5" />{t("account.currentSubscription")}</span>
+                                <span className="font-medium text-foreground">{planName}</span>
+                            </div>
+                            <div className="mt-1.5 text-[10px] text-muted-foreground">
+                                {wallet?.member && memberUntil ? t("account.memberUntil", { date: memberUntil }) : t("account.freePlanHint")}
+                            </div>
+                            {wallet?.member && <div className="mt-1.5 text-xs text-foreground">生成积分 · {formatGenerationDiscount(wallet.generationDiscount)}</div>}
+                            <div className="mt-3 flex gap-2">
+                                <Link to="/account?tab=membership" onClick={close} className="inline-flex h-7 flex-1 items-center justify-center rounded-md bg-foreground text-[11px] font-medium text-background transition hover:opacity-85">
+                                    查看会员权益
+                                </Link>
+                                <Link to="/account?tab=orders" onClick={close} className="inline-flex h-7 flex-1 items-center justify-center rounded-md border border-border text-[11px] text-foreground transition hover:bg-muted">
+                                    {t("account.orders")}
+                                </Link>
+                            </div>
+                        </div>
+
+                        <div className="rounded-lg border border-border px-3 py-2.5">
+                            <div className="flex items-center justify-between gap-3 text-[11px]">
+                                <span className="inline-flex items-center gap-1.5 text-muted-foreground"><HardDrive className="size-3.5" />{t("account.storageSpace")}</span>
+                                <span className="tabular-nums text-muted-foreground">{formatStorage(usedBytes)} / {formatStorage(limitBytes)}</span>
+                            </div>
+                            <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
+                                <span className="block h-full rounded-full bg-[#009EFA] transition-[width]" style={{ width: `${storagePercent}%` }} />
+                            </div>
+                            {storagePercent >= 90 ? <p className="mt-2 text-xs text-amber-500">{t("account.storageNearlyFull")}</p> : null}
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                                <Link to="/assets" onClick={close} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground transition hover:text-foreground">
+                                    {t("account.manageAssets")} <ChevronDown className="size-3 -rotate-90" />
+                                </Link>
+                                <Link to="/assets?tab=history" onClick={close} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground transition hover:text-foreground">
+                                    {t("assets.tabHistory")} <ChevronDown className="size-3 -rotate-90" />
+                                </Link>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-1">
+                            <Link to="/account" onClick={close} className="flex items-center gap-2 rounded-md px-2.5 py-2 text-[11px] text-foreground transition hover:bg-muted">
+                                <UserRound className="size-3.5 text-muted-foreground" />{t("account.title")}
+                            </Link>
+                            <Link to="/account?tab=ledger" onClick={close} className="flex items-center gap-2 rounded-md px-2.5 py-2 text-[11px] text-foreground transition hover:bg-muted">
+                                <ReceiptText className="size-3.5 text-muted-foreground" />{t("account.ledger")}
+                            </Link>
+                        </div>
+
+                        <div className="border-t border-border pt-1">
+                            <button type="button" onClick={() => void changeAppLocale(nextLocale.code)} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[11px] text-muted-foreground transition hover:bg-muted hover:text-foreground">
+                                <Languages className="size-3.5" />
+                                <span>{t("account.interfaceLanguage")}</span>
+                                <span className="ml-auto text-foreground">{currentLocale?.label ?? locale}</span>
+                            </button>
+                            <button type="button" onClick={() => { close(); openConfigDialog(false); }} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[11px] text-muted-foreground transition hover:bg-muted hover:text-foreground">
+                                <Settings2 className="size-3.5" />
+                                <span>{t("account.preferences")}</span>
+                            </button>
+                        </div>
+
+                        <button type="button" onClick={() => { close(); void logout().then(() => navigate("/")).catch((error) => message.error(error instanceof Error ? error.message : "退出失败，请重试")); }} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[11px] text-red-500 transition hover:bg-red-500/10">
+                            <LogOut className="size-3.5" />
+                            <span>{t("auth.logout")}</span>
+                        </button>
+                    </div>
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/layout/analytics-tracker.tsx
+LINES: 1-15
+========================================================================
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
+
+import { trackPageview } from "@/lib/analytics";
+
+// Observe SPA route changes and report page views; trackPageview is a no-op when analytics is not configured.
+export function AnalyticsTracker() {
+    const location = useLocation();
+
+    useEffect(() => {
+        trackPageview(`${location.pathname}${location.search}`);
+    }, [location.pathname, location.search]);
+
+    return null;
+}
+
+
+========================================================================
+FILE: web/src/components/layout/app-config-modal.tsx
+LINES: 1-158
+========================================================================
+import { App, Button, Form, Input, Modal, Radio, Select, Switch } from "antd";
+import { useTranslation } from "react-i18next";
+
+import { ModelPicker } from "@/components/model-picker";
+import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@/lib/audio-generation";
+import { computeMediaSize, computeVideoSize, inferMediaRatio, inferMediaScale, inferVideoRatio, mediaScaleOptions, parseVideoResolution, videoResolutionOptionsFromMap } from "@/lib/media-size";
+import { modelOptionName, useConfigStore, type ModelCapability } from "@/stores/use-config-store";
+
+type ModelGroup = {
+    capability: ModelCapability;
+    modelKey: "imageModel" | "videoModel" | "textModel" | "audioModel";
+    labelKey: string;
+};
+
+const modelGroups: ModelGroup[] = [
+    { capability: "image", modelKey: "imageModel", labelKey: "config.preferences.defaultImageModel" },
+    { capability: "video", modelKey: "videoModel", labelKey: "config.preferences.defaultVideoModel" },
+    { capability: "text", modelKey: "textModel", labelKey: "config.preferences.defaultTextModel" },
+    { capability: "audio", modelKey: "audioModel", labelKey: "config.preferences.defaultAudioModel" },
+];
+
+export function AppConfigPanel({ showDoneButton = false }: { showDoneButton?: boolean }) {
+    const { message } = App.useApp();
+    const { t } = useTranslation();
+    const config = useConfigStore((state) => state.config);
+    const serverModels = useConfigStore((state) => state.serverModels);
+    const updateConfig = useConfigStore((state) => state.updateConfig);
+    const shouldPromptContinue = useConfigStore((state) => state.shouldPromptContinue);
+    const setConfigDialogOpen = useConfigStore((state) => state.setConfigDialogOpen);
+    const clearPromptContinue = useConfigStore((state) => state.clearPromptContinue);
+    const imageResolutionOptions = mediaScaleOptions.map((value) => ({ value, label: value === "auto" ? t("settingsPanels.common.auto") : value.toUpperCase() }));
+    const selectedVideoModel = serverModels.find((model) => model.id === modelOptionName(config.videoModel) && model.capability === "video");
+    const videoResolutionOptions = videoResolutionOptionsFromMap(selectedVideoModel?.resolutionMultipliers);
+
+    const finishConfig = () => {
+        setConfigDialogOpen(false);
+        message.success(t(shouldPromptContinue ? "config.savedContinue" : "config.saved"));
+        clearPromptContinue();
+    };
+
+    return (
+        <>
+            <Form layout="vertical" requiredMark={false}>
+                <div className="mb-2 text-sm font-semibold">{t("config.preferences.defaultModels")}</div>
+                <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    {modelGroups.map((group) => (
+                        <Form.Item key={group.modelKey} label={t(group.labelKey)} className="mb-0">
+                            <ModelPicker config={config} value={config[group.modelKey]} onChange={(model) => updateConfig(group.modelKey, model)} capability={group.capability} fullWidth />
+                        </Form.Item>
+                    ))}
+                </div>
+                <div className="mb-2 text-sm font-semibold">{t("config.preferences.generation")}</div>
+                <div className="grid gap-4 md:grid-cols-4">
+                    <Form.Item label={t("config.preferences.canvasImageCount")} extra={t("config.preferences.canvasImageCountDescription")} className="mb-4">
+                        <Input
+                            type="number"
+                            min={1}
+                            max={15}
+                            value={config.canvasImageCount}
+                            onChange={(event) => updateConfig("canvasImageCount", event.target.value)}
+                            onBlur={(event) => updateConfig("canvasImageCount", normalizeImageCount(event.target.value))}
+                        />
+                    </Form.Item>
+                    <Form.Item label={t("config.preferences.imageResolution")} className="mb-4">
+                        <Select value={inferMediaScale(config.size)} options={imageResolutionOptions} onChange={(scale) => updateConfig("size", computeMediaSize(scale, inferMediaRatio(config.size)))} />
+                    </Form.Item>
+                    <Form.Item label={t("config.preferences.videoResolution")} className="mb-4">
+                        <Select
+                            value={parseVideoResolution(config.vquality)}
+                            options={videoResolutionOptions}
+                            onChange={(value) => {
+                                updateConfig("vquality", value);
+                                const ratio = inferVideoRatio(config.size);
+                                if (ratio !== "auto") updateConfig("size", computeVideoSize(value, ratio));
+                            }}
+                        />
+                    </Form.Item>
+                    <Form.Item label={t("config.preferences.audioVoice")} className="mb-4">
+                        <Select value={config.audioVoice} options={audioVoiceOptions} onChange={(value) => updateConfig("audioVoice", value)} />
+                    </Form.Item>
+                    <Form.Item label={t("config.preferences.audioFormat")} className="mb-4">
+                        <Select value={config.audioFormat} options={audioFormatOptions} onChange={(value) => updateConfig("audioFormat", value)} />
+                    </Form.Item>
+                    <Form.Item label={t("config.preferences.audioSpeed")} className="mb-4">
+                        <Input
+                            type="number"
+                            min={0.25}
+                            max={4}
+                            step={0.05}
+                            value={config.audioSpeed}
+                            onChange={(event) => updateConfig("audioSpeed", event.target.value)}
+                            onBlur={(event) => updateConfig("audioSpeed", normalizeAudioSpeedValue(event.target.value))}
+                        />
+                    </Form.Item>
+                </div>
+                <Form.Item label={t("config.preferences.regenerateBehavior")} className="mb-4">
+                    <Radio.Group value={config.nodeRegenerateBehavior} onChange={(event) => updateConfig("nodeRegenerateBehavior", event.target.value)} className="flex flex-col gap-2">
+                        <Radio value="overwrite">
+                            <span className="block text-sm font-medium">{t("config.preferences.regenerateBehaviorOverwrite")}</span>
+                            <span className="mt-0.5 block text-xs opacity-60">{t("config.preferences.regenerateBehaviorOverwriteDescription")}</span>
+                        </Radio>
+                        <Radio value="new-node">
+                            <span className="block text-sm font-medium">{t("config.preferences.regenerateBehaviorNewNode")}</span>
+                            <span className="mt-0.5 block text-xs opacity-60">{t("config.preferences.regenerateBehaviorNewNodeDescription")}</span>
+                        </Radio>
+                    </Radio.Group>
+                </Form.Item>
+                <Form.Item className="mb-4">
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm">{t("config.preferences.autoFocusOnSelect")}</span>
+                        <Switch checked={config.autoFocusOnSelect} onChange={(checked) => updateConfig("autoFocusOnSelect", checked)} />
+                    </div>
+                </Form.Item>
+                <Form.Item label={t("config.preferences.audioInstructions")} className="mb-4">
+                    <Input.TextArea rows={2} value={config.audioInstructions} placeholder={t("config.preferences.audioInstructionsPlaceholder")} onChange={(event) => updateConfig("audioInstructions", event.target.value)} />
+                </Form.Item>
+                <Form.Item label={t("config.preferences.systemPrompt")} className="mb-0">
+                    <Input.TextArea rows={4} value={config.systemPrompt} placeholder={t("config.preferences.systemPromptPlaceholder")} onChange={(event) => updateConfig("systemPrompt", event.target.value)} />
+                </Form.Item>
+            </Form>
+            {showDoneButton ? (
+                <div className="mt-4 flex justify-end">
+                    <Button type="primary" onClick={finishConfig}>
+                        {t("common.done")}
+                    </Button>
+                </div>
+            ) : null}
+        </>
+    );
+}
+
+export function AppConfigModal() {
+    const { t } = useTranslation();
+    const isConfigOpen = useConfigStore((state) => state.isConfigOpen);
+    const setConfigDialogOpen = useConfigStore((state) => state.setConfigDialogOpen);
+    return (
+        <Modal
+            title={
+                <div>
+                    <div className="text-lg font-semibold">{t("config.title")}</div>
+                    <div className="mt-1 text-xs font-normal text-muted-foreground">{t("config.modalDescription")}</div>
+                </div>
+            }
+            open={isConfigOpen}
+            width={980}
+            centered
+            onCancel={() => setConfigDialogOpen(false)}
+            styles={{ body: { maxHeight: "72vh", overflowY: "auto", paddingRight: 12 } }}
+            footer={null}
+        >
+            <AppConfigPanel showDoneButton />
+        </Modal>
+    );
+}
+
+function normalizeImageCount(value: string) {
+    return String(Math.max(1, Math.min(15, Math.floor(Math.abs(Number(value)) || 3))));
+}
+
+
+========================================================================
+FILE: web/src/components/layout/app-providers.tsx
+LINES: 1-55
+========================================================================
+import type { ReactNode } from "react";
+import { useEffect } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { App, ConfigProvider } from "antd";
+import enUS from "antd/es/locale/en_US";
+import zhCN from "antd/es/locale/zh_CN";
+import dayjs from "dayjs";
+import "dayjs/locale/zh-cn";
+import { useTranslation } from "react-i18next";
+
+import { ClientRootInit } from "@/components/layout/client-root-init";
+import { useGlobalScrollbar } from "@/hooks/use-global-scrollbar";
+import type { AppLocale } from "@/i18n";
+import { getAntThemeConfig } from "@/lib/app-theme";
+import { useThemeStore } from "@/stores/use-theme-store";
+
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            staleTime: 30_000,
+            retry: false,
+            refetchOnWindowFocus: false,
+        },
+    },
+});
+
+export function AppProviders({ children }: { children: ReactNode }) {
+    const { i18n, t } = useTranslation();
+    useGlobalScrollbar();
+    const theme = useThemeStore((state) => state.theme);
+    const dark = theme === "dark";
+    const locale = i18n.resolvedLanguage as AppLocale;
+
+    useEffect(() => {
+        document.documentElement.classList.toggle("dark", dark);
+        document.documentElement.style.colorScheme = theme;
+    }, [dark, theme]);
+
+    useEffect(() => {
+        document.documentElement.lang = locale;
+        document.title = t("meta.title");
+        document.querySelector('meta[name="description"]')?.setAttribute("content", t("meta.description"));
+        dayjs.locale(locale === "zh-CN" ? "zh-cn" : "en");
+    }, [locale, t]);
+
+    return (
+        <ConfigProvider locale={locale === "zh-CN" ? zhCN : enUS} theme={getAntThemeConfig(dark)}>
+            <App>
+                <QueryClientProvider client={queryClient}>
+                    <ClientRootInit>{children}</ClientRootInit>
+                </QueryClientProvider>
+            </App>
+        </ConfigProvider>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/layout/app-top-nav.css
+LINES: 1-48
+========================================================================
+/* 顶栏导航：选中态 = 青柠色文字 + 文字下方一条青柠小短线，不叠加背景色块 */
+.app-top-nav .nav-item .nav-label {
+    position: relative;
+}
+
+.app-top-nav .nav-item .nav-label::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    width: 18px;
+    height: 2px;
+    border-radius: 999px;
+    background-color: var(--brand, #d8ff3e);
+    opacity: 0;
+    transform: translateX(-50%) scaleX(0.4);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    pointer-events: none;
+}
+
+/* 选中项：文字与图标统一走品牌青柠，压过 tsx 里的 !text-white */
+.app-top-nav .nav-item.is-active,
+.app-top-nav .nav-item.is-active:hover,
+.app-top-nav .nav-item.is-active .nav-label {
+    color: var(--brand, #d8ff3e) !important;
+}
+
+.app-top-nav .nav-item.is-active .nav-label::after {
+    opacity: 1;
+    transform: translateX(-50%) scaleX(1);
+}
+
+/* hover 与选中都不叠加背景色块 */
+.app-top-nav .nav-item,
+.app-top-nav .nav-item:hover {
+    background-color: transparent;
+}
+
+/* 未选中项悬停：从灰色提到近白，保持"当前页很亮、其余很淡"的层次 */
+.app-top-nav .nav-item:not(.is-active):hover {
+    color: rgba(255, 255, 255, 0.92) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-top-nav .nav-item .nav-label::after {
+        transition: none;
+    }
+}
+
+
+========================================================================
+FILE: web/src/components/layout/app-top-nav.tsx
+LINES: 1-165
+========================================================================
+import { useEffect, useState } from "react";
+import type { ComponentType } from "react";
+import { Code2, Menu, X } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+
+import { BrandWordmark } from "@/components/brand/brand-wordmark";
+import { PromoContactButton } from "@/components/promo/promo-contact-button";
+import { UserAccountMenu } from "@/components/layout/account-menu";
+import { NavAdminIcon, NavAssetsIcon, NavCanvasIcon, NavCreateIcon, NavExploreIcon, NavHomeIcon, NavPromptsIcon } from "@/components/layout/nav-icons";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { AppConfigModalHost } from "@/components/layout/lazy-overlays";
+import { cn } from "@/lib/utils";
+import { prefetchRoute } from "@/lib/route-prefetch";
+import { loadSiteInfo } from "@/services/api/site";
+import "./app-top-nav.css";
+
+export function useApiIntegrationUrl() {
+    const [url, setUrl] = useState("");
+    useEffect(() => {
+        let active = true;
+        void loadSiteInfo().then(({ site }) => {
+            const value = site.apiIntegrationUrl?.trim();
+            if (active && value && /^https?:\/\//i.test(value)) setUrl(value);
+        }).catch(() => undefined);
+        return () => { active = false; };
+    }, []);
+    return url;
+}
+
+type NavIcon = ComponentType<{ className?: string }>;
+type NavItem = { to: string; labelKey: string; icon: NavIcon; match: (pathname: string) => boolean };
+
+const creationNav: NavItem[] = [
+    { to: "/", labelKey: "navigation.home", icon: NavHomeIcon, match: path => path === "/" },
+    { to: "/canvas", labelKey: "navigation.canvas", icon: NavCanvasIcon, match: path => path === "/canvas" },
+    { to: "/create", labelKey: "navigation.create", icon: NavCreateIcon, match: path => ["/create", "/image", "/video"].includes(path) },
+    { to: "/explore", labelKey: "navigation.explore", icon: NavExploreIcon, match: path => path === "/explore" },
+];
+const resourceNav: NavItem[] = [
+    { to: "/assets", labelKey: "navigation.assets", icon: NavAssetsIcon, match: path => path === "/assets" },
+    { to: "/prompts", labelKey: "navigation.prompts", icon: NavPromptsIcon, match: path => path === "/prompts" },
+];
+
+function useNavItems(): NavItem[] {
+    const user = useAuthStore((state) => state.user);
+    return user?.role === "admin"
+        ? [...creationNav, ...resourceNav, { to: "/admin", labelKey: "navigation.admin", icon: NavAdminIcon, match: (path: string) => path === "/admin" }]
+        : [...creationNav, ...resourceNav];
+}
+
+export function AppTopNav({ mobileOpen, onMobileOpen, onMobileClose }: { mobileOpen: boolean; onMobileOpen: () => void; onMobileClose: () => void }) {
+    const { t } = useTranslation();
+    const { pathname } = useLocation();
+    const items = useNavItems();
+    const apiUrl = useApiIntegrationUrl();
+
+    return (
+        <>
+            <header className="app-top-nav sticky top-0 z-40 shrink-0 border-b border-[rgba(255,255,255,0.08)] bg-rail/85 backdrop-blur-[20px]">
+                {/* 头部通栏：布局保留（logo 贴左、导航居中、账户区贴右），视觉按即梦规范 */}
+                <div className="flex h-[64px] w-full items-center gap-5 px-5 md:px-6 xl:px-8">
+                    <Link to="/" className="flex shrink-0 items-center gap-2.5 !text-foreground transition hover:opacity-80">
+                        <img src="/brand/sundas-symbol.svg" alt="" className="size-[26px]" />
+                        <BrandWordmark height={17} decorative />
+                    </Link>
+
+                    <nav className="hidden min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] lg:flex [&::-webkit-scrollbar]:hidden" aria-label="primary">
+                        <div className="mx-auto flex w-max items-center gap-1">
+                            {apiUrl && <a href={apiUrl} target="_blank" rel="noopener noreferrer" className="flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-[8px] px-2.5 text-[13px] font-medium !text-muted-foreground transition-colors hover:text-foreground"><Code2 className="size-4" />API 对接</a>}
+                            {items.map((item) => {
+                                const Icon = item.icon;
+                                const active = item.match(pathname);
+                                return (
+                                    <Link
+                                        key={item.to}
+                                        to={item.to}
+                                        aria-current={active ? "page" : undefined}
+                                        onMouseEnter={() => prefetchRoute(item.to)}
+                                        onFocus={() => prefetchRoute(item.to)}
+                                        className={cn(
+                                            "nav-item relative flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-[8px] px-2.5 text-[13px] font-medium transition-colors duration-150 min-[1360px]:px-3",
+                                            active ? "is-active !text-white" : "!text-muted-foreground hover:!text-foreground",
+                                        )}
+                                    >
+                                        <Icon className="size-4 shrink-0" />
+                                        <span className="nav-label">{t(item.labelKey)}</span>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    </nav>
+
+                    <div className="ml-auto flex shrink-0 items-center gap-2 lg:ml-0">
+                        {/* 右侧动作区：不套背景容器，会员/积分/头像三枚胶囊直接贴在顶栏上 */}
+                        <div className="hidden items-center gap-2 md:flex">
+                            <PromoContactButton variant="topbar" />
+                            <UserAccountMenu />
+                        </div>
+                        <div className="flex items-center md:hidden">
+                            <UserAccountMenu />
+                        </div>
+                        <button
+                            type="button"
+                            className="grid size-9 place-items-center rounded-[8px] border border-border text-muted-foreground transition hover:text-foreground lg:hidden"
+                            onClick={onMobileOpen}
+                            aria-label={t("navigation.openMenu")}
+                        >
+                            <Menu className="size-5" />
+                        </button>
+                    </div>
+                </div>
+            </header>
+            {mobileOpen ? <MobileDrawer items={items} pathname={pathname} onNavigate={onMobileClose} /> : null}
+            <AppConfigModalHost />
+        </>
+    );
+}
+
+function MobileDrawer({ items, pathname, onNavigate }: { items: NavItem[]; pathname: string; onNavigate: () => void }) {
+    const { t } = useTranslation();
+    const apiUrl = useApiIntegrationUrl();
+    return (
+        <div className="fixed inset-0 z-50 lg:hidden">
+            <button type="button" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" onClick={onNavigate} aria-label={t("navigation.closeMenu")} />
+            <aside className="absolute left-0 top-0 flex h-full w-[280px] flex-col border-r border-border bg-popover shadow-2xl">
+                <div className="relative flex h-[72px] shrink-0 items-center px-5">
+                    <Link to="/" onClick={onNavigate} className="flex items-center gap-2.5 text-foreground">
+                        <img src="/brand/sundas-symbol.svg" alt="" className="size-6" />
+                        <BrandWordmark height={16} decorative />
+                    </Link>
+                    <button type="button" className="absolute right-3 grid size-8 place-items-center text-muted-foreground hover:text-foreground" onClick={onNavigate} aria-label={t("navigation.closeMenu")}>
+                        <X className="size-4" />
+                    </button>
+                </div>
+                <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-3">
+                    {apiUrl && <a href={apiUrl} target="_blank" rel="noopener noreferrer" onClick={onNavigate} className="flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm !text-muted-foreground hover:!bg-accent hover:text-foreground"><Code2 className="size-4" />API 对接</a>}
+                    {items.map((item) => {
+                        const Icon = item.icon;
+                        const active = item.match(pathname);
+                        return (
+                            <Link
+                                key={item.to}
+                                to={item.to}
+                                aria-current={active ? "page" : undefined}
+                                onClick={onNavigate}
+                                onPointerDown={() => prefetchRoute(item.to)}
+                                className={cn(
+                                    "relative flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm transition-colors",
+                                    active ? "bg-[rgba(255,255,255,0.08)] font-medium !text-foreground" : "!text-muted-foreground hover:!bg-accent hover:!text-foreground",
+                                )}
+                            >
+                                <Icon className={cn("size-4 shrink-0", active ? "text-white" : "text-muted-foreground")} />
+                                <span>{t(item.labelKey)}</span>
+                            </Link>
+                        );
+                    })}
+                </nav>
+                <div className="shrink-0 border-t border-border p-3">
+                    <PromoContactButton />
+                </div>
+            </aside>
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/layout/client-root-init.tsx
+LINES: 1-42
+========================================================================
+import { useEffect } from "react";
+import type { ReactNode } from "react";
+import { App } from "antd";
+
+import { useCloudSync } from "@/hooks/use-cloud-sync";
+import { applyServerModels, type ServerModel } from "@/lib/server-models";
+import { apiRequest } from "@/services/api/client";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { subscribeSessionChanges } from "@/lib/session-broadcast";
+
+export function ClientRootInit({ children }: { children: ReactNode }) {
+    const { message } = App.useApp();
+    useCloudSync();
+
+    useEffect(() => {
+        void useAuthStore.getState().hydrate().catch((error) => message.error(error instanceof Error ? error.message : "无法确认登录状态"));
+        return subscribeSessionChanges(() => { void useAuthStore.getState().externalSessionChanged().catch((error) => message.error(error instanceof Error ? error.message : "无法确认登录状态")); });
+    }, []);
+
+    useEffect(() => {
+        const refresh = () => { if (document.visibilityState === "visible") void useAuthStore.getState().refreshWallet().catch(() => undefined); };
+        document.addEventListener("visibilitychange", refresh);
+        window.addEventListener("online", refresh);
+        return () => { document.removeEventListener("visibilitychange", refresh); window.removeEventListener("online", refresh); };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        apiRequest<{ models: ServerModel[] }>("/api/models")
+            .then((data) => {
+                if (!cancelled && data.models.length) applyServerModels(data.models);
+            })
+            .catch(() => {
+                // 模型列表拉取失败时保留本地缓存，登录后还会再拉一次。
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    return <>{children}</>;
+}
+
+
+========================================================================
+FILE: web/src/components/layout/creation-sidebar.tsx
+LINES: 1-79
+========================================================================
+import { loadCreationChats, useCreationChat } from "@/pages/chat/chat-store";
+import { Drawer } from "antd";
+import { ImagePlus, LayoutGrid, Menu, Video, X, MessageSquare } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+
+import { useAuthStore } from "@/stores/use-auth-store";
+import { isCanvasAccountActive, useCanvasStore } from "@/stores/canvas/use-canvas-store";
+import { useCreationHistory } from "@/components/creation/creation-history";
+import { fetchRecentGenerationHistory } from "@/services/api/generation-history";
+
+export function CreationSidebar() {
+    const [open, setOpen] = useState(false);
+    const { pathname, search } = useLocation();
+    const user = useAuthStore((state) => state.user);
+    const ready = useAuthStore((state) => state.ready);
+    const epoch = useAuthStore((state) => state.sessionEpoch);
+    const history = useCreationHistory();
+    const chats = useCreationChat();
+    useEffect(() => { if (ready && user) void loadCreationChats(user.id); }, [ready, user?.id]);
+    const threads = chats.owner === user?.id ? chats.threads : [];
+    useEffect(() => { setOpen(false); }, [pathname, search]);
+    useEffect(() => {
+        if (!ready || !user) return;
+        const owner = user.id;
+        const session = `${owner}:${epoch}`;
+        const videoMode = pathname === "/video" || (pathname === "/create" && new URLSearchParams(search).get("mode") === "video");
+        const modes: ("image" | "video")[] = videoMode ? ["image"] : pathname === "/image" || pathname === "/create" ? ["video"] : ["image", "video"];
+        let active = true;
+        for (const mode of modes) {
+            const current = useCreationHistory.getState();
+            if (current.session === session && current[mode].length) continue;
+            void fetchRecentGenerationHistory(owner, mode).then((items) => {
+                const auth = useAuthStore.getState();
+                const currentState = useCreationHistory.getState();
+                if (active && auth.ready && auth.user?.id === owner && auth.sessionEpoch === epoch && (currentState.session !== session || !currentState[mode].length)) currentState.update(session, mode, items);
+            }).catch(() => undefined);
+        }
+        return () => { active = false; };
+    }, [ready, user?.id, epoch, pathname, search]);
+    const projects = useCanvasStore((state) => state.projects);
+    const hydrated = useCanvasStore((state) => state.hydrated);
+    const recent = ready && hydrated && user && isCanvasAccountActive(user.id)
+        ? [...projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4)
+        : [];
+
+    const recentGenerations = ready && user && history.session === `${user.id}:${epoch}`
+        ? [...history.image, ...history.video].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5)
+        : [];
+    const recentWorks = [
+        ...threads.filter(t => t.messages.length || t.records.length || t.draft).map(t => ({ key: `chat:${t.id}`, title: t.title, time: t.updatedAt, to: `/create?mode=chat&thread=${t.id}`, icon: MessageSquare, type: "对话" })),
+        ...recentGenerations.map(item => ({ key: `${item.mode}:${item.id}`, title: item.title, time: item.createdAt, to: threads.some(t => t.records.some(r => r.id === item.id)) ? `/create?mode=chat&thread=${threads.find(t => t.records.some(r => r.id === item.id))!.id}` : `/create?mode=${item.mode}&record=${encodeURIComponent(item.id)}`, icon: item.mode === "image" ? ImagePlus : Video, type: item.mode === "image" ? "图片" : "视频" })),
+        ...recent.map(project => ({ key: `canvas:${project.id}`, title: project.title, time: new Date(project.updatedAt).getTime(), to: `/canvas/${project.id}`, icon: LayoutGrid, type: "画布" })),
+    ].sort((a, b) => b.time - a.time);
+
+    const sidebar = (
+        <aside className="creation-sidebar flex h-full w-[220px] lg:w-[240px] shrink-0 flex-col border-r border-border text-foreground">
+            <div className="flex h-16 items-center justify-between px-5">
+                <h2 className="text-sm font-semibold">最近作品</h2>
+                <button type="button" onClick={() => setOpen(false)} className="text-muted-foreground lg:hidden" aria-label="关闭最近作品"><X className="size-5" /></button>
+            </div>
+            <nav className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-4" aria-label="最近作品">
+                {user && <div>
+                    {recentWorks.map(({ key, title, to, icon: Icon, type }) => <Link key={key} to={to} aria-current={`${pathname}${search}` === to ? "page" : undefined} title={`${type} · ${title}`} onClick={() => setOpen(false)} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm !text-muted-foreground hover:bg-muted hover:!text-foreground"><Icon className="size-3.5 shrink-0" /><span className="min-w-0 flex-1 truncate">{title}</span><span className="shrink-0 text-xs">{type}</span></Link>)}
+                    {recentWorks.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">暂无最近作品</p>}
+                    <div className="mt-2 flex gap-3 px-3 text-xs"><Link to="/create" onClick={() => setOpen(false)} className="!text-muted-foreground hover:!text-foreground">生成历史</Link><Link to="/canvas" onClick={() => setOpen(false)} className="!text-muted-foreground hover:!text-foreground">全部画布</Link></div>
+                </div>}
+            </nav>
+
+        </aside>
+    );
+    // 未登录访客没有「最近作品」，不占侧栏宽度
+    if (!user) return null;
+    return <>
+        <div className="hidden h-full lg:block">{sidebar}</div>
+        <button type="button" onClick={() => setOpen(true)} className="m-2 flex shrink-0 items-center gap-2 self-start rounded-lg px-3 py-2 text-xs text-muted-foreground hover:bg-muted lg:hidden" aria-label="打开最近作品" aria-expanded={open} aria-controls="creation-mobile-navigation"><Menu className="size-4" />最近作品</button>
+        <Drawer open={open} onClose={() => setOpen(false)} placement="left" size={220} closable={false} styles={{ body: { padding: 0 } }} rootClassName="creation-mobile-drawer" destroyOnHidden><div id="creation-mobile-navigation" className="creation-shell h-full">{sidebar}</div></Drawer>
+    </>;
+}
+
+
+========================================================================
+FILE: web/src/components/layout/lazy-overlays.tsx
+LINES: 1-43
+========================================================================
+import { Suspense, lazy, useEffect, useState } from "react";
+
+import { useAuthDialogStore } from "@/stores/use-auth-dialog-store";
+import { useConfigStore } from "@/stores/use-config-store";
+
+/**
+ * 全局浮层（登录弹窗 / 偏好设置弹窗）按需加载：
+ * 这两块只在用户主动触发时才出现，但会静态带进 antd 的 Form / Modal / Select / Radio / Switch，
+ * 是首屏包最大的一块业务开销。默认不挂载 → chunk 不下载；
+ * 首次打开后保持挂载，关闭动画与内部状态与原来一致。
+ */
+const AuthDialog = lazy(() => import("@/components/auth/auth-dialog").then((module) => ({ default: module.AuthDialog })));
+const AppConfigModal = lazy(() => import("@/components/layout/app-config-modal").then((module) => ({ default: module.AppConfigModal })));
+
+function useKeepMountedWhen(open: boolean) {
+    const [mounted, setMounted] = useState(open);
+    useEffect(() => {
+        if (open) setMounted(true);
+    }, [open]);
+    return mounted;
+}
+
+export function AuthDialogHost() {
+    const open = useAuthDialogStore((state) => state.mode !== null);
+    const mounted = useKeepMountedWhen(open);
+    if (!mounted) return null;
+    return (
+        <Suspense fallback={null}>
+            <AuthDialog />
+        </Suspense>
+    );
+}
+
+export function AppConfigModalHost() {
+    const open = useConfigStore((state) => state.isConfigOpen);
+    const mounted = useKeepMountedWhen(open);
+    if (!mounted) return null;
+    return (
+        <Suspense fallback={null}>
+            <AppConfigModal />
+        </Suspense>
+    );
+}
+

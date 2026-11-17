@@ -1,0 +1,3083 @@
+SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
+This is uncompressed source text, not a directory index or archive.
+Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
+Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+
+========================================================================
+FILE: web/src/services/image-storage.ts
+LINES: 1-361
+========================================================================
+
+import { nanoid } from "nanoid";
+import i18n from "@/i18n";
+import { assertLocalMediaOwner, assertMediaOwner, currentMediaOwner, isOwnMediaUrl, localMediaKey, notifyLocalMediaOnly, StorageQuotaError, uploadBlobToServer } from "@/services/cloud-media";
+import { lazyStore } from "@/lib/localforage-store";
+import { withLocalProxy } from "@/stores/use-config-store";
+import { createImageThumbnail } from "@/lib/image-thumbnail";
+import { MediaObjectUrls, registerSessionMediaCache } from "@/lib/media-object-urls";
+
+export type UploadedImage = {
+    url: string;
+    storageKey?: string;
+    width: number;
+    height: number;
+    bytes: number;
+    mimeType: string;
+    /** 仅为兼容从 BeefTV 平移过来的调用方：sundas 没有远端待上传态，恒为 false。 */
+    pendingRemoteUpload?: boolean;
+};
+
+const store = lazyStore("image_files");
+const previewStore = lazyStore("image_previews");
+const imageLogStore = lazyStore("image_generation_logs");
+const videoLogStore = lazyStore("video_generation_logs");
+const objectUrls = registerSessionMediaCache(new MediaObjectUrls());
+const previewUrls = registerSessionMediaCache(new MediaObjectUrls(() => {
+    previewRevision += 1;
+    previewListeners.forEach((listener) => listener());
+}));
+const previewListeners = new Set<() => void>();
+let previewRevision = 0;
+let previewQueue: Promise<unknown> = Promise.resolve();
+const IMAGE_PREVIEW_VERSION = 1;
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
+const IMAGE_REMOTE_LOAD_TIMEOUT_MS = 10 * 60_000;
+const IMAGE_DECODE_TIMEOUT_MS = 10_000;
+const IMAGE_RESPONSE_ERROR = "ImageResponseError";
+const IMAGE_TIMEOUT_ERROR = "ImageTimeoutError";
+
+type StoredImagePreview = { version: number; blob?: Blob };
+
+type ImageReadOptions = { signal?: AbortSignal; expectedOwner?: string | null; onProgress?: (progress: number) => void };
+
+export async function uploadImage(input: string | Blob, options?: ImageReadOptions): Promise<UploadedImage> {
+    const owner = options?.expectedOwner === undefined ? currentMediaOwner() : options.expectedOwner;
+    assertMediaOwner(owner, options?.signal);
+    options = { ...options, expectedOwner: owner };
+    if (typeof input !== "string") {
+        try {
+            return await storeImage(input, options);
+        } catch (error) {
+            if (error instanceof StorageQuotaError) throw error;
+            const uploaded = await uploadBlobToServer(input, "image", owner, options?.signal, true, false, options?.onProgress).catch(() => null);
+            if (!uploaded) throw error;
+            const meta = await loadImageMeta(uploaded.url, options).catch(() => null);
+            return { url: uploaded.url, width: meta?.width ?? 0, height: meta?.height ?? 0, bytes: uploaded.bytes, mimeType: uploaded.mime };
+        }
+    }
+    if (isOwnMediaUrl(input)) {
+        const meta = await loadImageMeta(input, options);
+        assertMediaOwner(owner, options?.signal);
+        if (!meta) throw new Error(i18n.t("common.imageReadFailed"));
+        return { url: input, width: meta.width, height: meta.height, bytes: 0, mimeType: "" };
+    }
+
+    let blob: Blob;
+    try {
+        blob = await fetchImageBlob(input, options);
+    } catch (error) {
+        if (options?.signal?.aborted || isNamedError(error, IMAGE_RESPONSE_ERROR) || isNamedError(error, IMAGE_TIMEOUT_ERROR) || !/^https?:\/\//i.test(input)) throw error;
+        const meta = await loadImageMeta(input, options, IMAGE_REMOTE_LOAD_TIMEOUT_MS);
+        if (!meta) throw error;
+        assertMediaOwner(owner, options?.signal);
+        return { url: input, width: meta.width, height: meta.height, bytes: 0, mimeType: "" };
+    }
+    return storeImage(blob, options);
+}
+
+async function storeImage(blob: Blob, options?: ImageReadOptions): Promise<UploadedImage> {
+    const owner = options?.expectedOwner === undefined ? currentMediaOwner() : options.expectedOwner;
+    assertMediaOwner(owner, options?.signal);
+    const storageKey = localMediaKey("image", owner, nanoid());
+    const url = URL.createObjectURL(blob);
+    try {
+        const meta = await loadImageMeta(url, options);
+        if (!meta) throw new Error(i18n.t("common.imageReadFailed"));
+        throwIfAborted(options?.signal);
+
+        const uploaded = await uploadBlobToServer(blob, "image", owner, options?.signal, false, false, options?.onProgress).catch((error) => { if (error instanceof StorageQuotaError) throw error; return null; });
+        assertMediaOwner(owner, options?.signal);
+        if (uploaded) {
+            URL.revokeObjectURL(url);
+            return { url: uploaded.url, width: meta.width, height: meta.height, bytes: blob.size, mimeType: blob.type.startsWith("image/") ? blob.type : "" };
+        }
+
+        await store.setItem(storageKey, blob);
+        assertMediaOwner(owner, options?.signal);
+        throwIfAborted(options?.signal);
+        objectUrls.set(storageKey, url);
+        await storeImagePreview(storageKey, blob);
+        assertMediaOwner(owner, options?.signal);
+        notifyLocalMediaOnly(owner);
+        return { url, storageKey, width: meta.width, height: meta.height, bytes: blob.size, mimeType: blob.type.startsWith("image/") ? blob.type : "" };
+    } catch (error) {
+        objectUrls.delete(storageKey);
+        URL.revokeObjectURL(url);
+        await deleteImagePreview(storageKey);
+        await store.removeItem(storageKey).catch(() => undefined);
+        throw error;
+    }
+}
+
+async function fetchImageBlob(url: string, options?: ImageReadOptions) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const abort = () => controller.abort();
+    if (options?.signal?.aborted) abort();
+    else options?.signal?.addEventListener("abort", abort, { once: true });
+    const timer = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, IMAGE_DOWNLOAD_TIMEOUT_MS);
+    try {
+        const response = await fetch(withLocalProxy(url), { signal: controller.signal });
+        if (!response.ok) throw namedError(IMAGE_RESPONSE_ERROR);
+        return await response.blob();
+    } catch (error) {
+        if (timedOut) throw namedError(IMAGE_TIMEOUT_ERROR);
+        if (options?.signal?.aborted) throw abortReason(options.signal);
+        throw error;
+    } finally {
+        window.clearTimeout(timer);
+        options?.signal?.removeEventListener("abort", abort);
+    }
+}
+
+function loadImageMeta(url: string, options?: ImageReadOptions, timeoutMs = IMAGE_DECODE_TIMEOUT_MS) {
+    return new Promise<{ width: number; height: number } | null>((resolve, reject) => {
+        if (options?.signal?.aborted) return reject(abortReason(options.signal));
+        const image = new Image();
+        let settled = false;
+        const finish = (value: { width: number; height: number } | null) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            options?.signal?.removeEventListener("abort", abort);
+            image.onload = null;
+            image.onerror = null;
+            resolve(value);
+        };
+        const abort = () => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            image.onload = null;
+            image.onerror = null;
+            reject(abortReason(options!.signal!));
+        };
+        const timer = window.setTimeout(() => finish(null), timeoutMs);
+        options?.signal?.addEventListener("abort", abort, { once: true });
+        image.onload = () => finish(image.naturalWidth && image.naturalHeight ? { width: image.naturalWidth, height: image.naturalHeight } : null);
+        image.onerror = () => finish(null);
+        image.src = url;
+    });
+}
+
+function namedError(name: string) {
+    const error = new Error(i18n.t("common.imageReadFailed"));
+    error.name = name;
+    return error;
+}
+
+function isNamedError(error: unknown, name: string) {
+    return error instanceof Error && error.name === name;
+}
+
+function abortReason(signal: AbortSignal) {
+    return signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError");
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+    if (signal?.aborted) throw abortReason(signal);
+}
+
+type ImageHydration = { owner?: string; isActive?: () => boolean; cacheMiss?: boolean };
+
+export async function resolveImageUrl(storageKey?: string, fallback = "", hydration?: ImageHydration) {
+    if (!storageKey) return fallback;
+    const owner = hydration?.owner ?? currentMediaOwner();
+    assertLocalMediaOwner(storageKey, owner);
+    const assertActive = () => {
+        if (hydration?.isActive) {
+            if (!hydration.isActive()) throw new DOMException("账户数据加载已中断", "AbortError");
+        } else assertMediaOwner(owner);
+    };
+    assertActive();
+    // Refresh a stale cover URL while concurrent refreshes still share one read.
+    if (hydration?.cacheMiss && objectUrls.get(storageKey)) objectUrls.delete(storageKey);
+    const url = await objectUrls.resolve(storageKey, async () => {
+        const blob = await store.getItem<Blob>(storageKey);
+        assertActive();
+        return blob;
+    });
+    assertActive();
+    return url || fallback;
+}
+
+/** 优先返回本地缩略图，没有则回落到原图 URL —— 对齐 BeefTV 的封面解析语义。 */
+export async function resolvePreviewImageUrl(storageKey?: string, fallback = "", hydration?: ImageHydration) {
+    if (!storageKey) return fallback;
+    const owner = hydration?.owner ?? currentMediaOwner();
+    assertLocalMediaOwner(storageKey, owner);
+    if (hydration?.isActive) {
+        if (!hydration.isActive()) throw new DOMException("账户数据加载已中断", "AbortError");
+    } else assertMediaOwner(owner);
+    const preview = hydration?.cacheMiss ? undefined : previewUrlFor(storageKey);
+    if (preview) return preview;
+    return resolveImageUrl(storageKey, fallback, hydration);
+}
+
+export async function getImageBlob(storageKey: string) {
+    const owner = currentMediaOwner();
+    assertLocalMediaOwner(storageKey, owner);
+    const blob = await store.getItem<Blob>(storageKey);
+    assertMediaOwner(owner);
+    return blob;
+}
+
+// 缩略图按图片的 storageKey 另存一份 WebP，只放在本地 IndexedDB 里，不写进节点数据，也不参与导出。
+export function previewUrlFor(storageKey?: string) {
+    if (!storageKey) return undefined;
+    try { assertLocalMediaOwner(storageKey); } catch { return undefined; }
+    return previewUrls.get(storageKey);
+}
+
+// 缩略图在后台补，生成完成后再让用到它的界面重渲染一次。
+export function subscribeImagePreviews(listener: () => void) {
+    previewListeners.add(listener);
+    return () => {
+        previewListeners.delete(listener);
+    };
+}
+
+export function getImagePreviewRevision() {
+    return previewRevision;
+}
+
+export async function ensureImagePreview(storageKey?: string) {
+    if (!storageKey) return undefined;
+    const owner = currentMediaOwner();
+    try { assertLocalMediaOwner(storageKey, owner); } catch { return undefined; }
+    return previewUrls.resolve(storageKey, async (isCurrent) => {
+        const stored = await previewStore.getItem<StoredImagePreview>(storageKey).catch(() => null);
+        if (currentMediaOwner() !== owner || !isCurrent()) return undefined;
+        if (stored?.version === IMAGE_PREVIEW_VERSION) return stored.blob;
+        // Keep the existing serial decoder queue; duplicate requests share this complete operation.
+        const result = previewQueue.then(async () => {
+            if (currentMediaOwner() !== owner || !isCurrent()) return undefined;
+            const original = await getImageBlob(storageKey);
+            return original ? createStoredImagePreview(storageKey, original, () => currentMediaOwner() === owner && isCurrent()) : undefined;
+        });
+        previewQueue = result.catch(() => undefined);
+        return result;
+    }).catch(() => undefined);
+}
+
+async function storeImagePreview(storageKey: string, original: Blob) {
+    const owner = currentMediaOwner();
+    return previewUrls.resolve(storageKey, (isCurrent) => createStoredImagePreview(storageKey, original, () => currentMediaOwner() === owner && isCurrent())).catch(() => undefined);
+}
+
+async function createStoredImagePreview(storageKey: string, original: Blob, isCurrent: () => boolean) {
+    // Decode errors must remain retryable rather than being persisted as a successful empty preview.
+    const preview = await createImageThumbnail(original);
+    if (!isCurrent()) return undefined;
+    await previewStore.setItem<StoredImagePreview>(storageKey, { version: IMAGE_PREVIEW_VERSION, blob: preview }).catch(() => undefined);
+    return isCurrent() ? preview : undefined;
+}
+
+async function deleteImagePreview(storageKey: string) {
+    previewUrls.delete(storageKey);
+    await previewStore.removeItem(storageKey).catch(() => undefined);
+}
+
+export async function setImageBlob(storageKey: string, blob: Blob) {
+    await store.setItem(storageKey, blob);
+    await deleteImagePreview(storageKey);
+    await storeImagePreview(storageKey, blob);
+    const url = URL.createObjectURL(blob);
+    objectUrls.set(storageKey, url);
+    return url;
+}
+
+export async function retryLocalImage(storageKey: string, options?: ImageReadOptions): Promise<UploadedImage> {
+    const owner = options?.expectedOwner === undefined ? currentMediaOwner() : options.expectedOwner;
+    assertMediaOwner(owner, options?.signal);
+    const blob = await getImageBlob(storageKey);
+    if (!blob?.size) throw new Error(i18n.t("common.imageReadFailed"));
+    const uploaded = await uploadBlobToServer(blob, "image", owner, options?.signal, true, false, options?.onProgress);
+    if (!uploaded) throw new Error(i18n.t("common.imageReadFailed"));
+    const meta = await loadImageMeta(uploaded.url, options).catch(() => null);
+    return { url: uploaded.url, width: meta?.width ?? 0, height: meta?.height ?? 0, bytes: uploaded.bytes, mimeType: uploaded.mime };
+}
+
+export async function imageToDataUrl(image: { url?: string; dataUrl?: string; storageKey?: string }, options?: ImageReadOptions) {
+    const owner = options?.expectedOwner === undefined ? currentMediaOwner() : options.expectedOwner;
+    assertMediaOwner(owner, options?.signal);
+    if (image.storageKey) assertLocalMediaOwner(image.storageKey, owner);
+    const url = image.dataUrl || (await resolveImageUrl(image.storageKey, image.url || ""));
+    if (!url || url.startsWith("data:")) { assertMediaOwner(owner, options?.signal); return url; }
+    const result = await blobToDataUrl(await fetchImageBlob(url, options));
+    assertMediaOwner(owner, options?.signal);
+    return result;
+}
+
+export async function deleteStoredImages(keys: Iterable<string>) {
+    await Promise.all(
+        Array.from(new Set(keys)).map(async (key) => {
+            objectUrls.delete(key);
+            await deleteImagePreview(key);
+            await store.removeItem(key);
+        }),
+    );
+}
+
+export async function cleanupUnusedImages(usedData: unknown) {
+    const usedKeys = collectImageStorageKeys(usedData);
+    await Promise.all([
+        imageLogStore.iterate((value) => {
+            collectImageStorageKeys(value, usedKeys);
+        }),
+        videoLogStore.iterate((value) => {
+            collectImageStorageKeys(value, usedKeys);
+        }),
+    ]);
+    const unused: string[] = [];
+    await store.iterate((_value, key) => {
+        if (!usedKeys.has(key)) unused.push(key);
+    });
+    const orphanPreviews: string[] = [];
+    await previewStore.iterate((_value, key) => {
+        if (!usedKeys.has(key)) orphanPreviews.push(key);
+    });
+    await Promise.all([deleteStoredImages(unused), ...orphanPreviews.map(deleteImagePreview)]);
+}
+
+export function collectImageStorageKeys(value: unknown, keys = new Set<string>()) {
+    if (!value || typeof value !== "object") return keys;
+    if ("storageKey" in value && typeof value.storageKey === "string" && value.storageKey.startsWith("image:")) keys.add(value.storageKey);
+    Object.values(value).forEach((item) => (Array.isArray(item) ? item.forEach((child) => collectImageStorageKeys(child, keys)) : collectImageStorageKeys(item, keys)));
+    return keys;
+}
+
+function blobToDataUrl(blob: Blob) {
+    return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error(i18n.t("common.imageReadFailed")));
+        reader.readAsDataURL(blob);
+    });
+}
+
+
+========================================================================
+FILE: web/src/services/local-storage-usage.ts
+LINES: 1-64
+========================================================================
+export type IndexedDbStoreUsage = { name: string; records: number; bytes: number };
+export type IndexedDbDatabaseUsage = { name: string; version: number; bytes: number; stores: IndexedDbStoreUsage[] };
+export type LocalStorageUsage = { usage: number; quota: number | null; contentBytes: number; databases: IndexedDbDatabaseUsage[] };
+
+export async function readLocalStorageUsage(): Promise<LocalStorageUsage> {
+    const [estimate, database] = await Promise.all([readStorageEstimate(), readDatabaseUsage("sundas")]);
+    return { usage: estimate?.usage ?? database.bytes, quota: estimate?.quota ?? null, contentBytes: database.bytes, databases: [database] };
+}
+
+async function readStorageEstimate() {
+    if (typeof navigator === "undefined" || !navigator.storage?.estimate) return null;
+    try {
+        return await navigator.storage.estimate();
+    } catch {
+        return null;
+    }
+}
+
+function readDatabaseUsage(name: string) {
+    return new Promise<IndexedDbDatabaseUsage>((resolve, reject) => {
+        const request = indexedDB.open(name);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+            const database = request.result;
+            const names = Array.from(database.objectStoreNames);
+            if (!names.length) {
+                database.close();
+                resolve({ name, version: database.version, bytes: 0, stores: [] });
+                return;
+            }
+            const transaction = database.transaction(names, "readonly");
+            Promise.all(names.map((storeName) => readStoreUsage(transaction.objectStore(storeName))))
+                .then((stores) => resolve({ name, version: database.version, bytes: stores.reduce((total, store) => total + store.bytes, 0), stores: stores.sort((a, b) => b.bytes - a.bytes) }))
+                .catch(reject)
+                .finally(() => database.close());
+        };
+    });
+}
+
+function readStoreUsage(store: IDBObjectStore) {
+    return new Promise<IndexedDbStoreUsage>((resolve, reject) => {
+        let records = 0;
+        let bytes = 0;
+        const request = store.openCursor();
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+            const cursor = request.result;
+            if (!cursor) {
+                resolve({ name: store.name, records, bytes });
+                return;
+            }
+            records += 1;
+            bytes += valueBytes(cursor.value);
+            cursor.continue();
+        };
+    });
+}
+
+function valueBytes(value: unknown) {
+    if (value instanceof Blob) return value.size;
+    if (value instanceof ArrayBuffer) return value.byteLength;
+    if (ArrayBuffer.isView(value)) return value.byteLength;
+    return new TextEncoder().encode(typeof value === "string" ? value : JSON.stringify(value)).byteLength;
+}
+
+
+========================================================================
+FILE: web/src/services/media-download.ts
+LINES: 1-34
+========================================================================
+/** 返回 true 表示已使用同源授权下载；其他 URL 继续原有下载行为。 */
+export function downloadCloudMedia(value: string, filename: string) {
+    const url = new URL(value, window.location.origin);
+    if (url.origin !== window.location.origin || !url.pathname.startsWith('/media/private/')) return false;
+    url.searchParams.set('download', filename);
+    const anchor = document.createElement('a');
+    anchor.href = url.toString();
+    anchor.download = filename;
+    anchor.rel = 'noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    return true;
+}
+
+const pendingMediaRefresh = new WeakMap<HTMLMediaElement | HTMLImageElement, string>();
+
+/** 只重取本站私有媒体；同一次失败不循环重试，读取成功后允许之后再次过期恢复。 */
+export function refreshExpiredMedia(event: { currentTarget: HTMLMediaElement | HTMLImageElement }) {
+    const video = event.currentTarget;
+    const src = new URL(video.getAttribute('src') || '', window.location.origin);
+    if (src.origin !== window.location.origin || !src.pathname.startsWith('/media/private/') || (video instanceof HTMLMediaElement && video.error && [1, 3].includes(video.error.code))) return;
+    src.searchParams.delete('_refresh');
+    const source = src.toString();
+    if (pendingMediaRefresh.get(video) === source) return;
+    pendingMediaRefresh.set(video, source);
+    const position = video instanceof HTMLMediaElement ? video.currentTime : 0;
+    src.searchParams.set('_refresh', String(Date.now()));
+    const refreshedUrl = src.toString();
+    if (video instanceof HTMLMediaElement) video.addEventListener('loadedmetadata', () => { if (video.src === refreshedUrl && position > 0) video.currentTime = position; }, { once: true });
+    video.addEventListener(video instanceof HTMLMediaElement ? 'loadeddata' : 'load', () => { if (pendingMediaRefresh.get(video) === source) pendingMediaRefresh.delete(video); }, { once: true });
+    video.src = refreshedUrl;
+    if (video instanceof HTMLMediaElement) video.load();
+}
+
+
+========================================================================
+FILE: web/src/stores/canvas/use-canvas-store.ts
+LINES: 1-218
+========================================================================
+import { create } from "zustand";
+import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
+
+import i18n from "@/i18n";
+import { localForageStorage } from "@/lib/localforage-storage";
+import { nextUpdatedAt } from "@/lib/next-updated-at";
+import { createSerializedWriter } from "@/lib/serialized-writer";
+import type { DirectorScene } from "@/types/director";
+import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
+import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "@/types/canvas";
+import type { ProductionDocument } from "../../../../shared/production";
+
+export type CanvasProject = {
+    id: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+    nodes: CanvasNodeData[];
+    connections: CanvasConnection[];
+    chatSessions: CanvasAssistantSession[];
+    activeChatId: string | null;
+    backgroundMode: CanvasBackgroundMode;
+    showImageInfo: boolean;
+    viewport: ViewportTransform;
+    production?: ProductionDocument;
+    /** 导演台场景：跟随画布项目一起持久化，一个项目可存多条镜头场景。 */
+    directorScenes?: DirectorScene[];
+};
+
+export type CanvasDeletedProject = {
+    id: string;
+    deletedAt: string;
+};
+
+type CanvasStore = {
+    hydrated: boolean;
+    projects: CanvasProject[];
+    deletedProjects: CanvasDeletedProject[];
+    createProject: (title?: string) => string;
+    importProject: (project: Partial<CanvasProject>) => string;
+    openProject: (id: string) => CanvasProject | null;
+    renameProject: (id: string, title: string) => void;
+    deleteProjects: (ids: string[]) => void;
+    clearDeletedProjects: (ids: string[]) => void;
+    replaceProjects: (projects: CanvasProject[], deletedProjects?: CanvasDeletedProject[]) => void;
+    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport" | "production" | "directorScenes">>) => void;
+};
+
+const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
+const CANVAS_STORE_KEY = "sundas:canvas_store";
+export function isCanvasAccountActive(userId: string | null) {
+    return useCanvasStore.persist.getOptions().name === (userId ? `${CANVAS_STORE_KEY}:${userId}` : CANVAS_STORE_KEY);
+}
+type PersistedCanvasState = Pick<CanvasStore, "projects" | "deletedProjects">;
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let queuedPersistState: PersistedCanvasState | null = null;
+let switchingCanvas = false;
+let canvasHydrationError: unknown;
+const canvasWrites = createSerializedWriter();
+
+function writeCanvas(name: string, value: string) {
+    return canvasWrites.write(() => localForageStorage.setItem(name, value));
+}
+
+const canvasStorage: PersistStorage<CanvasStore> = {
+    getItem: async (name) => {
+        const value = await localForageStorage.getItem(name);
+        if (!value) return null;
+        const parsed = JSON.parse(value) as StorageValue<CanvasStore>;
+        queuedPersistState = parsed.state as PersistedCanvasState;
+        return parsed;
+    },
+    setItem: (name, value) => {
+        if (switchingCanvas) return;
+        const nextState = value.state as PersistedCanvasState;
+        if (queuedPersistState && queuedPersistState.projects === nextState.projects && queuedPersistState.deletedProjects === nextState.deletedProjects) return;
+        const deletedChanged = Boolean(queuedPersistState && queuedPersistState.deletedProjects !== nextState.deletedProjects);
+        queuedPersistState = nextState;
+        if (saveTimer) clearTimeout(saveTimer);
+        if (deletedChanged) {
+            saveTimer = null;
+            void writeCanvas(name, JSON.stringify(value)).catch((error) => console.error("画布本地保存失败", error));
+            return;
+        }
+        saveTimer = setTimeout(() => {
+            saveTimer = null;
+            void writeCanvas(name, JSON.stringify(value)).catch((error) => console.error("画布本地保存失败", error));
+        }, 400);
+    },
+    removeItem: (name) => localForageStorage.removeItem(name),
+};
+
+function nextProjectTitle(projects: CanvasProject[]) {
+    let highest = 0;
+    for (const project of projects) {
+        const match = project.title.match(/(\d+)\s*$/);
+        if (match) highest = Math.max(highest, Number(match[1]));
+    }
+    return i18n.t("canvas.defaultTitle", { count: Math.max(projects.length + 1, highest + 1) });
+}
+
+export const useCanvasStore = create<CanvasStore>()(
+    persist(
+        (set, get) => ({
+            hydrated: false,
+            projects: [],
+            deletedProjects: [],
+            createProject: (title) => {
+                const now = new Date().toISOString();
+                const id = crypto.randomUUID();
+                const project: CanvasProject = {
+                    id,
+                    title: title?.trim() || nextProjectTitle(get().projects),
+                    createdAt: now,
+                    updatedAt: now,
+                    nodes: [],
+                    connections: [],
+                    chatSessions: [],
+                    activeChatId: null,
+                    backgroundMode: "dots",
+                    showImageInfo: false,
+                    viewport: initialViewport,
+                };
+                set((state) => ({ projects: [project, ...state.projects] }));
+                return id;
+            },
+            importProject: (source) => {
+                const now = new Date().toISOString();
+                const project: CanvasProject = {
+                    id: crypto.randomUUID(),
+                    title: source.title || i18n.t("canvas.project.imported"),
+                    createdAt: source.createdAt || now,
+                    updatedAt: now,
+                    nodes: source.nodes || [],
+                    connections: source.connections || [],
+                    chatSessions: source.chatSessions || [],
+                    activeChatId: source.activeChatId || null,
+                    backgroundMode: source.backgroundMode || "dots",
+                    showImageInfo: source.showImageInfo || false,
+                    viewport: source.viewport || initialViewport,
+                    ...(source.production ? { production: source.production } : {}),
+                    ...(source.directorScenes ? { directorScenes: source.directorScenes } : {}),
+                };
+                set((state) => ({ projects: [project, ...state.projects] }));
+                return project.id;
+            },
+            openProject: (id) => {
+                return get().projects.find((item) => item.id === id) || null;
+            },
+            renameProject: (id, title) =>
+                set((state) => ({
+                    projects: state.projects.map((project) => (project.id === id ? { ...project, title: title.trim() || project.title, updatedAt: nextUpdatedAt(project.updatedAt) } : project)),
+                })),
+            deleteProjects: (ids) =>
+                set((state) => {
+                    const now = new Date().toISOString();
+                    const removing = new Set(ids);
+                    const projects = state.projects.filter((project) => !removing.has(project.id));
+                    const deletedProjects = [...state.deletedProjects.filter((item) => !removing.has(item.id)), ...ids.map((id) => ({ id, deletedAt: now }))];
+                    return { projects, deletedProjects };
+                }),
+            clearDeletedProjects: (ids) =>
+                set((state) => {
+                    const removing = new Set(ids);
+                    return { deletedProjects: state.deletedProjects.filter((item) => !removing.has(item.id)) };
+                }),
+            replaceProjects: (projects, deletedProjects = []) => set({ projects, deletedProjects }),
+            updateProject: (id, patch) =>
+                set((state) => {
+                    const current = state.projects.find(project => project.id === id);
+                    if (!current || Object.entries(patch).every(([key, value]) => current[key as keyof CanvasProject] === value)) return state;
+                    return { projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch, updatedAt: nextUpdatedAt(project.updatedAt) } : project)) };
+                }),
+        }),
+        {
+            name: CANVAS_STORE_KEY,
+            skipHydration: true,
+            storage: canvasStorage,
+            partialize: (state) =>
+                ({
+                    projects: state.projects,
+                    deletedProjects: state.deletedProjects,
+                }) as StorageValue<CanvasStore>["state"],
+            onRehydrateStorage: () => (_state, error) => {
+                canvasHydrationError = error;
+                if (!error) useCanvasStore.setState({ hydrated: true });
+            },
+        },
+    ),
+);
+
+export async function flushCanvasAccount() {
+    const previous = useCanvasStore.persist.getOptions().name;
+    if (!previous?.trim()) throw new Error("画布缓存标识缺失，已停止保存和切换账户");
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = null;
+    await canvasWrites.flush();
+    if (previous !== CANVAS_STORE_KEY && queuedPersistState) {
+        await writeCanvas(previous, JSON.stringify({ state: queuedPersistState, version: 0 }));
+    }
+}
+
+export async function switchCanvasAccount(userId: string | null, alreadyFlushed = false) {
+    if (!alreadyFlushed) await flushCanvasAccount();
+    switchingCanvas = true;
+    try {
+        queuedPersistState = null;
+        useCanvasStore.setState({ projects: [], deletedProjects: [], hydrated: false });
+        useCanvasStore.persist.setOptions({ name: userId ? `${CANVAS_STORE_KEY}:${userId}` : CANVAS_STORE_KEY });
+        if (userId) {
+            canvasHydrationError = undefined;
+            await useCanvasStore.persist.rehydrate();
+            if (canvasHydrationError) throw canvasHydrationError;
+        }
+    } finally {
+        switchingCanvas = false;
+    }
+}
+
+
+========================================================================
+FILE: web/src/stores/canvas/use-canvas-theme-store.ts
+LINES: 1-47
+========================================================================
+import { create } from "zustand";
+import { useLayoutEffect } from "react";
+
+import { useThemeStore, type ThemeName } from "@/stores/use-theme-store";
+
+type CanvasThemeStore = {
+    theme: ThemeName;
+    active: boolean;
+    followGlobal: boolean;
+    setTheme: (theme?: string) => void;
+};
+
+/**
+ * 画布主题作用域（sundas 版）。
+ *
+ * BeefTV 这套 store 承载「画布可独立选外观」，sundas 的外观已锁定暗色，
+ * 所以这里只保留导演台等调用方需要的契约：useActiveTheme() 返回当前主题、
+ * useCanvasThemeScope() 标记画布处于激活态。
+ */
+export const useCanvasThemeStore = create<CanvasThemeStore>()((set) => ({
+    theme: useThemeStore.getState().theme,
+    active: false,
+    followGlobal: true,
+    setTheme: (theme) => set({ theme: theme === "light" ? "light" : "dark", followGlobal: false }),
+}));
+
+useThemeStore.subscribe((state, previous) => {
+    if (state.theme !== previous.theme && useCanvasThemeStore.getState().followGlobal) {
+        useCanvasThemeStore.setState({ theme: state.theme });
+    }
+});
+
+export function useCanvasThemeScope() {
+    useLayoutEffect(() => {
+        useCanvasThemeStore.setState({ active: true });
+        return () => {
+            useCanvasThemeStore.setState({ active: false });
+        };
+    }, []);
+}
+
+export function useActiveTheme() {
+    const workspaceTheme = useThemeStore((state) => state.theme);
+    const canvasTheme = useCanvasThemeStore((state) => state.theme);
+    const active = useCanvasThemeStore((state) => state.active);
+    return active ? canvasTheme : workspaceTheme;
+}
+
+
+========================================================================
+FILE: web/src/stores/canvas/use-canvas-ui-store.ts
+LINES: 1-29
+========================================================================
+import { create } from "zustand";
+
+type CanvasUiStore = {
+    editingProjectId: string | null;
+    editingProjectTitle: string;
+    selectedProjectIds: string[];
+    deleteProjectIds: string[];
+    startEditingProject: (id: string, title: string) => void;
+    setEditingProjectTitle: (title: string) => void;
+    stopEditingProject: () => void;
+    toggleSelectedProjectId: (id: string, selected: boolean) => void;
+    setDeleteProjectIds: (ids: string[]) => void;
+    removeSelectedProjectIds: (ids: string[]) => void;
+    reset: () => void;
+};
+
+export const useCanvasUiStore = create<CanvasUiStore>((set) => ({
+    editingProjectId: null,
+    editingProjectTitle: "",
+    selectedProjectIds: [],
+    deleteProjectIds: [],
+    startEditingProject: (editingProjectId, editingProjectTitle) => set({ editingProjectId, editingProjectTitle }),
+    setEditingProjectTitle: (editingProjectTitle) => set({ editingProjectTitle }),
+    stopEditingProject: () => set({ editingProjectId: null }),
+    toggleSelectedProjectId: (id, selected) => set((state) => ({ selectedProjectIds: selected ? [...new Set([...state.selectedProjectIds, id])] : state.selectedProjectIds.filter((item) => item !== id) })),
+    setDeleteProjectIds: (deleteProjectIds) => set({ deleteProjectIds }),
+    removeSelectedProjectIds: (ids) => set((state) => ({ selectedProjectIds: state.selectedProjectIds.filter((id) => !ids.includes(id)) })),
+    reset: () => set({ editingProjectId: null, editingProjectTitle: "", selectedProjectIds: [], deleteProjectIds: [] }),
+}));
+
+
+========================================================================
+FILE: web/src/stores/canvas/use-director-workbench-store.ts
+LINES: 1-111
+========================================================================
+import { create } from "zustand";
+
+import { DIRECTOR_DEFAULT_MODE, DIRECTOR_ENTRY_MODE, directorModeCapabilities, resolveDirectorModeTransition, type DirectorMode } from "@/lib/canvas/director/director-modes";
+import { DIRECTOR_DEFAULT_VIEW_MODE, type DirectorViewMode } from "@/lib/canvas/director/director-view-modes";
+import type { DirectorRenderMode } from "@/types/director";
+
+type DirectorWorkbenchStore = {
+    workspaceView: "scene" | "preview";
+    workspaceViewRestore: { viewMode: DirectorViewMode; sequencerVisible: boolean; renderMode: DirectorRenderMode } | null;
+    selectedObjectId: string | null;
+    selectedBone: string | null;
+    selectedLightId: string | null;
+    mode: DirectorMode;
+    /** 取景模式（3D/CAM/五个正交轴向）。纯视口状态，不影响一级模式的能力矩阵。 */
+    viewMode: DirectorViewMode;
+    transformMode: "translate" | "rotate" | "scale";
+    renderMode: DirectorRenderMode;
+    playhead: number;
+    playbackScope: "shot" | "sequence";
+    sequenceLoop: boolean;
+    fixedPreviewCameraId: string | null;
+    setPlaybackScope: (scope: "shot" | "sequence") => void;
+    setSequenceLoop: (loop: boolean) => void;
+    setFixedPreviewCameraId: (id: string | null) => void;
+    playing: boolean;
+    autoKey: boolean;
+    sequencerHeight: number;
+    sequencerVisible: boolean;
+    setSelectedObjectId: (id: string | null) => void;
+    setSelectedBone: (bone: string | null) => void;
+    setSelectedLightId: (id: string | null) => void;
+    /** 切换一级模式。离开动画模式时一并停播、关 Auto Key、夹回合法渲染视图。 */
+    setMode: (mode: DirectorMode) => void;
+    /** 切换取景模式。UI-only：不写入 DirectorScene，不产生 undo/history。 */
+    setViewMode: (mode: DirectorViewMode) => void;
+    /** 顶层工作区切换只影响视口与时间线显示，不写入场景数据。 */
+    setWorkspaceView: (view: "scene" | "preview") => void;
+    setTransformMode: (mode: DirectorWorkbenchStore["transformMode"]) => void;
+    /** 切换渲染视图。当前模式不允许的视图一律忽略，不做静默降级。 */
+    setRenderMode: (mode: DirectorRenderMode) => void;
+    setPlayhead: (time: number) => void;
+    setPlaying: (playing: boolean) => void;
+    setAutoKey: (autoKey: boolean) => void;
+    setSequencerHeight: (height: number) => void;
+    setSequencerVisible: (visible: boolean) => void;
+    reset: () => void;
+};
+
+const initialState = {
+    workspaceView: "scene" as const,
+    workspaceViewRestore: null,
+    mode: DIRECTOR_ENTRY_MODE,
+    viewMode: DIRECTOR_DEFAULT_VIEW_MODE,
+    selectedObjectId: null,
+    selectedBone: null,
+    selectedLightId: null,
+    transformMode: "translate" as const,
+    renderMode: "beauty" as const,
+    playhead: 0,
+    playbackScope: "shot" as const,
+    sequenceLoop: true,
+    fixedPreviewCameraId: null,
+    playing: false,
+    autoKey: false,
+    sequencerHeight: 130,
+    sequencerVisible: false,
+};
+
+export const useDirectorWorkbenchStore = create<DirectorWorkbenchStore>((set) => ({
+    ...initialState,
+    setSelectedObjectId: (selectedObjectId) => set({ selectedObjectId, selectedBone: null, selectedLightId: null }),
+    setSelectedBone: (selectedBone) => set({ selectedBone }),
+    setSelectedLightId: (selectedLightId) => set({ selectedLightId, selectedObjectId: null, selectedBone: null }),
+    setMode: (mode) => set((state) => ({
+        ...resolveDirectorModeTransition({ mode, playing: state.playing, autoKey: state.autoKey, renderMode: state.renderMode }),
+        sequencerVisible: mode === "animate" ? true : state.sequencerVisible,
+    })),
+    setViewMode: (viewMode) => set({ viewMode }),
+    setWorkspaceView: (workspaceView) => set((state) => {
+        if (workspaceView === state.workspaceView) return {};
+        if (workspaceView === "preview") {
+            return {
+                workspaceView,
+                workspaceViewRestore: { viewMode: state.viewMode, sequencerVisible: state.sequencerVisible, renderMode: state.renderMode },
+                viewMode: "camera",
+                sequencerVisible: true,
+                renderMode: "beauty",
+            };
+        }
+        return {
+            workspaceView,
+            viewMode: state.workspaceViewRestore?.viewMode || state.viewMode,
+            sequencerVisible: state.workspaceViewRestore?.sequencerVisible ?? state.sequencerVisible,
+            renderMode: state.workspaceViewRestore?.renderMode || state.renderMode,
+            workspaceViewRestore: null,
+        };
+    }),
+    setTransformMode: (transformMode) => set({ transformMode }),
+    // 夹在 store 层而不是只在 UI 层过滤：dock 与顶栏是两条路径，
+    // 只挡其中一条迟早会漏（本轮就漏过一次：dock 的「骨骼视图」在摆场模式仍可点）。
+    setRenderMode: (renderMode) => set((state) => (directorModeCapabilities(state.mode).renderModes.includes(renderMode) ? { renderMode } : {})),
+    setPlayhead: (playhead) => set({ playhead }),
+    setPlaybackScope: (playbackScope) => set({ playbackScope, playing: false }),
+    setSequenceLoop: (sequenceLoop) => set({ sequenceLoop }),
+    setFixedPreviewCameraId: (fixedPreviewCameraId) => set({ fixedPreviewCameraId }),
+    setPlaying: (playing) => set({ playing }),
+    setAutoKey: (autoKey) => set({ autoKey }),
+    setSequencerHeight: (sequencerHeight) => set({ sequencerHeight: Math.max(130, Math.min(620, sequencerHeight)) }),
+    setSequencerVisible: (sequencerVisible) => set({ sequencerVisible }),
+    reset: () => set(initialState),
+}));
+
+
+========================================================================
+FILE: web/src/stores/canvas/use-production-store.ts
+LINES: 1-26
+========================================================================
+import { create } from 'zustand';
+import { localForageStorage } from '@/lib/localforage-storage';
+import { useAuthStore } from '@/stores/use-auth-store';
+import type { ProductionModel, ProductionRun, ProductionRunDetail, ProductionSubmission } from '@/services/api/canvas-production';
+
+export type ProductionTab = 'script' | 'library' | 'shots' | 'audio' | 'composition' | 'runs';
+type State = { scope: string; tab: ProductionTab; focusShotId: string | null; busy: boolean; error: string; models: ProductionModel[]; runs: ProductionRun[]; detail: ProductionRunDetail | null; pending: ProductionSubmission | null; patch: (value: Partial<Omit<State, 'patch'>>) => void };
+const initial = { scope: '', tab: 'script' as const, focusShotId: null, busy: false, error: '', models: [], runs: [], detail: null, pending: null };
+export const useProductionStore = create<State>(set => ({ ...initial, patch: value => set(value) }));
+useAuthStore.subscribe((state, previous) => {
+    if (state.sessionEpoch !== previous.sessionEpoch || state.user?.id !== previous.user?.id) useProductionStore.getState().patch(initial);
+});
+
+/** Persist the authorized idempotency key before submission, including a lost HTTP response. */
+export async function saveProductionSubmission(owner: string, projectId: string, value: ProductionSubmission | null) {
+    const key = `sundas:production-pending:${owner}:${projectId}`;
+    if (value) await localForageStorage.setItem(key, JSON.stringify(value));
+    else await localForageStorage.removeItem(key);
+}
+export async function readProductionSubmission(owner: string, projectId: string): Promise<ProductionSubmission | null> {
+    const value = await localForageStorage.getItem(`sundas:production-pending:${owner}:${projectId}`);
+    if (!value) return null;
+    const parsed = JSON.parse(value) as ProductionSubmission;
+    if (!parsed.clientRequestId || parsed.confirmed !== true || !parsed.quoteDigest) throw new Error('原提交记录损坏，请先在生产记录核对任务');
+    return parsed;
+}
+
+
+========================================================================
+FILE: web/src/stores/use-agent-store.ts
+LINES: 1-181
+========================================================================
+import { create } from "zustand";
+import i18n from "@/i18n";
+import { useAuthStore } from "@/stores/use-auth-store";
+
+import type { CanvasAgentOp, CanvasAgentSnapshot } from "@/lib/canvas/canvas-agent-ops";
+import type { CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
+
+export type AgentChatRole = "user" | "assistant" | "system" | "tool" | "error";
+export type AgentAttachment = { id: string; name: string; type: string; size: number; width: number; height: number; url: string; dataUrl: string };
+export type AgentMessageAttachment = Pick<AgentAttachment, "id" | "name" | "url"> & Partial<Pick<AgentAttachment, "type" | "size" | "width" | "height" | "dataUrl">>;
+export type AgentCanvasReference = Pick<CanvasResourceReference, "nodeId" | "label" | "title" | "kind" | "previewUrl" | "text">;
+export type AgentSkillReference = { name: string; path: string; displayName?: string };
+export type AgentChatItem = { id: string; itemId?: string; clientMessageId?: string; threadId?: string; turnId?: string; role: AgentChatRole; title?: string; text: string; meta?: string; detail?: unknown; attachments?: AgentMessageAttachment[]; canvasReferences?: AgentCanvasReference[]; skill?: AgentSkillReference; streamId?: string; activityItems?: Record<string, string> };
+export type AgentEventLog = { id: string; time: string; title: string; text: string; raw?: unknown };
+export type AgentPendingToolCall = { requestId: string; name: string; input?: { ops?: CanvasAgentOp[]; path?: string } & Record<string, unknown> };
+export type AgentPermissionMode = "request" | "automatic" | "full";
+export type AgentReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
+export type AgentModel = {
+    id: string;
+    model: string;
+    displayName: string;
+    defaultReasoningEffort: AgentReasoningEffort;
+    supportedReasoningEfforts: Array<{ reasoningEffort: AgentReasoningEffort; description?: string }>;
+    isDefault?: boolean;
+};
+export type AgentApprovalDecision = "accept" | "acceptForSession" | "decline";
+export type AgentPendingApproval = { requestId: string; method: string; threadId?: string; turnId?: string; itemId?: string; reason?: string; command?: unknown; cwd?: string; grantRoot?: string; networkApprovalContext?: unknown; permissions?: unknown; deciding?: AgentApprovalDecision };
+export type AgentCanvasContext = { snapshot: CanvasAgentSnapshot; applyOps: (ops?: CanvasAgentOp[]) => CanvasAgentSnapshot; undoOps: () => CanvasAgentSnapshot | null; canUndo: boolean };
+export type AgentThreadSummary = { id: string; preview: string; name?: string | null; cwd?: string; status?: string; source?: unknown; createdAt?: number; updatedAt?: number };
+export type AgentTokenUsage = { input: number; cached: number; output: number };
+export type AgentBootstrapStatus = { key: string; text: string; detail: string; status: "running" | "ready" | "error" };
+export type AgentConversationState = {
+    revision: number;
+    conversationId: string;
+    threadId: string;
+    status: "idle" | "preparing" | "ready" | "warning" | "running" | "failed";
+    mcpStatuses: Record<string, { status: "starting" | "ready" | "failed" | "cancelled"; error?: string | null; failureReason?: string | null }>;
+    sourceClientId?: string;
+    error?: string;
+};
+export type AgentPanelTab = "chat" | "setup" | "history" | "skills" | "log";
+
+const CONNECT_TIMEOUT_MS = 6000;
+let agentSource: EventSource | null = null;
+let connectTimer: ReturnType<typeof setTimeout> | null = null;
+
+type AgentStore = {
+    width: number;
+    panelOpen: boolean;
+    panelMounted: boolean;
+    panelClosing: boolean;
+    canvasContext: AgentCanvasContext | null;
+    url: string;
+    token: string;
+    connected: boolean;
+    enabled: boolean;
+    silentConnect: boolean;
+    fragmentBootstrap: boolean;
+    prompt: string;
+    attachments: AgentAttachment[];
+    canvasReferences: CanvasResourceReference[];
+    sending: boolean;
+    waiting: boolean;
+    messages: AgentChatItem[];
+    tokenUsage: AgentTokenUsage | null;
+    eventLogs: AgentEventLog[];
+    threads: AgentThreadSummary[];
+    activeThreadId: string;
+    activeTurnId: string;
+    workspacePath: string;
+    loadingThreads: boolean;
+    activeTab: AgentPanelTab;
+    confirmTools: boolean;
+    permissionMode: AgentPermissionMode;
+    models: AgentModel[];
+    model: string;
+    reasoningEffort: AgentReasoningEffort | "";
+    activity: string;
+    conversation: AgentConversationState;
+    bootstrapStatus: AgentBootstrapStatus | null;
+    mcpStartupStatuses: Record<string, AgentBootstrapStatus>;
+    connectError: string;
+    pendingTool: AgentPendingToolCall | null;
+    pendingApprovals: AgentPendingApproval[];
+    setAgentState: (patch: Partial<Omit<AgentStore, "setAgentState" | "connectAgent" | "disconnectAgent" | "addMessage" | "addEventLog" | "clearEventLogs" | "openPanel" | "closePanel" | "togglePanel" | "setCanvasContext">>) => void;
+    openPanel: () => void;
+    closePanel: () => void;
+    togglePanel: () => void;
+    setCanvasContext: (context: AgentCanvasContext | null) => void;
+    connectAgent: (options?: { silent?: boolean }) => void;
+    disconnectAgent: (patch?: Partial<Omit<AgentStore, "setAgentState" | "connectAgent" | "disconnectAgent" | "addMessage" | "addEventLog" | "clearEventLogs" | "openPanel" | "closePanel" | "togglePanel" | "setCanvasContext">>) => void;
+    addMessage: (item: AgentChatItem) => void;
+    addEventLog: (item: AgentEventLog) => void;
+    clearEventLogs: () => void;
+};
+
+export const CANVAS_AGENT_PANEL_MOTION_MS = 500;
+
+export const useAgentStore = create<AgentStore>((set, get) => ({
+    width: 440,
+    panelOpen: false,
+    panelMounted: true,
+    panelClosing: false,
+    canvasContext: null,
+    url: "https://example.invalid",
+    token: "",
+    connected: false,
+    enabled: false,
+    silentConnect: false,
+    fragmentBootstrap: false,
+    prompt: "",
+    attachments: [],
+    canvasReferences: [],
+    sending: false,
+    waiting: false,
+    messages: [],
+    tokenUsage: null,
+    eventLogs: [],
+    threads: [],
+    activeThreadId: "",
+    activeTurnId: "",
+    workspacePath: "",
+    loadingThreads: false,
+    activeTab: "setup",
+    confirmTools: false,
+    permissionMode: "request",
+    models: [],
+    model: "",
+    reasoningEffort: "",
+    activity: i18n.t("agent.state.ready"),
+    conversation: { revision: 0, conversationId: "", threadId: "", status: "idle", mcpStatuses: {} },
+    bootstrapStatus: null,
+    mcpStartupStatuses: {},
+    connectError: "",
+    pendingTool: null,
+    pendingApprovals: [],
+    setAgentState: (patch) => set(patch),
+    openPanel: () => set({ panelOpen: true, panelMounted: true, panelClosing: false }),
+    closePanel: () => {
+        if (!get().panelMounted || get().panelClosing) return;
+        set({ panelOpen: false, panelClosing: true });
+        setTimeout(() => {
+            if (get().panelClosing) set({ panelClosing: false });
+        }, CANVAS_AGENT_PANEL_MOTION_MS);
+    },
+    togglePanel: () => (get().panelOpen ? get().closePanel() : get().openPanel()),
+    setCanvasContext: (canvasContext) => set({ canvasContext }),
+    connectAgent: (options) => {
+        const silent = options?.silent ?? false;
+        const endpoint = get().url.trim().replace(/\/$/, "");
+        const token = get().token.trim();
+        if (!endpoint || !token) return set({ connectError: silent ? "" : i18n.t("agent.state.connectionRequired") });
+        try {
+            const parsed = new URL(endpoint);
+            if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
+        } catch {
+            return set({ connectError: silent ? "" : i18n.t("agent.state.invalidUrl") });
+        }
+        // Only set enabled here; LocalAgentPanel's effect owns SSE initialization.
+        set({ url: endpoint, token, enabled: true, silentConnect: silent, fragmentBootstrap: false, activity: i18n.t("agent.status.connecting"), connectError: "" });
+    },
+    disconnectAgent: (patch = {}) => {
+        agentSource?.close();
+        agentSource = null;
+        if (connectTimer) clearTimeout(connectTimer);
+        connectTimer = null;
+        set({ enabled: false, connected: false, silentConnect: false, fragmentBootstrap: false, activity: i18n.t("agent.state.offline"), conversation: { revision: 0, conversationId: "", threadId: "", status: "idle", mcpStatuses: {} }, bootstrapStatus: null, mcpStartupStatuses: {}, ...patch });
+    },
+    addMessage: (item) => set((state) => ({ messages: [...state.messages, item] })),
+    addEventLog: (item) => set((state) => ({ eventLogs: [...state.eventLogs.slice(-160), item] })),
+    clearEventLogs: () => set({ eventLogs: [] }),
+}));
+
+useAuthStore.subscribe((state, previous) => {
+    if (state.sessionEpoch === previous.sessionEpoch && state.user?.id === previous.user?.id) return;
+    useAgentStore.getState().disconnectAgent({
+        token: "", canvasContext: null, prompt: "", attachments: [], canvasReferences: [],
+        messages: [], eventLogs: [], threads: [], activeThreadId: "", activeTurnId: "",
+        sending: false, waiting: false, pendingTool: null, pendingApprovals: [], tokenUsage: null,
+    });
+});
+
+
+========================================================================
+FILE: web/src/stores/use-asset-store.ts
+LINES: 1-159
+========================================================================
+import { create } from "zustand";
+import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
+
+import { localForageStorage } from "@/lib/localforage-storage";
+import { nextUpdatedAt } from "@/lib/next-updated-at";
+import { createSerializedWriter } from "@/lib/serialized-writer";
+import { ensureImagePreview, previewUrlFor, resolveImageUrl, uploadImage } from "@/services/image-storage";
+import { resolveMediaUrl } from "@/services/file-storage";
+
+export type AssetKind = "text" | "image" | "video" | "audio" | "model";
+export type TextAsset = AssetBase<"text"> & { data: { content: string } };
+export type ImageAsset = AssetBase<"image"> & { data: { dataUrl: string; storageKey?: string; width: number; height: number; bytes: number; mimeType: string } };
+export type VideoAsset = AssetBase<"video"> & { data: { url: string; storageKey?: string; width: number; height: number; bytes: number; mimeType: string } };
+/** 3D 模型（.glb/.gltf）：给导演台把上传的自定义演员/道具存进素材库。 */
+export type ModelAsset = AssetBase<"model"> & { data: { url: string; storageKey?: string; bytes: number; mimeType: string; fileName?: string } };
+export type AudioAsset = AssetBase<"audio"> & { data: { url: string; storageKey?: string; width: number; height: number; bytes: number; mimeType: string; durationMs?: number } };
+export type Asset = AudioAsset | TextAsset | ImageAsset | VideoAsset | ModelAsset;
+
+type AssetBase<T extends AssetKind> = {
+    id: string;
+    kind: T;
+    title: string;
+    coverUrl: string;
+    tags: string[];
+    source?: string;
+    note?: string;
+    createdAt: string;
+    updatedAt: string;
+    metadata?: Record<string, unknown>;
+};
+
+type AssetStore = {
+    hydrated: boolean;
+    assets: Asset[];
+    deletedAssets: string[];
+    addAsset: (asset: Omit<Asset, "id" | "createdAt" | "updatedAt">) => string;
+    updateAsset: (id: string, patch: Partial<Omit<Asset, "id" | "createdAt">>) => void;
+    removeAsset: (id: string) => void;
+    clearDeletedAssets: (ids: string[]) => void;
+    replaceAssets: (assets: Asset[]) => void;
+    cleanupImages: (extra?: unknown) => void;
+};
+
+// 卡片用缩略图渲染，自定义封面（远程地址或单独上传的封面）保持原样。
+export function assetCoverUrl(asset: Asset) {
+    const own = asset.kind === "image" ? asset.data.dataUrl : "";
+    const cover = asset.coverUrl || own;
+    return asset.kind === "image" && cover === own ? previewUrlFor(asset.data.storageKey) || cover : cover;
+}
+
+const ASSET_STORE_KEY = "sundas:asset_store";
+export function isAssetAccountActive(userId: string | null) {
+    return useAssetStore.persist.getOptions().name === (userId ? `${ASSET_STORE_KEY}:${userId}` : ASSET_STORE_KEY);
+}
+let switchingAssets = false;
+let assetHydrationError: unknown;
+const assetWrites = createSerializedWriter();
+
+const assetStorage: PersistStorage<AssetStore> = {
+    getItem: async (name) => {
+        const value = await localForageStorage.getItem(name);
+        if (!value) return null;
+        const owner = name.startsWith(`${ASSET_STORE_KEY}:`) ? name.slice(ASSET_STORE_KEY.length + 1) : "";
+        const hydration = { owner, isActive: () => switchingAssets && useAssetStore.persist.getOptions().name === name };
+        const parsed = JSON.parse(value) as StorageValue<AssetStore>;
+        parsed.state.assets = await Promise.all(
+            parsed.state.assets.map(async (asset) => {
+                if ((asset.kind === "video" || asset.kind === "audio") && asset.data.storageKey) return { ...asset, data: { ...asset.data, url: await resolveMediaUrl(asset.data.storageKey, asset.data.url, hydration) } };
+                if (asset.kind !== "image") return asset;
+                if (asset.data.storageKey) {
+                    void ensureImagePreview(asset.data.storageKey);
+                    return {
+                        ...asset,
+                        coverUrl: asset.coverUrl?.startsWith("blob:") ? await resolveImageUrl(asset.data.storageKey, asset.coverUrl, hydration) : asset.coverUrl,
+                        data: { ...asset.data, dataUrl: await resolveImageUrl(asset.data.storageKey, asset.data.dataUrl, hydration) },
+                    };
+                }
+                if (!asset.data.dataUrl?.startsWith("data:image/")) return asset;
+                const image = await uploadImage(asset.data.dataUrl);
+                return { ...asset, coverUrl: asset.coverUrl?.startsWith("data:image/") ? image.url : asset.coverUrl, data: { ...asset.data, dataUrl: image.url, storageKey: image.storageKey, bytes: image.bytes, mimeType: image.mimeType } };
+            }),
+        );
+        return parsed;
+    },
+    setItem: (name, value) => {
+        if (switchingAssets) return;
+        const encoded = JSON.stringify(value);
+        const write = assetWrites.write(() => localForageStorage.setItem(name, encoded));
+        void write.catch((error) => console.error("素材本地保存失败", error));
+        return write;
+    },
+    removeItem: (name) => localForageStorage.removeItem(name),
+};
+
+export const useAssetStore = create<AssetStore>()(
+    persist(
+        (set, get) => ({
+            hydrated: false,
+            assets: [],
+            deletedAssets: [],
+            addAsset: (asset) => {
+                const now = new Date().toISOString();
+                const id = crypto.randomUUID();
+                set((state) => ({ assets: [{ ...asset, id, createdAt: now, updatedAt: now } as Asset, ...state.assets] }));
+                return id;
+            },
+            updateAsset: (id, patch) =>
+                set((state) => ({
+                    assets: state.assets.map((asset) => (asset.id === id ? ({ ...asset, ...patch, updatedAt: nextUpdatedAt(asset.updatedAt) } as Asset) : asset)),
+                })),
+            removeAsset: (id) =>
+                set((state) => {
+                    const assets = state.assets.filter((asset) => asset.id !== id);
+                    get().cleanupImages({ assets });
+                    return { assets, deletedAssets: [...new Set([...state.deletedAssets, id])] };
+                }),
+            clearDeletedAssets: (ids) => set((state) => ({ deletedAssets: state.deletedAssets.filter((id) => !ids.includes(id)) })),
+            replaceAssets: (assets) => set({ assets }),
+            // 媒体文件存储仍被所有账户共享，不能按当前账户引用删除其他账户的离线文件。
+            cleanupImages: () => {},
+        }),
+        {
+            name: ASSET_STORE_KEY,
+            skipHydration: true,
+            storage: assetStorage,
+            partialize: (state) => ({ assets: state.assets, deletedAssets: state.deletedAssets }) as StorageValue<AssetStore>["state"],
+            onRehydrateStorage: () => (_state, error) => {
+                assetHydrationError = error;
+                if (!error) useAssetStore.setState({ hydrated: true });
+            },
+        },
+    ),
+);
+
+export async function flushAssetAccount() {
+    await assetWrites.flush();
+    const previous = useAssetStore.persist.getOptions().name;
+    if (!previous?.trim()) throw new Error("资产缓存标识缺失，已停止保存和切换账户");
+    if (previous !== ASSET_STORE_KEY && useAssetStore.getState().hydrated) {
+        const { assets, deletedAssets } = useAssetStore.getState();
+        await assetWrites.write(() => localForageStorage.setItem(previous, JSON.stringify({ state: { assets, deletedAssets }, version: 0 })));
+    }
+}
+
+export async function switchAssetAccount(userId: string | null, alreadyFlushed = false) {
+    if (!alreadyFlushed) await flushAssetAccount();
+    switchingAssets = true;
+    try {
+        useAssetStore.setState({ assets: [], deletedAssets: [], hydrated: false });
+        useAssetStore.persist.setOptions({ name: userId ? `${ASSET_STORE_KEY}:${userId}` : ASSET_STORE_KEY });
+        if (userId) {
+            assetHydrationError = undefined;
+            await useAssetStore.persist.rehydrate();
+            if (assetHydrationError) throw assetHydrationError;
+        }
+    } finally {
+        switchingAssets = false;
+    }
+}
+
+
+========================================================================
+FILE: web/src/stores/use-auth-dialog-store.ts
+LINES: 1-33
+========================================================================
+import { create } from "zustand";
+
+export type AuthMode = "login" | "register" | "reset";
+
+type OpenOptions = {
+    /** 登录成功后的落点，默认回首页 */
+    redirect?: string;
+    /** 邀请码，注册入口带过来时预填 */
+    invite?: string;
+};
+
+type AuthDialogState = {
+    mode: AuthMode | null;
+    redirect: string;
+    invite: string;
+    open: (mode?: AuthMode, options?: OpenOptions) => void;
+    setMode: (mode: AuthMode) => void;
+    close: () => void;
+};
+
+/**
+ * 登录弹窗状态：任意页面调用 open() 即可浮出，不改变当前路由。
+ * /login /register /forgot-password 三个地址仍可用，由 AuthGate 落到首页后自动弹窗。
+ */
+export const useAuthDialogStore = create<AuthDialogState>((set) => ({
+    mode: null,
+    redirect: "/",
+    invite: "",
+    open: (mode = "login", options) =>
+        set({ mode, redirect: options?.redirect ?? "/", invite: options?.invite ?? "" }),
+    setMode: (mode) => set({ mode }),
+    close: () => set({ mode: null }),
+}));
+
+
+========================================================================
+FILE: web/src/stores/use-auth-store.ts
+LINES: 1-176
+========================================================================
+import { create } from "zustand";
+
+import { apiRequest } from "@/services/api/client";
+import { createSerializedWriter } from "@/lib/serialized-writer";
+import { useCanvasUiStore } from "@/stores/canvas/use-canvas-ui-store";
+import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
+import { broadcastSessionChange } from "@/lib/session-broadcast";
+import { clearSessionMediaCaches } from "@/lib/media-object-urls";
+
+const authTransitions = createSerializedWriter();
+let authEpoch = 0;
+let walletRequest = 0;
+
+async function switchCachedAccount(userId: string | null) {
+    const [{ switchCanvasAccount, flushCanvasAccount }, { switchAssetAccount, flushAssetAccount }] = await Promise.all([
+        import("@/stores/canvas/use-canvas-store"), import("@/stores/use-asset-store"),
+    ]);
+    const flushes = await Promise.allSettled([flushCanvasAccount(), flushAssetAccount()]);
+    const flushError = flushes.find((item): item is PromiseRejectedResult => item.status === "rejected");
+    if (flushError) throw flushError.reason;
+    const switches = await Promise.allSettled([switchCanvasAccount(userId, true), switchAssetAccount(userId, true)]);
+    const switchError = switches.find((item): item is PromiseRejectedResult => item.status === "rejected");
+    if (switchError) throw switchError.reason;
+}
+
+export type AuthUser = {
+    id: string;
+    email: string;
+    displayName: string;
+    role: "user" | "admin";
+    status: "active" | "banned";
+};
+
+export type WalletState = {
+    balance: number;
+    availableCredits?: number;
+    held: number;
+    member: boolean;
+    memberUntil: string | null;
+    planName?: string | null;
+    planId?: string | null;
+    tierName?: string | null;
+    tierLevel?: number | null;
+    generationDiscount?: number;
+    monthlyCredits?: number;
+    storage?: { usedBytes: number; limitBytes: number };
+};
+
+type AuthState = {
+    user: AuthUser | null;
+    wallet: WalletState | null;
+    ready: boolean;
+    sessionEpoch: number;
+    hydrate: () => Promise<void>;
+    externalSessionChanged: () => Promise<void>;
+    refreshWallet: () => Promise<void>;
+    login: (email: string, password: string) => Promise<AuthUser>;
+    register: (email: string, code: string, password: string, inviteCode?: string) => Promise<AuthUser>;
+    logout: () => Promise<void>;
+    sendCode: (email: string, purpose: "register" | "reset") => Promise<void>;
+    resetPassword: (email: string, code: string, password: string) => Promise<void>;
+    changePassword: (oldPassword: string, newPassword: string, expectedUserId?: string) => Promise<void>;
+};
+
+async function hydrateNow(set: (state: Partial<AuthState>) => void) {
+    const epoch = authEpoch;
+    const safeSet = (state: Partial<AuthState>) => { if (authEpoch === epoch) set(state); };
+    safeSet({ ready: false, user: null, wallet: null });
+    try {
+        let data: { user: AuthUser | null; wallet?: WalletState };
+        try { data = await apiRequest<{ user: AuthUser | null; wallet?: WalletState }>("/api/auth/me"); }
+        catch { throw new Error("无法确认登录状态，请检查网络后刷新页面"); }
+        if (authEpoch !== epoch) return;
+        try { await switchCachedAccount(data.user?.id ?? null); }
+        catch (error) {
+            if (error instanceof Error && error.name === "LocalMediaOwnershipError") throw new Error(error.message);
+            throw new Error("本地账户数据加载失败，请检查浏览器存储后刷新页面");
+        }
+        safeSet({ user: data.user, wallet: data.user ? (data.wallet ?? null) : null });
+    } finally { safeSet({ ready: true }); }
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
+    user: null,
+    wallet: null,
+    ready: false,
+    sessionEpoch: 0,
+
+    hydrate: () => authTransitions.write(async () => { authEpoch += 1; set({ sessionEpoch: authEpoch }); await hydrateNow(set); }),
+
+    externalSessionChanged: () => {
+        const epoch = ++authEpoch;
+        set({ ready: false, user: null, wallet: null, sessionEpoch: epoch });
+        return authTransitions.write(async () => { if (authEpoch === epoch) await hydrateNow(set); });
+    },
+
+    refreshWallet: async () => {
+        const owner = get().user?.id;
+        const epoch = authEpoch;
+        if (!owner || !get().ready) return;
+        const request = ++walletRequest;
+        const wallet = await apiRequest<WalletState>("/api/wallet", { headers: { "X-Sundas-User": owner } });
+        if (get().ready && get().user?.id === owner && authEpoch === epoch && request === walletRequest) set({ wallet });
+    },
+
+    login: (email, password) => authTransitions.write(async () => {
+        authEpoch += 1;
+        const epoch = authEpoch;
+        set({ ready: false, sessionEpoch: authEpoch });
+        try {
+            try { await switchCachedAccount(null); }
+            catch { throw new Error("本地数据保存失败，请检查浏览器存储空间后重试"); }
+            if (authEpoch === epoch) set({ user: null, wallet: null });
+        } finally { if (authEpoch === epoch) set({ ready: true }); }
+        const data = await apiRequest<{ user: AuthUser }>("/api/auth/login", { method: "POST", json: { email, password } });
+        broadcastSessionChange();
+        try { await hydrateNow(set); }
+        catch (error) { throw new Error(`登录已提交，但会话确认失败：${error instanceof Error ? error.message : "请刷新页面"}`); }
+        if (get().user?.id !== data.user.id) throw new Error("登录已提交，但会话未能确认，请刷新页面后重试");
+        return data.user;
+    }),
+
+    register: (email, code, password, inviteCode) => authTransitions.write(async () => {
+        authEpoch += 1;
+        const epoch = authEpoch;
+        set({ ready: false, sessionEpoch: authEpoch });
+        try {
+            try { await switchCachedAccount(null); }
+            catch { throw new Error("本地数据保存失败，请检查浏览器存储空间后重试"); }
+            if (authEpoch === epoch) set({ user: null, wallet: null });
+        } finally { if (authEpoch === epoch) set({ ready: true }); }
+        const data = await apiRequest<{ user: AuthUser }>("/api/auth/register", { method: "POST", json: { email, code, password, inviteCode: inviteCode || undefined } });
+        broadcastSessionChange();
+        try { await hydrateNow(set); }
+        catch (error) { throw new Error(`注册已提交，请勿重复注册；会话确认失败：${error instanceof Error ? error.message : "请刷新页面后登录"}`); }
+        if (get().user?.id !== data.user.id) throw new Error("注册已提交，但会话未能确认，请刷新页面后登录");
+        return data.user;
+    }),
+
+    logout: () => authTransitions.write(async () => {
+        const owner = get().user?.id;
+        authEpoch += 1;
+        const epoch = authEpoch;
+        set({ ready: false, sessionEpoch: authEpoch });
+        try {
+            try { await switchCachedAccount(null); }
+            catch { throw new Error("本地数据保存失败，尚未退出，请检查浏览器存储空间后重试"); }
+            if (authEpoch !== epoch) return;
+            if (authEpoch === epoch) set({ user: null, wallet: null });
+            await apiRequest("/api/auth/logout", { method: "POST", headers: owner ? { "X-Sundas-User": owner } : undefined });
+            broadcastSessionChange();
+        } finally {
+            if (authEpoch === epoch) set({ ready: true });
+        }
+    }),
+
+    sendCode: async (email, purpose) => {
+        await apiRequest("/api/auth/send-code", { method: "POST", json: { email, purpose } });
+    },
+
+    resetPassword: async (email, code, password) => {
+        await apiRequest("/api/auth/reset-password", { method: "POST", json: { email, code, password } });
+    },
+
+    changePassword: async (oldPassword, newPassword, expectedUserId) => {
+        await apiRequest("/api/auth/change-password", { method: "POST", headers: expectedUserId ? { "X-Sundas-User": expectedUserId } : undefined, json: { oldPassword, newPassword } });
+    },
+}));
+
+useAuthStore.subscribe((state, previous) => {
+    if (state.sessionEpoch !== previous.sessionEpoch || state.user?.id !== previous.user?.id) {
+        clearSessionMediaCaches();
+        useCanvasUiStore.getState().reset();
+        useWorkbenchAgentStore.getState().reset();
+    }
+});
+
+
+========================================================================
+FILE: web/src/stores/use-canvas-side-panel-store.ts
+LINES: 1-72
+========================================================================
+import { create } from "zustand";
+
+export const CANVAS_SIDE_PANEL_MOTION_MS = 500;
+export const CANVAS_SIDE_PANEL_MIN_WIDTH = 220;
+export const CANVAS_SIDE_PANEL_MAX_WIDTH = 480;
+export const CANVAS_SIDE_PANEL_DEFAULT_WIDTH = 280;
+
+const WIDTH_KEY = "canvas-side-panel-width";
+const OPEN_KEY = "canvas-side-panel-open";
+const NODE_VIEW_KEY = "canvas-side-panel-node-view";
+
+export type CanvasNodeViewMode = "list" | "grid";
+
+function initialWidth() {
+    if (typeof window === "undefined") return CANVAS_SIDE_PANEL_DEFAULT_WIDTH;
+    const stored = Number(localStorage.getItem(WIDTH_KEY));
+    if (!stored) return CANVAS_SIDE_PANEL_DEFAULT_WIDTH;
+    return Math.min(CANVAS_SIDE_PANEL_MAX_WIDTH, Math.max(CANVAS_SIDE_PANEL_MIN_WIDTH, stored));
+}
+
+function initialOpen() {
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.getItem(OPEN_KEY);
+    if (stored === "1") return true;
+    if (stored === "0") return false;
+    // 首次访问时小屏默认收起，避免移动端面板遮挡画布；桌面端保持展开。
+    return !window.matchMedia("(max-width: 767px)").matches;
+}
+
+function initialNodeView(): CanvasNodeViewMode {
+    if (typeof window === "undefined") return "list";
+    return localStorage.getItem(NODE_VIEW_KEY) === "grid" ? "grid" : "list";
+}
+
+type CanvasSidePanelStore = {
+    width: number;
+    panelOpen: boolean;
+    panelMounted: boolean;
+    panelClosing: boolean;
+    nodeViewMode: CanvasNodeViewMode;
+    setWidth: (width: number) => void;
+    setNodeViewMode: (mode: CanvasNodeViewMode) => void;
+    openPanel: () => void;
+    closePanel: () => void;
+    togglePanel: () => void;
+};
+
+export const useCanvasSidePanelStore = create<CanvasSidePanelStore>((set, get) => ({
+    width: initialWidth(),
+    panelOpen: initialOpen(),
+    panelMounted: initialOpen(),
+    panelClosing: false,
+    nodeViewMode: initialNodeView(),
+    setWidth: (width) => set({ width }),
+    setNodeViewMode: (mode) => {
+        if (typeof window !== "undefined") localStorage.setItem(NODE_VIEW_KEY, mode);
+        set({ nodeViewMode: mode });
+    },
+    openPanel: () => {
+        if (typeof window !== "undefined") localStorage.setItem(OPEN_KEY, "1");
+        set({ panelOpen: true, panelMounted: true, panelClosing: false });
+    },
+    closePanel: () => {
+        if (!get().panelMounted || get().panelClosing) return;
+        if (typeof window !== "undefined") localStorage.setItem(OPEN_KEY, "0");
+        set({ panelOpen: false, panelClosing: true });
+        setTimeout(() => {
+            if (get().panelClosing) set({ panelMounted: false, panelClosing: false });
+        }, CANVAS_SIDE_PANEL_MOTION_MS);
+    },
+    togglePanel: () => (get().panelOpen ? get().closePanel() : get().openPanel()),
+}));
+
+
+========================================================================
+FILE: web/src/stores/use-cloud-sync-status.ts
+LINES: 1-4
+========================================================================
+import { create } from 'zustand';
+import type { CloudSaveStatus } from '@/lib/cloud-sync-status';
+
+export const useCloudSyncStatus = create<{owner: string;session: number;projects: Record<string,CloudSaveStatus>;status: CloudSaveStatus;error: string}>(() => ({owner:'',session:0,projects:{},status:'reading',error:''}));
+
+
+========================================================================
+FILE: web/src/stores/use-config-store.ts
+LINES: 1-514
+========================================================================
+import { useMemo } from "react";
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { nanoid } from "nanoid";
+
+import i18n from "@/i18n";
+
+export type ApiCallFormat = "openai" | "gemini";
+export type ModelCapability = "image" | "video" | "text" | "audio";
+export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
+
+export type ChannelModel = {
+    name: string;
+    capability: ModelCapability;
+    script?: string;
+};
+
+export type ServerModelRouteInfo = {
+    id: string;
+    channelName: string;
+    unit: string;
+    baseCredits: number;
+    resolutionMultipliers: Record<string, number>;
+    health: string;
+    latencyMs?: number | null;
+    checkedAt?: string | null;
+};
+
+export type ServerModelInfo = {
+    id: string;
+    name: string;
+    upstreamName?: string;
+    capability: ModelCapability;
+    familyId?: string | null;
+    familyName?: string | null;
+    familyVendor?: string | null;
+    familyIcon?: string | null;
+    description?: string;
+    metadata?: Record<string, unknown>;
+    routes: ServerModelRouteInfo[];
+    routeCount: number;
+    minCredits: number;
+    maxCredits: number;
+    health: string;
+    unit?: string | null;
+    resolutionMultipliers: Record<string, number>;
+};
+
+export type ModelChannel = {
+    id: string;
+    name: string;
+    baseUrl: string;
+    apiKey: string;
+    apiFormat: ApiCallFormat;
+    models: ChannelModel[];
+};
+
+export type AiConfig = {
+    channelMode: "remote" | "local";
+    baseUrl: string;
+    apiKey: string;
+    apiFormat: ApiCallFormat;
+    channels: ModelChannel[];
+    model: string;
+    imageModel: string;
+    videoModel: string;
+    videoRouteId?: string;
+    textModel: string;
+    audioModel: string;
+    audioVoice: string;
+    audioFormat: string;
+    audioSpeed: string;
+    audioInstructions: string;
+    videoSeconds: string;
+    vquality: string;
+    videoGenerateAudio: string;
+    videoWatermark: string;
+    videoMode: string;
+    systemPrompt: string;
+    reasoningEffort: ReasoningEffort;
+    models: string[];
+    quality: string;
+    size: string;
+    background: string;
+    count: string;
+    canvasImageCount: string;
+    proxyEnabled: boolean;
+    proxyUrl: string;
+    nodeRegenerateBehavior: "new-node" | "overwrite";
+    autoFocusOnSelect: boolean;
+};
+
+export type ChannelCredentialsImportResult = {
+    status: "created" | "updated" | "missing-base-url" | "invalid-base-url";
+    channelName?: string;
+};
+
+export const CONFIG_STORE_KEY = "sundas:ai_config_store";
+const CHANNEL_MODEL_SEPARATOR = "::";
+const OPENAI_BASE_URL = "https://api.openai.com";
+const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
+export const LOCAL_PROXY_PACKAGE = "@basketikun/canvas-proxy";
+export const DEFAULT_LOCAL_PROXY_URL = "https://example.invalid";
+
+export const defaultConfig: AiConfig = {
+    channelMode: "local",
+    baseUrl: OPENAI_BASE_URL,
+    apiKey: "",
+    apiFormat: "openai",
+    channels: [
+        {
+            id: "default",
+            name: i18n.t("config.channels.defaultName"),
+            baseUrl: OPENAI_BASE_URL,
+            apiKey: "",
+            apiFormat: "openai",
+            models: [
+                { name: "gpt-image-2", capability: "image" },
+                { name: "grok-imagine-video", capability: "video" },
+                { name: "gpt-5.5", capability: "text" },
+                { name: "gpt-4o-mini-tts", capability: "audio" },
+            ],
+        },
+    ],
+    model: "default::gpt-image-2",
+    imageModel: "default::gpt-image-2",
+    videoModel: "default::grok-imagine-video",
+    videoRouteId: "",
+    textModel: "default::gpt-5.5",
+    audioModel: "default::gpt-4o-mini-tts",
+    audioVoice: "alloy",
+    audioFormat: "mp3",
+    audioSpeed: "1",
+    audioInstructions: "",
+    videoSeconds: "6",
+    vquality: "720",
+    videoGenerateAudio: "true",
+    videoWatermark: "false",
+    videoMode: "frames",
+    systemPrompt: "",
+    reasoningEffort: "auto",
+    models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
+    quality: "auto",
+    size: "1:1",
+    background: "",
+    count: "1",
+    canvasImageCount: "3",
+    proxyEnabled: false,
+    proxyUrl: DEFAULT_LOCAL_PROXY_URL,
+    nodeRegenerateBehavior: "new-node",
+    autoFocusOnSelect: false,
+};
+
+type ConfigStore = {
+    config: AiConfig;
+    serverModels: ServerModelInfo[];
+    isConfigOpen: boolean;
+    shouldPromptContinue: boolean;
+    updateConfig: <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
+    importChannelCredentials: (input: { baseUrl?: string | null; apiKey?: string | null }) => ChannelCredentialsImportResult;
+    isAiConfigReady: (config: AiConfig, model: string) => boolean;
+    openConfigDialog: (shouldPromptContinue?: boolean) => void;
+    setConfigDialogOpen: (isOpen: boolean) => void;
+    clearPromptContinue: () => void;
+};
+
+const VIDEO_KEYWORDS = ["video", "seedance", "sora", "veo", "kling", "wan", "hailuo"];
+
+export function boolConfig(value: string, fallback: boolean) {
+    return value ? value === "true" : fallback;
+}
+const AUDIO_KEYWORDS = ["audio", "tts", "speech", "voice", "music", "sound"];
+const IMAGE_KEYWORDS = ["seedream", "gpt-image", "image", "dall-e", "dalle", "imagen", "flux", "sdxl", "stable-diffusion", "midjourney"];
+
+/** Best-effort default capability for a freshly fetched model name; user can override in the channel editor. */
+export function guessCapability(name: string): ModelCapability {
+    const value = name.toLowerCase();
+    if (VIDEO_KEYWORDS.some((keyword) => value.includes(keyword))) return "video";
+    if (AUDIO_KEYWORDS.some((keyword) => value.includes(keyword))) return "audio";
+    if (IMAGE_KEYWORDS.some((keyword) => value.includes(keyword))) return "image";
+    return "text";
+}
+
+function findChannelModel(config: AiConfig, value: string): { channel: ModelChannel; model: ChannelModel } | null {
+    const decoded = decodeChannelModel(value);
+    const name = decoded?.model || value;
+    const channel = decoded ? config.channels.find((item) => item.id === decoded.channelId) : config.channels.find((item) => item.models.some((model) => model.name === name));
+    const model = channel?.models.find((item) => item.name === name);
+    return channel && model ? { channel, model } : null;
+}
+
+export function modelCapabilityOf(config: AiConfig, value: string): ModelCapability | undefined {
+    return findChannelModel(config, value)?.model.capability;
+}
+
+export function modelMatchesCapability(config: AiConfig, value: string, capability?: ModelCapability) {
+    if (!capability) return true;
+    return modelCapabilityOf(config, value) === capability;
+}
+
+export function resolveModelForCapability(config: AiConfig, currentModel: string | undefined, capability: ModelCapability) {
+    const defaultModel = capability === "image" ? config.imageModel : capability === "video" ? config.videoModel : capability === "audio" ? config.audioModel : config.textModel;
+    const fallbackModel = capability === "image" ? defaultConfig.imageModel : capability === "video" ? defaultConfig.videoModel : capability === "audio" ? defaultConfig.audioModel : defaultConfig.textModel;
+    for (const model of [currentModel, defaultModel]) {
+        if (!model) continue;
+        const configuredCapability = modelCapabilityOf(config, model);
+        // Keep unavailable selections visible so the readiness check blocks the
+        // request. Only a known capability switch may choose another model.
+        if (!configuredCapability || configuredCapability === capability) return model;
+    }
+    return fallbackModel;
+}
+
+export function selectableModelsByCapability(config: AiConfig, capability?: ModelCapability) {
+    if (!capability) return config.models;
+    return config.channels.flatMap((channel) => channel.models.filter((model) => model.capability === capability).map((model) => encodeChannelModel(channel.id, model.name)));
+}
+
+/** Generation requests always use the site's gateway. */
+export function resolveModelScript(_config: AiConfig, _value: string) {
+    return "";
+}
+
+function isAiConfigReady(config: AiConfig, model: string) {
+    const match = findChannelModel(config, model);
+    return Boolean(match && match.channel.baseUrl.trim() && match.channel.apiKey.trim());
+}
+
+export const useConfigStore = create<ConfigStore>()(
+    persist(
+        (set, get) => ({
+            config: defaultConfig,
+            serverModels: [],
+            isConfigOpen: false,
+            shouldPromptContinue: false,
+            updateConfig: (key, value) =>
+                set((state) => ({
+                    config: {
+                        ...state.config,
+                        [key]: value,
+                    },
+                })),
+            importChannelCredentials: (input) => {
+                const currentConfig = get().config;
+                const result = upsertChannelCredentials(currentConfig, input);
+                if (result.config !== currentConfig) set({ config: result.config });
+                return { status: result.status, channelName: result.channelName };
+            },
+            isAiConfigReady: (config, model) => isAiConfigReady(config, model),
+            openConfigDialog: (shouldPromptContinue = false) => set({ isConfigOpen: true, shouldPromptContinue }),
+            setConfigDialogOpen: (isConfigOpen) => set({ isConfigOpen }),
+            clearPromptContinue: () => set({ shouldPromptContinue: false }),
+        }),
+        {
+            name: CONFIG_STORE_KEY,
+            partialize: (state) => ({ config: state.config }),
+            merge: (persisted, current) => {
+                const persistedState = (persisted || {}) as Partial<ConfigStore>;
+                const persistedConfig = (persistedState.config || {}) as Partial<AiConfig>;
+                const config = { ...defaultConfig, ...persistedConfig };
+                if (!Array.isArray(persistedConfig.channels)) config.channels = [];
+                const channels = normalizeChannels(config);
+                const models = modelOptionsFromChannels(channels);
+                return {
+                    ...current,
+                    config: {
+                        ...config,
+                        channelMode: "local",
+                        apiFormat: normalizeApiFormat(config.apiFormat),
+                        channels,
+                        models,
+                        imageModel: normalizeModelOptionValue(config.imageModel || config.model, channels),
+                        videoModel: normalizeModelOptionValue(config.videoModel, channels),
+                        textModel: normalizeModelOptionValue(config.textModel || config.model, channels),
+                        audioModel: normalizeModelOptionValue(config.audioModel || defaultConfig.audioModel, channels),
+                        audioVoice: config.audioVoice || defaultConfig.audioVoice,
+                        audioFormat: config.audioFormat || defaultConfig.audioFormat,
+                        audioSpeed: config.audioSpeed || defaultConfig.audioSpeed,
+                        audioInstructions: config.audioInstructions || "",
+                        reasoningEffort: config.reasoningEffort || "auto",
+                        videoSeconds: config.videoSeconds || "6",
+                        vquality: config.vquality || "720",
+                        videoGenerateAudio: config.videoGenerateAudio || "true",
+                        videoWatermark: config.videoWatermark || "false",
+                        videoMode: config.videoMode === "reference" ? "reference" : "frames",
+                        canvasImageCount: config.canvasImageCount || "3",
+                        proxyEnabled: Boolean(config.proxyEnabled),
+                        proxyUrl: config.proxyUrl || DEFAULT_LOCAL_PROXY_URL,
+                        nodeRegenerateBehavior: config.nodeRegenerateBehavior === "overwrite" ? "overwrite" : "new-node",
+                        autoFocusOnSelect: Boolean(config.autoFocusOnSelect),
+                    },
+                };
+            },
+        },
+    ),
+);
+
+export function useEffectiveConfig() {
+    const config = useConfigStore((state) => state.config);
+    return useMemo(() => ({ ...config, channelMode: "local" as const }), [config]);
+}
+
+/** Normalize a mixed list of raw model names or model objects into deduped ChannelModel entries. */
+export function normalizeChannelModels(models: Array<string | ChannelModel> | undefined): ChannelModel[] {
+    const seen = new Set<string>();
+    const result: ChannelModel[] = [];
+    for (const item of models || []) {
+        const name = (typeof item === "string" ? item : item?.name || "").trim();
+        if (!name || seen.has(name)) continue;
+        seen.add(name);
+        const capability = typeof item === "string" ? guessCapability(name) : item.capability || guessCapability(name);
+        const script = typeof item === "string" ? undefined : item.script?.trim() || undefined;
+        result.push({ name, capability, script });
+    }
+    return result;
+}
+
+export function createModelChannel(channel?: Partial<ModelChannel>): ModelChannel {
+    const apiFormat = normalizeApiFormat(channel?.apiFormat);
+    return {
+        id: channel?.id?.trim() || nanoid(),
+        name: channel?.name?.trim() || i18n.t("config.channels.newName"),
+        baseUrl: channel?.baseUrl?.trim() || defaultBaseUrlForApiFormat(apiFormat),
+        apiKey: channel?.apiKey || "",
+        apiFormat,
+        models: normalizeChannelModels(channel?.models),
+    };
+}
+
+export function upsertChannelCredentials(
+    config: AiConfig,
+    input: { baseUrl?: string | null; apiKey?: string | null },
+): ChannelCredentialsImportResult & { config: AiConfig } {
+    const rawBaseUrl = input.baseUrl?.trim() || "";
+    if (!rawBaseUrl) return { status: "missing-base-url", config };
+    if (!isHttpBaseUrl(rawBaseUrl)) return { status: "invalid-base-url", config };
+
+    const baseUrl = normalizeImportedBaseUrl(rawBaseUrl);
+    const apiKey = input.apiKey?.trim() || "";
+    const matchingIndex = config.channels.findIndex((channel) => normalizedBaseUrlKey(channel.baseUrl) === normalizedBaseUrlKey(baseUrl));
+
+    if (matchingIndex >= 0) {
+        const existing = config.channels[matchingIndex];
+        if (existing.baseUrl === baseUrl && (!apiKey || existing.apiKey === apiKey)) {
+            return { status: "updated", channelName: existing.name, config };
+        }
+        const updated = { ...existing, baseUrl, ...(apiKey ? { apiKey } : {}) };
+        const channels = config.channels.map((channel, index) => (index === matchingIndex ? updated : channel));
+        return { status: "updated", channelName: existing.name, config: { ...config, channels } };
+    }
+
+    const channel = createModelChannel({
+        name: importedChannelName(baseUrl),
+        baseUrl,
+        apiKey,
+        apiFormat: "openai",
+        models: [],
+    });
+    return { status: "created", channelName: channel.name, config: { ...config, channels: [...config.channels, channel] } };
+}
+
+function isHttpBaseUrl(baseUrl: string) {
+    try {
+        const url = new URL(baseUrl);
+        return (url.protocol === "http:" || url.protocol === "https:") && Boolean(url.hostname);
+    } catch {
+        return false;
+    }
+}
+
+function normalizedBaseUrlKey(baseUrl: string) {
+    try {
+        return stripTrailingApiVersion(normalizeImportedBaseUrl(baseUrl));
+    } catch {
+        return stripTrailingApiVersion(baseUrl.trim().replace(/\/+$/, ""));
+    }
+}
+
+function normalizeImportedBaseUrl(baseUrl: string) {
+    const url = new URL(baseUrl.trim());
+    url.hash = "";
+    return url.toString().replace(/\/+$/, "");
+}
+
+function stripTrailingApiVersion(baseUrl: string) {
+    return baseUrl.replace(/\/v1$/i, "");
+}
+
+function importedChannelName(baseUrl: string) {
+    const hostname = new URL(baseUrl).hostname;
+    return hostname.replace(/^(?:www|api)\./i, "") || i18n.t("config.channels.newName");
+}
+
+export function encodeChannelModel(channelId: string, model: string) {
+    return `${channelId}${CHANNEL_MODEL_SEPARATOR}${model.trim()}`;
+}
+
+export function isChannelModelValue(value: string) {
+    return value.includes(CHANNEL_MODEL_SEPARATOR);
+}
+
+export function decodeChannelModel(value: string) {
+    const index = value.indexOf(CHANNEL_MODEL_SEPARATOR);
+    if (index < 0) return null;
+    return { channelId: value.slice(0, index), model: value.slice(index + CHANNEL_MODEL_SEPARATOR.length) };
+}
+
+export function modelOptionName(value: string) {
+    return decodeChannelModel(value)?.model || value;
+}
+
+export function modelOptionLabel(config: AiConfig, value: string) {
+    const decoded = decodeChannelModel(value);
+    if (!decoded) return value;
+    const serverModel = useConfigStore.getState().serverModels.find((model) => model.id === decoded.model);
+    if (serverModel) return serverModel.name;
+    const channel = config.channels.find((item) => item.id === decoded.channelId);
+    return channel ? `${decoded.model}（${channel.name}）` : decoded.model;
+}
+
+export function modelOptionsFromChannels(channels: ModelChannel[]) {
+    return uniqueModelOptions(channels.flatMap((channel) => channel.models.map((model) => encodeChannelModel(channel.id, model.name))));
+}
+
+export function normalizeModelOptionValue(value: string | undefined, channels: ModelChannel[]) {
+    const model = (value || "").trim();
+    if (!model) return "";
+    const decoded = decodeChannelModel(model);
+    if (decoded) {
+        const channel = channels.find((item) => item.id === decoded.channelId);
+        return channel && channel.models.some((item) => item.name === decoded.model) ? model : "";
+    }
+    const channel = channels.find((item) => item.models.some((entry) => entry.name === model)) || channels[0];
+    return channel && channel.models.some((item) => item.name === model) ? encodeChannelModel(channel.id, model) : model;
+}
+
+export function resolveModelChannel(config: AiConfig, value: string) {
+    const decoded = decodeChannelModel(value);
+    const model = decoded?.model || value;
+    const matched = decoded ? config.channels.find((channel) => channel.id === decoded.channelId) : config.channels.find((channel) => channel.models.some((item) => item.name === model));
+    return matched || config.channels[0] || createModelChannel({ id: "default", name: i18n.t("config.channels.defaultName"), baseUrl: config.baseUrl, apiKey: config.apiKey, apiFormat: config.apiFormat, models: config.models.map(modelOptionName).map((name) => ({ name, capability: guessCapability(name) })) });
+}
+
+export function resolveModelRequestConfig(config: AiConfig, value: string) {
+    return {
+        ...config,
+        model: modelOptionName(value || config.model),
+        baseUrl: `${window.location.origin}/api`,
+        apiKey: "server",
+        apiFormat: "openai" as const,
+    };
+}
+
+function normalizeChannels(config: AiConfig) {
+    const persistedChannels = Array.isArray(config.channels) ? config.channels : [];
+    const channels = persistedChannels.map((channel, index) =>
+        createModelChannel({
+            ...channel,
+            id: channel.id || (index === 0 ? "default" : `channel-${index + 1}`),
+            name: channel.name || (index === 0 ? i18n.t("config.channels.defaultName") : i18n.t("config.channels.indexedName", { index: index + 1 })),
+            models: normalizeChannelModels(channel.models),
+        }),
+    );
+    if (!channels.length) {
+        channels.push(
+            createModelChannel({
+                id: "default",
+                name: i18n.t("config.channels.defaultName"),
+                baseUrl: config.baseUrl || defaultConfig.baseUrl,
+                apiKey: config.apiKey || "",
+                apiFormat: config.apiFormat || defaultConfig.apiFormat,
+                models: normalizeChannelModels([config.model, config.imageModel, config.videoModel, config.textModel, config.audioModel].map(modelOptionName)),
+            }),
+        );
+    }
+    return channels;
+}
+
+export function defaultBaseUrlForApiFormat(apiFormat: ApiCallFormat) {
+    if (apiFormat === "gemini") return GEMINI_BASE_URL;
+    return OPENAI_BASE_URL;
+}
+
+function normalizeApiFormat(apiFormat: unknown): ApiCallFormat {
+    return apiFormat === "gemini" ? apiFormat : "openai";
+}
+
+function uniqueModelOptions(models: string[]) {
+    return Array.from(new Set((models || []).map((model) => model.trim()).filter(Boolean)));
+}
+
+export function buildApiUrl(baseUrl: string, path: string) {
+    const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
+    const lowerBaseUrl = normalizedBaseUrl.toLowerCase();
+    const apiBaseUrl = lowerBaseUrl.endsWith("/v1") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1`;
+    return withLocalProxy(`${apiBaseUrl}${path}`);
+}
+
+export function normalizeLocalProxyUrl(value: string) {
+    const trimmed = value.trim().replace(/\/+$/, "");
+    if (!trimmed) return "";
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+}
+
+/** Prefix an outgoing request with the local forwarding proxy so the browser is not blocked by CORS. */
+export function withLocalProxy(url: string) {
+    // Requests to our gateway must retain the browser session and never use a legacy forwarding proxy.
+    if (typeof window !== "undefined" && /^https?:\/\//i.test(url) && new URL(url).origin === window.location.origin) return url;
+    const { proxyEnabled, proxyUrl } = useConfigStore.getState().config;
+    if (!proxyEnabled || !/^https?:\/\//i.test(url)) return url;
+    const base = normalizeLocalProxyUrl(proxyUrl);
+    if (!base || url.startsWith(`${base}/`)) return url;
+    return `${base}/${url}`;
+}
+
+
+========================================================================
+FILE: web/src/stores/use-creative-agent-store.ts
+LINES: 1-10
+========================================================================
+import { create } from 'zustand';
+import { useAuthStore } from './use-auth-store';
+import type { AgentState, AgentThread, CreativeSkill, AgentCatalog } from '@/services/api/creative-agent';
+
+type State = { projectId: string; open: boolean; tab: 'chat' | 'skills'; snapshot: AgentState | null; threads: AgentThread[]; skills: CreativeSkill[]; catalog: AgentCatalog | null; busy: boolean; error: string };
+const initial: State = { projectId: '', open: false, tab: 'chat', snapshot: null, threads: [], skills: [], catalog: null, busy: false, error: '' };
+export const useCreativeAgentStore = create<State & { patch: (value: Partial<State>) => void; reset: () => void }>(set => ({ ...initial, patch: value => set(value), reset: () => set(initial) }));
+useAuthStore.subscribe((state, previous) => {
+    if (state.sessionEpoch !== previous.sessionEpoch || state.user?.id !== previous.user?.id) useCreativeAgentStore.getState().reset();
+});
+
+
+========================================================================
+FILE: web/src/stores/use-operation-progress.ts
+LINES: 1-85
+========================================================================
+import { create } from "zustand";
+import { nanoid } from "nanoid";
+
+export type OperationPhase = "preparing" | "transferring" | "processing" | "done" | "error";
+
+export type OperationProgress = {
+    id: string;
+    title: string;
+    detail: string;
+    phase: OperationPhase;
+    totalBytes?: number;
+    loadedBytes?: number;
+    totalFiles?: number;
+    doneFiles?: number;
+    startedAt: number;
+    updatedAt: number;
+};
+
+type ProgressStore = { entries: Record<string, OperationProgress>; remove: (id: string) => void };
+
+/**
+ * 操作进度（sundas 精简版）。
+ *
+ * BeefTV 这套 store 还带「画布节点任务」聚合与速率采样；sundas 目前只有导演台
+ * 导出白膜视频会用到它，所以只保留 startOperation 的进度契约，
+ * 供调用方上报进度/完成/失败，UI 侧按需读取 entries。
+ */
+export const useOperationProgress = create<ProgressStore>((set) => ({
+    entries: {},
+    remove: (id) =>
+        set((state) => {
+            const entries = { ...state.entries };
+            delete entries[id];
+            return { entries };
+        }),
+}));
+
+export function startOperation(title: string, options: { detail?: string; totalBytes?: number; totalFiles?: number } = {}) {
+    const id = nanoid();
+    const startedAt = Date.now();
+    let finished = false;
+
+    const patch = (next: Partial<OperationProgress>) => {
+        if (finished) return;
+        useOperationProgress.setState((state) => {
+            const previous = state.entries[id];
+            if (!previous) return state;
+            return { entries: { ...state.entries, [id]: { ...previous, ...next, updatedAt: Date.now() } } };
+        });
+    };
+
+    useOperationProgress.setState((state) => ({
+        entries: {
+            ...state.entries,
+            [id]: {
+                id,
+                title,
+                detail: options.detail || "正在准备文件",
+                phase: "preparing",
+                totalBytes: options.totalBytes,
+                totalFiles: options.totalFiles,
+                startedAt,
+                updatedAt: startedAt,
+            },
+        },
+    }));
+
+    const settle = (phase: "done" | "error", detail: string) => {
+        patch({ phase, detail });
+        finished = true;
+        if (phase === "done") window.setTimeout(() => useOperationProgress.getState().remove(id), 4500);
+    };
+
+    return {
+        update: patch,
+        progress: (loaded: number, total?: number) =>
+            patch({ loadedBytes: loaded, totalBytes: total, phase: total && loaded >= total ? "processing" : "transferring", detail: total && loaded >= total ? "文件已传输，正在确认与保存" : "正在传输文件" }),
+        done: (detail = "处理完成") => settle("done", detail),
+        fail: (detail = "处理没有完成，请重试") => settle("error", detail),
+        dismiss: () => {
+            finished = true;
+            useOperationProgress.getState().remove(id);
+        },
+    };
+}
+
+
+========================================================================
+FILE: web/src/stores/use-promo-contact-store.ts
+LINES: 1-13
+========================================================================
+import { create } from "zustand";
+
+type PromoContactState = {
+    open: boolean;
+    openDialog: () => void;
+    closeDialog: () => void;
+};
+
+export const usePromoContactStore = create<PromoContactState>((set) => ({
+    open: false,
+    openDialog: () => set({ open: true }),
+    closeDialog: () => set({ open: false }),
+}));
+
+
+========================================================================
+FILE: web/src/stores/use-theme-store.ts
+LINES: 1-17
+========================================================================
+import { create } from "zustand";
+
+export type ThemeName = "light" | "dark";
+
+type ThemeStore = {
+    theme: ThemeName;
+    setTheme: (theme: ThemeName) => void;
+};
+
+/**
+ * 主题已锁定为暗色（浅色模式功能已移除）。
+ * 保留 store 形状与 setTheme 空实现，画布等依赖 theme 的组件零改动。
+ */
+export const useThemeStore = create<ThemeStore>()((set) => ({
+    theme: "dark",
+    setTheme: () => set({ theme: "dark" }),
+}));
+
+
+========================================================================
+FILE: web/src/stores/use-user-store.ts
+LINES: 1-18
+========================================================================
+import { create } from "zustand";
+
+export type LocalUser = {
+    id: string;
+    username: string;
+    displayName: string;
+    avatarUrl: string;
+};
+
+type UserStore = {
+    user: LocalUser | null;
+    clearSession: () => void;
+};
+
+export const useUserStore = create<UserStore>()((set) => ({
+    user: null,
+    clearSession: () => set({ user: null }),
+}));
+
+
+========================================================================
+FILE: web/src/stores/use-workbench-agent-store.ts
+LINES: 1-66
+========================================================================
+import { create } from "zustand";
+
+// The Agent panel dispatches commands through this store to set workbench prompts and optionally start generation.
+// The panel writes model, quality, size, count, and other options to use-config-store, which workbench pages read directly.
+// Prompt and run are sent here; pages identify new commands by nonce and call clear after consuming them.
+
+export type WorkbenchCommand = {
+    nonce: number;
+    taskId?: string;
+    prompt?: string;
+    run: boolean;
+};
+
+export type WorkbenchGenerationTask = {
+    id: string;
+    kind: "image" | "video";
+    status: "queued" | "running" | "succeeded" | "failed";
+    prompt?: string;
+    createdAt: string;
+    updatedAt: string;
+    successCount?: number;
+    failCount?: number;
+    error?: string;
+};
+
+type WorkbenchAgentStore = {
+    imageCommand: WorkbenchCommand | null;
+    videoCommand: WorkbenchCommand | null;
+    tasks: WorkbenchGenerationTask[];
+    dispatchImage: (command: Omit<WorkbenchCommand, "nonce" | "taskId">) => string | undefined;
+    dispatchVideo: (command: Omit<WorkbenchCommand, "nonce" | "taskId">) => string | undefined;
+    updateTask: (id: string, patch: Partial<Pick<WorkbenchGenerationTask, "status" | "successCount" | "failCount" | "error">>) => void;
+    clearImageCommand: () => void;
+    clearVideoCommand: () => void;
+    reset: () => void;
+};
+
+let nonce = 0;
+const nextNonce = () => (nonce += 1);
+
+export const useWorkbenchAgentStore = create<WorkbenchAgentStore>((set) => ({
+    imageCommand: null,
+    videoCommand: null,
+    tasks: [],
+    dispatchImage: (command) => {
+        const commandNonce = nextNonce();
+        const task = command.run ? createTask("image", commandNonce, command.prompt) : undefined;
+        set((state) => ({ imageCommand: { ...command, nonce: commandNonce, taskId: task?.id }, tasks: task ? [task, ...state.tasks].slice(0, 30) : state.tasks }));
+        return task?.id;
+    },
+    dispatchVideo: (command) => {
+        const commandNonce = nextNonce();
+        const task = command.run ? createTask("video", commandNonce, command.prompt) : undefined;
+        set((state) => ({ videoCommand: { ...command, nonce: commandNonce, taskId: task?.id }, tasks: task ? [task, ...state.tasks].slice(0, 30) : state.tasks }));
+        return task?.id;
+    },
+    updateTask: (id, patch) => set((state) => ({ tasks: state.tasks.map((task) => (task.id === id ? { ...task, ...patch, updatedAt: new Date().toISOString() } : task)) })),
+    clearImageCommand: () => set({ imageCommand: null }),
+    clearVideoCommand: () => set({ videoCommand: null }),
+    reset: () => set({ imageCommand: null, videoCommand: null, tasks: [] }),
+}));
+
+function createTask(kind: "image" | "video", commandNonce: number, prompt?: string): WorkbenchGenerationTask {
+    const now = new Date().toISOString();
+    return { id: `${kind}-${commandNonce}`, kind, status: "queued", prompt, createdAt: now, updatedAt: now };
+}
+
+
+========================================================================
+FILE: web/src/styles/canvas-redesigned.css
+LINES: 1-148
+========================================================================
+.canvas-redesigned .agent-tabs .ant-tabs-nav {
+    margin-bottom: 0 !important;
+}.canvas-redesigned .agent-tabs .ant-tabs-tab {
+    padding: 6px 10px !important;
+    border-radius: 6px !important;
+    margin: 0 2px !important;
+    transition: all 0.15s ease !important;
+}.canvas-redesigned .agent-tabs .ant-tabs-tab:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+}.canvas-redesigned .agent-tabs .ant-tabs-tab-active {
+    background: rgba(255, 255, 255, 0.08) !important;
+}.canvas-redesigned .agent-tabs .ant-tabs-ink-bar {
+    display: none !important;
+}.canvas-redesigned .agent-select .ant-select-selector {
+    border: none !important;
+    border-radius: 6px !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    padding: 4px 8px !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    transition: background 0.15s ease !important;
+}.canvas-redesigned .agent-select .ant-select-selector:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+}.canvas-redesigned .agent-select.ant-select-focused .ant-select-selector {
+    background: rgba(255, 255, 255, 0.08) !important;
+    box-shadow: none !important;
+}.canvas-redesigned .agent-select .ant-select-selection-search-input {
+    height: 16px !important;
+}.canvas-redesigned .agent-select .ant-select-selection-item {
+    font-size: 11px !important;
+    line-height: 16px !important;
+}.canvas-redesigned .agent-select .ant-select-arrow {
+    font-size: 10px !important;
+}.canvas-redesigned .agent-select.ant-select-multiple .ant-select-selection-item {
+    border-radius: 4px !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: none !important;
+    padding: 0 6px !important;
+    margin: 2px !important;
+    font-size: 10px !important;
+    height: 18px !important;
+    line-height: 18px !important;
+}.canvas-redesigned .ant-select-dropdown {
+    border-radius: 8px !important;
+    overflow: hidden !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3) !important;
+    backdrop-filter: blur(20px) !important;
+    padding: 4px !important;
+}.canvas-redesigned .ant-select-item {
+    border-radius: 4px !important;
+    padding: 6px 8px !important;
+    margin: 1px 0 !important;
+    font-size: 11px !important;
+    transition: background 0.1s ease !important;
+}.canvas-redesigned .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+    background: rgba(255, 255, 255, 0.06) !important;
+}.canvas-redesigned .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+    background: rgba(255, 255, 255, 0.1) !important;
+    font-weight: 500 !important;
+}.canvas-redesigned .ant-tag {
+    border-radius: 4px !important;
+    padding: 0 6px !important;
+    font-size: 10px !important;
+    line-height: 16px !important;
+    border: none !important;
+}.canvas-redesigned .ant-input-textarea {
+    border-radius: 6px !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    background: rgba(255, 255, 255, 0.03) !important;
+    transition: all 0.15s ease !important;
+}.canvas-redesigned .ant-input-textarea:hover {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+}.canvas-redesigned .ant-input-textarea-focused,
+.canvas-redesigned .ant-input-textarea:focus {
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    box-shadow: none !important;
+}.canvas-redesigned .ant-input-textarea textarea {
+    font-size: 11px !important;
+    line-height: 1.5 !important;
+}.canvas-redesigned .thin-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}.canvas-redesigned .thin-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}.canvas-redesigned .thin-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 2px;
+}.canvas-redesigned .thin-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* 画布生成框：即梦风格的胶囊按钮 */
+.canvas-gen-panel .canvas-gen-chip {
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+.canvas-gen-panel .canvas-gen-chip:hover,
+.canvas-gen-panel .canvas-gen-chip[data-state="open"] {
+    background: var(--gen-chip-hover) !important;
+}
+.canvas-gen-panel .canvas-gen-chip .ant-btn-icon {
+    margin-inline-end: 0 !important;
+    opacity: 0.75;
+}
+.canvas-gen-panel .canvas-gen-chip .canvas-select-chevron {
+    width: 14px;
+    height: 14px;
+    opacity: 0.6;
+}
+.canvas-gen-panel .canvas-gen-icon:hover,
+.canvas-gen-panel .ant-btn.canvas-gen-icon:not(:disabled):hover {
+    background: var(--gen-chip-hover) !important;
+}
+.canvas-gen-panel .canvas-gen-chip:focus-visible,
+.canvas-gen-panel .canvas-gen-icon:focus-visible {
+    outline: 2px solid var(--gen-border-focus);
+    outline-offset: 2px;
+}
+
+/* 漫剧制作面板（画布右侧）：6 个标签。
+   左右各留 16px 边距跟标题对齐，标签之间用固定 18px 间距紧凑排列，
+   不再用 space-between 拉满整行（那样间距会被撑到 70px+，看着很散）。 */
+aside[aria-label="漫剧制作工作台"] .production-tabs.ant-tabs {
+    padding: 0 16px;
+    margin-top: 4px;
+}
+
+aside[aria-label="漫剧制作工作台"] .production-tabs.ant-tabs > .ant-tabs-nav {
+    margin: 0;
+}
+
+aside[aria-label="漫剧制作工作台"] .production-tabs .ant-tabs-nav-list {
+    display: flex;
+    width: auto;
+    gap: 18px;
+    justify-content: flex-start;
+}
+
+aside[aria-label="漫剧制作工作台"] .production-tabs .ant-tabs-tab {
+    margin: 0 !important;
+    padding: 0 0 9px !important;
+    justify-content: center;
+}
+
+aside[aria-label="漫剧制作工作台"] .production-tabs .ant-tabs-tab + .ant-tabs-tab {
+    margin-left: 0 !important;
+}
+
+
+========================================================================
+FILE: web/src/styles/creation-redesign.css
+LINES: 1-554
+========================================================================
+/* 创作工作台（图片 / 视频 / 对话）—— 即梦规范落地
+   侧栏 #171717 / 内容 #121212 / 合成器 24px 圆角 + 1px 亮箍 / 工具 pill 32px
+   主按钮反白 / 所有控件圆角 8 / 无发光无彩色渐变 */
+
+/* ---------------------------------------------------------------- 侧栏 */
+.creation-shell .creation-sidebar {
+    width: 240px;
+    background: var(--bg-rail);
+    border-right: 1px solid var(--line);
+}
+
+.creation-shell .creation-sidebar > div:first-child {
+    height: 64px;
+    padding: 0 16px;
+}
+
+.creation-shell .creation-sidebar h2 {
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 500;
+    color: var(--text-4);
+}
+
+.creation-shell .creation-sidebar nav a {
+    min-height: 36px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-3) !important;
+    transition:
+        background-color 160ms cubic-bezier(0.4, 0, 0.2, 1),
+        color 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-shell .creation-sidebar nav a:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1) !important;
+}
+
+.creation-shell .creation-sidebar nav a[aria-current="page"] {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-1) !important;
+}
+
+.creation-shell .creation-sidebar nav a > span:last-child {
+    font-size: 11px;
+    color: var(--text-5);
+}
+
+/* ------------------------------------------------------------ 顶栏/内容 */
+.creation-shell main .creation-top-actions {
+    height: 60px;
+    padding: 0 24px;
+    border-bottom: 0;
+    background: transparent;
+}
+
+.creation-shell main .creation-top-actions button {
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* 「加载更早记录」：居中胶囊，不再贴左悬空 */
+.creation-shell main .creation-load-earlier.ant-btn {
+    display: flex;
+    width: fit-content;
+    margin: 0 auto 16px;
+    height: 32px;
+    padding: 0 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.creation-shell main .creation-load-earlier.ant-btn:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1);
+}
+
+/* -------------------------------------------------------------- 空态 */
+.creation-shell main .creation-empty-wrap {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+}
+
+.creation-shell main .creation-empty {
+    display: flex;
+    min-height: clamp(200px, 34dvh, 420px);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+    text-align: center;
+}
+
+.creation-shell main .creation-empty-icon {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-2);
+}
+
+.creation-shell main .creation-empty-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 1.5;
+}
+
+.creation-shell main .creation-empty h2 {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--text-1);
+}
+
+.creation-shell main .creation-empty p {
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 22px;
+    color: var(--text-4);
+}
+
+.creation-shell main .creation-empty .creation-tool-button {
+    height: 32px;
+    margin-top: 18px;
+    padding: 0 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-3);
+    font-size: 12px;
+}
+
+.creation-shell main .creation-empty .creation-tool-button:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1);
+}
+
+/* 访客页：没有历史记录，空态在可视区内垂直居中偏上 */
+.creation-shell.guest-creation .creation-empty {
+    min-height: 66dvh;
+}
+
+/* 访客页：没有历史记录，空态在可视区内垂直居中偏上 */
+.creation-shell.guest-creation .creation-empty {
+    min-height: 66dvh;
+}
+
+/* ------------------------------------------------------------ 合成器 */
+/* 对话列默认被 astryx 收窄到 800px；即梦合成器可到 1052，这里放宽列宽 */
+.creation-shell main div:has(> .creation-composer) {
+    width: 100%;
+    max-width: 1052px;
+}
+
+.creation-shell main .creation-composer {
+    max-width: 1004px;
+    padding: 0 0 24px;
+    margin: 0 auto;
+}
+
+.creation-shell main .creation-composer .astryx-chat-composer {
+    /* 内边距同时用于把工具条发丝线外扩到左右内缘，窄屏会改成 12px */
+    --cc-pad: 16px;
+    padding: var(--cc-pad);
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 24px !important;
+    background: #1a1a1a !important;
+    box-shadow: none !important;
+    transition:
+        border-color 160ms cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-shell main .creation-composer .astryx-chat-composer:focus-within {
+    border-color: rgba(216, 255, 62, 0.55) !important;
+    box-shadow: 0 0 0 3px rgba(216, 255, 62, 0.12) !important;
+}
+
+.creation-shell main .creation-composer .astryx-chat-composer > div {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+/* 输入区：14/24，无边框无底色 */
+.creation-shell main .creation-composer textarea.ant-input {
+    min-height: 88px;
+    padding: 2px 2px 24px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: var(--text-1) !important;
+    font-size: 14px !important;
+    line-height: 24px !important;
+    box-shadow: none !important;
+}
+
+.creation-shell main .creation-composer textarea.ant-input::placeholder {
+    color: var(--text-5) !important;
+}
+
+/* 焦点由外层 .astryx-chat-composer 表达；输入区自身不再画矩形描边。 */
+.creation-shell main .creation-composer textarea.ant-input:focus,
+.creation-shell main .creation-composer textarea.ant-input:focus-visible {
+    outline: none;
+    box-shadow: none !important;
+}
+
+/* 工具条：与输入区之间一条发丝线，pill 统一 32px/8px 圆角 */
+.creation-shell main .creation-composer .creation-actions {
+    padding-top: 0;
+    border-top: 0;
+}
+
+/* 发丝线画在「工具条 + 报价 + 提交」共用的那一行上，并向左右各外扩 16px
+   （抵消 .astryx-chat-composer 的内边距），这样线从输入框左内缘一直拉通到右内缘 */
+.creation-shell main .creation-composer .astryx-chat-composer div:has(> div > .creation-actions) {
+    position: relative;
+    padding-top: 12px;
+}
+
+.creation-shell main .creation-composer .astryx-chat-composer div:has(> div > .creation-actions)::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: calc(-1 * var(--cc-pad, 16px));
+    right: calc(-1 * var(--cc-pad, 16px));
+    height: 1px;
+    background: var(--line);
+    pointer-events: none;
+}
+
+.creation-shell main .creation-composer div:has(> .creation-actions) {
+    flex-wrap: wrap;
+    row-gap: 10px;
+}
+
+/* 工具条与「积分 + 提交」同排：抵消 creation-stream 里的强制换行 */
+.creation-shell main .creation-composer .astryx-chat-composer div:has(> div > .creation-actions) {
+    flex: 1 1 auto;
+    flex-basis: auto;
+    min-width: 0;
+}
+
+.creation-shell main .creation-composer div:has(> .creation-costs) {
+    width: auto;
+    margin-left: auto;
+    justify-content: flex-end;
+}
+
+.creation-shell main .creation-composer .creation-costs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 14px;
+}
+
+.creation-shell main .creation-composer .creation-costs > span {
+    font-size: 11px;
+    color: var(--text-5);
+}
+
+/* -------------------------------------------------------- 工具条控件 */
+.creation-shell main .creation-tool-button,
+.creation-shell main .creation-icon-button {
+    display: inline-flex;
+    height: 32px;
+    min-height: 32px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 450;
+    line-height: 1;
+    transition:
+        background-color 140ms cubic-bezier(0.4, 0, 0.2, 1),
+        color 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-shell main .creation-icon-button {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+}
+
+.creation-shell main .creation-tool-button:hover,
+.creation-shell main .creation-icon-button:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1);
+}
+
+.creation-shell main .creation-tool-button[aria-pressed="true"] {
+    background: var(--jm-accent-soft);
+    color: #e3ff6b;
+}
+
+/* 模式切换（图片/视频/对话）：一整块描边轨道 + 轨道内滑动滑块。
+   轨道常驻，切换时只有滑块位移，外框位置不变。 */
+.creation-mode-switch {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    width: 200px;
+    height: 32px;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.035);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* 访客页只有「图片 / 视频」两个选项，轨道跟着收窄 */
+.creation-mode-switch[data-count="2"] {
+    width: 136px;
+}
+
+.creation-mode-switch-bar {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    left: 2px;
+    width: 0;
+    border-radius: 7px;
+    /* 激活滑块走品牌青柠淡底，文字同步转青柠 */
+    background: rgba(216, 255, 62, 0.16);
+    box-shadow:
+        inset 0 0 0 1px rgba(216, 255, 62, 0.34),
+        0 1px 2px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+    /* 三个选项等宽，只做位移过渡；宽度直接落位，避免出现「边滑边撑开」 */
+    transition: left 240ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.creation-mode-switch-item {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 26px;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-4);
+    font-size: 12px;
+    font-weight: 450;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        background-color 160ms cubic-bezier(0.4, 0, 0.2, 1),
+        color 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-mode-switch-item > svg {
+    flex-shrink: 0;
+}
+
+/* 悬停只提亮文字，不再补一块底色，避免同时出现两个「框」 */
+.creation-mode-switch-item:hover:not([aria-checked="true"]):not(:disabled) {
+    color: var(--text-1);
+}
+
+.creation-mode-switch-item[aria-checked="true"] {
+    color: var(--brand);
+    font-weight: 500;
+}
+
+/* 特异性要压过 creation-controls.css 里的全局 focus-visible 外描边，否则焦点环会溢出轨道 */
+.creation-mode-switch .creation-mode-switch-item:focus-visible {
+    outline: 2px solid rgba(216, 255, 62, 0.55);
+    outline-offset: -2px;
+}
+
+.creation-mode-switch-item:disabled {
+    cursor: default;
+}
+
+/* 仅生成中才整条变淡；切换页面的瞬间不变淡，避免闪一下 */
+.creation-mode-switch[data-busy] .creation-mode-switch-item {
+    opacity: 0.65;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .creation-mode-switch-bar {
+        transition: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .creation-mode-switch {
+        width: 100%;
+    }
+}
+
+/* 模型选择器：32px 高、8px 圆角、描边 12% */
+.creation-shell main .creation-composer [role="combobox"] {
+    height: 32px !important;
+    min-width: 120px;
+    max-width: 176px;
+    border: 1px solid var(--line) !important;
+    border-radius: 8px !important;
+    background: transparent !important;
+    color: var(--text-2) !important;
+    font-size: 12px !important;
+    box-shadow: none !important;
+}
+
+.creation-shell main .creation-composer [role="combobox"]:hover {
+    border-color: var(--line-strong) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* ------------------------------------------------------------ 按钮 */
+.creation-shell main .astryx-button[data-variant="primary"] {
+    min-height: 36px;
+    padding-inline: 16px;
+    border-radius: 8px;
+    background: var(--brand) !important;
+    color: var(--brand-ink) !important;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: none !important;
+    filter: none !important;
+    transition: background-color 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-shell main .astryx-button[data-variant="primary"]:hover:not([aria-disabled="true"]):not(:disabled) {
+    background: var(--accent-hover) !important;
+    transform: none;
+}
+
+.creation-shell main .astryx-button[data-variant="primary"]:active:not([aria-disabled="true"]) {
+    background: var(--accent-active) !important;
+}
+
+.creation-shell main .astryx-button[data-variant="primary"][aria-disabled="true"],
+.creation-shell main .astryx-button[data-variant="primary"]:disabled {
+    background: rgba(255, 255, 255, 0.16) !important;
+    color: rgba(255, 255, 255, 0.4) !important;
+    box-shadow: none !important;
+}
+
+.creation-shell main .astryx-button[data-variant="primary"] svg {
+    color: inherit;
+}
+
+.creation-shell main .record-actions {
+    gap: 8px;
+    padding-block: 6px;
+}
+
+.creation-shell main .record-actions .astryx-button {
+    border-radius: 8px;
+    font-size: 12px;
+}
+
+/* ------------------------------------------------------- 结果/消息卡 */
+.creation-shell main .creation-result-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg-card);
+    box-shadow: none;
+    transition:
+        border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+        background-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-shell main .creation-result-card:hover {
+    border-color: var(--line-strong);
+    background: #1f1f1f;
+}
+
+.creation-shell main .creation-result-card img {
+    transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.creation-shell main .creation-result-card:hover img {
+    transform: scale(1.02);
+}
+
+.creation-shell main .astryx-chat-message {
+    font-size: 14px;
+    line-height: 24px;
+}
+
+/* ---------------------------------------------------------- 响应式 */
+@media (max-width: 1024px) {
+    .creation-shell .creation-sidebar {
+        width: 100%;
+    }
+}
+
+@media (max-width: 640px) {
+    .creation-shell main .creation-composer {
+        padding: 0 12px 16px;
+    }
+    .creation-shell main .creation-composer .astryx-chat-composer {
+        --cc-pad: 12px;
+        border-radius: 20px !important;
+        padding: var(--cc-pad);
+    }
+    .creation-shell main .creation-empty {
+        min-height: 30dvh;
+        padding: 20px 12px;
+    }
+    .creation-shell main .creation-empty h2 {
+        font-size: 18px;
+    }
+    .creation-shell main .creation-composer .creation-costs {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .creation-shell main .creation-result-card,
+    .creation-shell main .astryx-button[data-variant="primary"],
+    .creation-shell main .creation-composer .astryx-chat-composer {
+        transition: none;
+    }
+    .creation-shell main .creation-result-card:hover img {
+        transform: none;
+    }
+}
+

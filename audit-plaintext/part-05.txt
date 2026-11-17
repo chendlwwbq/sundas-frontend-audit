@@ -1,0 +1,1915 @@
+SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
+This is uncompressed source text, not a directory index or archive.
+Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
+Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+
+========================================================================
+FILE: web/src/components/canvas/creative-agent-panel.tsx
+LINES: 1-543
+========================================================================
+import { useEffect, useRef, useState } from 'react';
+import { Button, Input, Select, Tabs, Tag, theme as antdTheme } from 'antd';
+import { ArrowUp, BookOpen, ChevronDown, MessageSquare, Sparkles, Pause, Play, Plus, RefreshCw, Settings2, X, AlertCircle, CheckCircle2, Clock, Loader2 } from 'lucide-react';
+import { creativeAgentApi, type AgentItem, type AgentProject, type AgentState, type AgentTurn, type AgentTurnInput, type CreativeAgentOperation, type CreativeToolHandoff } from '@/services/api/creative-agent';
+import { useCreativeAgentStore } from '@/stores/use-creative-agent-store';
+import { useAuthStore } from '@/stores/use-auth-store';
+import { useCanvasStore } from '@/stores/canvas/use-canvas-store';
+import { validateCreativeToolHandoff } from '@/lib/canvas/creative-tool-handoff';
+import { describeAgentChanges } from '@/lib/canvas/creative-agent-changes';
+import { CreativeSkillsPanel } from './creative-skills-panel';
+import { canvasThemes } from '@/lib/canvas-theme';
+import { useThemeStore } from '@/stores/use-theme-store';
+
+export type CreativeAgentPanelProps = {
+    projectId: string;
+    selectedNodeIds: string[];
+    prepareCanvas: () => Promise<AgentProject>;
+    applyProject: (project: AgentProject) => void | Promise<void>;
+    onClose?: () => void;
+    onOpenProductionExport?: () => void;
+    onOpenDirector?: () => void;
+    onToolHandoff?: (handoff: CreativeToolHandoff) => void;
+};
+const statuses: Record<string, string> = { planning: '正在规划', ready: '等待确认', executing: '执行中', submitted: '已提交，等待任务结果', pending: '待执行', paused: '已暂停后续步骤', completed: '本轮完成', succeeded: '已完成', failed: '失败', review: '待核对' };
+const modes: Record<string, string> = { text: '文字', image: '图片', video: '视频', audio: '配音' };
+
+export function describeAgentOperation(operation: CreativeAgentOperation, state?: AgentState | null) {
+    const title = (id: string) => {
+        const existing = state?.project.content.nodes.find(node => node.id === id);
+        const planned = state?.items.find(item => item.content.operation?.type === 'add_node' && item.content.operation.id === id)?.content.operation;
+        return existing?.title || (planned?.type === 'add_node' ? planned.title : id);
+    };
+    switch (operation.type) {
+        case 'media_inspect': return '检查真实参考帧';
+        case 'production_capture': return '抽取成片预览参考帧';
+        case 'production_edit': return `调整成片编排 · ${operation.commands.length} 项操作`;
+        case 'director_capture': return operation.parameters.kind === 'video' ? '录制导演序列参考视频' : '抽取导演参考帧';
+        case 'director_command': return `调整导演场景 · ${operation.commands.length} 项操作`;
+        case 'add_node': return `新建${modes[operation.nodeType] || '分组'}节点：${operation.title}`;
+        case 'move_node': return `移动「${title(operation.nodeId)}」至 ${operation.position.x}, ${operation.position.y}`;
+        case 'update_prompt': return `更新「${title(operation.nodeId)}」的提示词`;
+        case 'connect_nodes': return `连接「${title(operation.fromNodeId)}」→「${title(operation.toNodeId)}」`;
+        case 'generate': return `为「${title(operation.nodeId)}」生成${modes[operation.mode]}${operation.seconds ? ` · ${operation.seconds}秒` : ''}`;
+        case 'creative_tool': return `${operation.tool === 'upscale' ? 'AI 超分' : '人物替换'}：「${title(operation.nodeId)}」`;
+        case 'production_tool': return `${({ preview: '生成服务端预览', script: '整理剧本草稿', images: '生成分镜图片', narration: '生成旁白', check: '检查制作稿' })[operation.action]}${operation.shotIds?.length ? ` · ${operation.shotIds.length} 个镜头` : ''}${operation.narrationIds?.length ? ` · ${operation.narrationIds.length} 段旁白` : ''}`;
+    }
+}
+
+function quoteText(item: AgentItem) {
+    const value = item.content.quote;
+    if (!value || value.maxCredits === null) return '费用需进一步确认';
+    if (!value.maxCredits) return '无需模型积分';
+    return value.minCredits === value.maxCredits ? `预计 ${value.maxCredits} 积分` : `预计 ${value.minCredits}–${value.maxCredits} 积分`;
+}
+
+function operationDetails(operation: CreativeAgentOperation, modelName: (id: string) => string) {
+    if (operation.type === 'production_capture') return `来源预览：${operation.runId}\n帧号：${operation.frames.join('、')}\n保留原尺寸，保存到素材库，占用现有存储配额，不调用生成模型。`;
+    if (operation.type === 'media_inspect') return `模型：${modelName(operation.modelId)}\n帧号：${operation.frames.join('、')}\n检查要求：${operation.instructions}\n仅检查选定真实画面，结果是建议。`;
+    if (operation.type === 'director_capture') return `帧范围 ${operation.parameters.startFrame}–${operation.parameters.endFrame}（结束帧不包含），${operation.parameters.frames?.join('、') || '整段视频'}。需在导演台领取执行，真实产物验收后完成。`;
+    if (operation.type === 'generate') return [`模型：${modelName(operation.modelId)}`, `参考素材：${operation.referenceNodeIds.length} 项`, operation.size ? `尺寸：${operation.size}` : '', operation.resolution ? `清晰度：${operation.resolution}` : '', operation.voice ? `音色：${operation.voice}` : '', `提示词：\n${operation.prompt}`].filter(Boolean).join('\n');
+    if (operation.type === 'creative_tool') return operation.instructions;
+    if (operation.type === 'production_tool') return [operation.modelId ? `模型：${modelName(operation.modelId)}` : '', operation.voice ? `音色：${operation.voice}` : '', operation.prompt || '', '产物进入制作生产记录，采用前可审核。'].filter(Boolean).join('\n');
+    if (operation.type === 'add_node') return [operation.text || '', operation.prompt || ''].filter(Boolean).join('\n') || '创建空节点，供后续编辑';
+    if (operation.type === 'update_prompt') return operation.prompt;
+    return '';
+}
+
+function StatusIcon({ status }: { status: string }) {
+    if (status === 'succeeded' || status === 'completed') return <CheckCircle2 className="size-3 shrink-0 text-green-500" />;
+    if (status === 'failed') return <AlertCircle className="size-3 shrink-0 text-red-400" />;
+    if (status === 'executing' || status === 'submitted') return <Loader2 className="size-3 shrink-0 animate-spin opacity-60" />;
+    return <Clock className="size-3 shrink-0 opacity-40" />;
+}
+
+export function CreativeAgentPanel({ projectId, selectedNodeIds, prepareCanvas, applyProject, onClose, onToolHandoff, onOpenProductionExport, onOpenDirector }: CreativeAgentPanelProps) {
+    const { token } = antdTheme.useToken();
+    const theme = canvasThemes[useThemeStore(s => s.theme)];
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const state = useCreativeAgentStore();
+    const owner = useAuthStore(value => value.user?.id);
+    const epoch = useAuthStore(value => value.sessionEpoch);
+    const [prompt, setPrompt] = useState('');
+    const [model, setModel] = useState('');
+    const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+    const scope = `${owner || ''}:${epoch}:${projectId}`;
+    const scopeRef = useRef(scope); scopeRef.current = scope;
+    const controller = useRef(new AbortController());
+    const running = useRef(false);
+    const pauseRequested = useRef(false);
+    const pendingPlan = useRef<{ fingerprint: string; input: AgentTurnInput } | null>(null);
+
+    useEffect(() => {
+        const active = new AbortController(); controller.current = active; running.current = false; pauseRequested.current = true; pendingPlan.current = null;
+        setPrompt(''); setSelectedSkills([]); setModel('');
+        useCreativeAgentStore.getState().patch({ projectId, snapshot: null, threads: [], skills: [], catalog: null, busy: true, error: '' });
+        const client = creativeAgentApi(active.signal);
+        const valid = () => !active.signal.aborted && scopeRef.current === scope;
+        void Promise.all([client.catalog(), client.skills(), client.threads(projectId)]).then(async ([catalog, skills, threads]) => {
+            if (!valid()) return;
+            useCreativeAgentStore.getState().patch({ catalog, skills: skills.skills, threads: threads.threads });
+            setModel(catalog.models[0]?.id || '');
+            if (threads.threads[0]) { const snapshot = await client.thread(threads.threads[0].id); if (valid()) useCreativeAgentStore.getState().patch({ snapshot }); }
+        }).catch(error => { if (valid()) useCreativeAgentStore.getState().patch({ error: error instanceof Error ? error.message : '助手加载失败' }); })
+            .finally(() => { if (valid()) useCreativeAgentStore.getState().patch({ busy: false }); });
+        return () => { active.abort(); pauseRequested.current = true; };
+    }, [projectId, owner, epoch]);
+
+    async function work(action: (client: ReturnType<typeof creativeAgentApi>, valid: () => boolean) => Promise<void>) {
+        if (running.current) return;
+        running.current = true;
+        const active = controller.current; const expected = scope;
+        const valid = () => !active.signal.aborted && scopeRef.current === expected;
+        const client = creativeAgentApi(active.signal);
+        state.patch({ busy: true, error: '' });
+        try { await action(client, valid); }
+        catch (error) { if (valid()) state.patch({ error: error instanceof Error ? error.message : '助手操作失败' }); }
+        finally { if (valid()) { running.current = false; state.patch({ busy: false }); } }
+    }
+    async function accept(snapshot: AgentState, valid: () => boolean, apply = false) {
+        if (!valid() || snapshot.thread.projectId !== projectId) return;
+        state.patch({ snapshot });
+        if (apply) await applyProject(snapshot.project);
+    }
+    async function newThread() {
+        await work(async (client, valid) => {
+            const project = await prepareCanvas(); if (!valid() || project.id !== projectId) return;
+            const snapshot = await client.createThread(projectId, '新的创作对话');
+            await accept(snapshot, valid);
+            const list = await client.threads(projectId); if (valid()) state.patch({ threads: list.threads });
+        });
+    }
+    async function plan() {
+        if (!prompt.trim()) return;
+        const selectedModel = state.catalog?.models.find(item => item.id === model);
+        if (!selectedModel) { state.patch({ error: '请先选择可用文本模型' }); return; }
+        await work(async (client, valid) => {
+            const project = await prepareCanvas(); if (!valid() || project.id !== projectId) return;
+            let snapshot = useCreativeAgentStore.getState().snapshot;
+            if (!snapshot) snapshot = await client.createThread(projectId, prompt.trim());
+            if (!valid()) return;
+            state.patch({ snapshot });
+            const payload = { modelId: model, expectedVersion: project.version, prompt: prompt.trim(), selectedNodeIds, skills: state.skills.filter(skill => skill.enabled && selectedSkills.includes(skill.id)).map(skill => ({ id: skill.id, version: skill.version })), acceptedPlanningCredits: selectedModel.credits };
+            const fingerprint = JSON.stringify({ threadId: snapshot.thread.id, ...payload });
+            if (!pendingPlan.current || pendingPlan.current.fingerprint !== fingerprint) pendingPlan.current = { fingerprint, input: { ...payload, clientRequestId: crypto.randomUUID() } };
+            const result = await client.plan(snapshot.thread.id, pendingPlan.current.input);
+            if (!valid()) return;
+            pendingPlan.current = null; setPrompt('');
+            await accept(result, valid);
+            const threads = await client.threads(projectId); if (valid()) state.patch({ threads: threads.threads });
+        });
+    }
+    async function execute(turn: AgentTurn) {
+        await work(async (client, valid) => {
+            pauseRequested.current = false;
+            const project = await prepareCanvas(); if (!valid() || project.id !== projectId) return;
+            let snapshot = await client.confirm(turn.id, project.version); await accept(snapshot, valid);
+            while (valid() && !pauseRequested.current) {
+                const liveTurn = snapshot.turns.find(item => item.id === turn.id);
+                if (liveTurn?.status !== 'executing') break;
+                const items = snapshot.items.filter(item => item.turnId === turn.id && item.role === 'tool').sort((a, b) => a.position - b.position);
+                const next = items.find(item => item.status !== 'succeeded');
+                if (!next || next.status !== 'pending') break;
+                snapshot = await client.step(turn.id, next.itemId, snapshot.project.version);
+                await accept(snapshot, valid, true);
+                if (!valid()) break;
+            }
+        });
+    }
+    async function pause(turn: AgentTurn) {
+        pauseRequested.current = true;
+        const expected = scope; const active = controller.current;
+        try { const snapshot = await creativeAgentApi(active.signal).pause(turn.id); if (!active.signal.aborted && scopeRef.current === expected) state.patch({ snapshot }); }
+        catch (error) { if (!active.signal.aborted && scopeRef.current === expected) state.patch({ error: error instanceof Error ? error.message : '暂停未完成' }); }
+    }
+    async function refresh(turn: AgentTurn) {
+        await work(async (client, valid) => {
+            const project = await prepareCanvas(); if (!valid() || project.id !== projectId) return;
+            const snapshot = await client.refresh(turn.id); await accept(snapshot, valid, snapshot.project.version !== project.version);
+        });
+    }
+    function openTool(handoff: CreativeToolHandoff) {
+        const auth = useAuthStore.getState();
+        if (controller.current.signal.aborted || scopeRef.current !== scope || auth.user?.id !== owner || auth.sessionEpoch !== epoch) return;
+        try {
+            validateCreativeToolHandoff(handoff, useCanvasStore.getState().projects.find(project => project.id === projectId), window.location.origin);
+            onToolHandoff?.(handoff);
+        } catch (error) { state.patch({ error: error instanceof Error ? error.message : '工具准备记录已变化' }); }
+    }
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+    }, [state.snapshot, state.busy, state.tab]);
+    const last = state.snapshot?.turns.at(-1);
+    const planningModel = state.catalog?.models.find(item => item.id === model);
+    const disabledSend = state.busy || !prompt.trim() || !planningModel || last?.status === 'planning' || last?.status === 'executing';
+
+    // 把所有 turns + items 展平为时间线消息
+    const messages = state.snapshot?.turns.flatMap(turn => {
+        const items = state.snapshot!.items
+            .filter(item => item.threadId === state.snapshot!.thread.id && item.turnId === turn.id)
+            .sort((a, b) => a.position - b.position);
+        return items;
+    }) ?? [];
+
+    return (
+        <aside
+            className="canvas-redesigned flex h-full min-h-0 w-[400px] max-w-[90vw] flex-col border-l"
+            style={{ background: theme.toolbar.panel, color: theme.toolbar.item, borderColor: theme.toolbar.border }}
+            aria-label="创作助手"
+        >
+            {/* 顶栏 */}
+            <div className="flex h-12 shrink-0 items-center justify-between border-b px-3" style={{ borderColor: theme.toolbar.border }}>
+                <div className="flex items-center gap-2">
+                    {/* 对话切换 */}
+                    <Select
+                        className="agent-select"
+                        style={{ width: 160 }}
+                        size="small"
+                        bordered={false}
+                        placeholder="选择对话"
+                        suffixIcon={<ChevronDown className="size-3 opacity-50" />}
+                        value={state.snapshot?.thread.id}
+                        disabled={state.busy}
+                        options={state.threads.map(t => ({ value: t.id, label: t.title }))}
+                        onChange={id => void work(async (client, valid) => accept(await client.thread(id), valid))}
+                    />
+                    <button
+                        type="button"
+                        className="grid size-7 place-items-center rounded-full transition hover:opacity-90"
+                        style={{ background: theme.composer.chip, color: theme.composer.muted }}
+                        aria-label="新建对话"
+                        disabled={state.busy}
+                        title="新建对话"
+                        onClick={() => void newThread()}
+                    >
+                        <Plus className="size-3.5" />
+                    </button>
+                </div>
+                <div className="flex items-center gap-1">
+                    <button
+                        type="button"
+                        className="grid size-8 place-items-center rounded-full transition hover:opacity-90"
+                        style={{ background: settingsOpen ? theme.composer.chipHover : 'transparent', color: theme.composer.muted }}
+                        aria-label="设置"
+                        aria-expanded={settingsOpen}
+                        onClick={() => setSettingsOpen(!settingsOpen)}
+                        title="设置"
+                    >
+                        <Settings2 className="size-3.5" />
+                    </button>
+                    <button
+                        type="button"
+                        className="grid size-8 place-items-center rounded-full transition hover:opacity-90"
+                        style={{ color: theme.composer.muted }}
+                        aria-label="关闭"
+                        onClick={onClose}
+                        title="关闭"
+                    >
+                        <X className="size-3.5" />
+                    </button>
+                </div>
+            </div>
+
+            {/* 折叠设置 */}
+            {settingsOpen && (
+                <div className="shrink-0 space-y-1.5 border-b px-3 py-2.5" style={{ borderColor: theme.toolbar.border, background: theme.toolbar.itemHover }}>
+                    <div className="flex items-center gap-2">
+                        <span className="w-14 shrink-0 text-[11px] opacity-50">模型</span>
+                        <Select
+                            className="agent-select flex-1"
+                            size="small"
+                            bordered={false}
+                            placeholder="选择模型"
+                            value={model || undefined}
+                            disabled={state.busy}
+                            options={state.catalog?.models.map(item => ({ value: item.id, label: `${item.name} · ${item.credits}积分` })) || []}
+                            onChange={setModel}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="w-14 shrink-0 text-[11px] opacity-50">技能</span>
+                        <Select
+                            mode="multiple"
+                            className="agent-select flex-1"
+                            size="small"
+                            bordered={false}
+                            placeholder="选择技能（可选）"
+                            value={selectedSkills}
+                            disabled={state.busy}
+                            options={state.skills.filter(s => s.enabled).map(s => ({ value: s.id, label: `${s.name} v${s.version}` }))}
+                            onChange={setSelectedSkills}
+                        />
+                    </div>
+                    <p className="text-[10px] opacity-40">已选 {selectedNodeIds.length} 个节点 · 读取文字与结构，不读取媒体画面</p>
+                </div>
+            )}
+
+            {/* 标签页 */}
+            <Tabs
+                className="agent-tabs shrink-0 px-3"
+                size="small"
+                activeKey={state.tab}
+                onChange={key => state.patch({ tab: key as 'chat' | 'skills' })}
+                items={[
+                    { key: 'chat', label: <span className="inline-flex items-center gap-1 text-[11px]"><MessageSquare className="size-3" />对话</span> },
+                    { key: 'skills', label: <span className="inline-flex items-center gap-1 text-[11px]"><BookOpen className="size-3" />技能</span> },
+                ]}
+            />
+
+            {state.tab === 'skills' ? <CreativeSkillsPanel /> : (
+                <>
+                    {/* 对话消息区 */}
+                    <div ref={scrollRef} className="thin-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-3">
+                        {/* 空状态 */}
+                        {!messages.length && !state.busy && (
+                            <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+                                <div className="grid size-12 place-items-center rounded-2xl" style={{ background: theme.composer.chip, color: theme.node.text }}>
+                                    <Sparkles className="size-5" />
+                                </div>
+                                <p className="text-sm font-medium" style={{ color: theme.node.text }}>有什么想创作的？</p>
+                                <p className="max-w-[240px] text-xs leading-relaxed" style={{ color: theme.composer.muted }}>描述你的创作目标，助手会先列出方案，确认后才修改画布</p>
+                            </div>
+                        )}
+
+                        {/* 加载中 */}
+                        {state.busy && !messages.length && (
+                            <div className="flex items-center gap-2 py-4 text-[11px] opacity-45">
+                                <Loader2 className="size-3.5 animate-spin" />
+                                加载中…
+                            </div>
+                        )}
+
+                        {/* 消息列表 */}
+                        {state.snapshot?.turns.map(turn => {
+                            const items = state.snapshot!.items
+                                .filter(item => item.threadId === state.snapshot!.thread.id && item.turnId === turn.id)
+                                .sort((a, b) => a.position - b.position);
+                            const ops = items.filter(i => i.role === 'tool');
+                            const known = ops.reduce((s, i) => s + (i.content.quote?.maxCredits || 0), 0);
+                            const hasUnknown = ops.some(i => i.content.quote?.maxCredits === null);
+
+                            return (
+                                <div key={`${turn.threadId}:${turn.id}`} className="space-y-1">
+                                    <div className="flex flex-wrap gap-1 text-xs opacity-70"><span>{statuses[turn.status]} · 规划 {Number(turn.planningCredits)} 积分</span>{turn.skillSnapshots.map(skill => <Tag key={skill.id}>{skill.name} v{skill.version}</Tag>)}</div>
+                                    {items.map(item => (
+                                        <div key={`${item.threadId}:${item.turnId}:${item.itemId}`}>
+                                            {/* 用户消息 */}
+                                            {item.role === 'user' && (
+                                                <div className="flex justify-end pb-1">
+                                                    <div
+                                                        className="whitespace-pre-wrap break-words max-w-[86%] rounded-[18px] rounded-br-md px-3.5 py-2 text-[13px] leading-relaxed"
+                                                        style={{ background: theme.composer.chipHover, color: theme.node.text }}
+                                                    >
+                                                        {item.content.text}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* 助手方案文字 */}
+                                            {item.role === 'assistant' && (
+                                                <div className="flex justify-start pb-1">
+                                                    <div
+                                                        className="whitespace-pre-wrap break-words max-w-[92%] px-1 py-1 text-[13px] leading-relaxed"
+                                                        style={{ color: theme.node.text }}
+                                                    >
+                                                        {item.content.text}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* 工具步骤 */}
+                                            {item.role === 'tool' && (
+                                                <div
+                                                    className="ml-2 flex items-start gap-2 rounded-lg border px-2.5 py-2 text-[11px]"
+                                                    style={{ borderColor: theme.toolbar.border, background: theme.toolbar.itemHover }}
+                                                >
+                                                    <StatusIcon status={item.status} />
+                                                    <div className="min-w-0 flex-1 space-y-0.5">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <span className="truncate font-medium opacity-85">
+                                                                {item.position + 1}. {describeAgentOperation(item.content.operation!, state.snapshot)}
+                                                            </span>
+                                                            <span className="shrink-0 text-[10px] opacity-45">{quoteText(item)}</span>
+                                                        </div>
+                                {['director_command', 'production_edit'].includes(item.content.operation!.type) && <div className="text-xs leading-relaxed" aria-label="方案修改内容"><p className="font-medium">方案修改内容</p><ul className="list-disc space-y-1 pl-4">{describeAgentChanges(item.content.operation!, state.snapshot?.project).map((description, index) => <li key={index} className="break-words">{description}</li>)}</ul></div>}
+                                {operationDetails(item.content.operation!, id => state.catalog?.generationModels.find(model => model.id === id)?.name || '已下线模型') && <details className="text-xs"><summary className="cursor-pointer" style={{ color: token.colorTextSecondary }}>查看具体参数</summary><p className="mt-2 whitespace-pre-wrap break-words">{operationDetails(item.content.operation!, id => state.catalog?.generationModels.find(model => model.id === id)?.name || '已下线模型')}</p></details>}
+                                {['director_command','production_edit'].includes(item.content.operation?.type || '') && item.status === 'succeeded' && <Button type="text" size="small" disabled={state.busy} onClick={() => void work(async (client, valid) => { const project = await prepareCanvas(); if (!valid()) return; const result = await client.undoDirector(projectId, item.itemId, project.version); if (!valid()) return; await applyProject(result.project); const snapshot = await client.thread(item.threadId); await accept(snapshot, valid); })}>撤销本次修改</Button>}
+                                {item.receipt?.message && <p className="text-xs leading-relaxed" style={{ color: item.status === 'review' || item.status === 'failed' ? token.colorWarning : token.colorTextSecondary }}>{item.receipt.message}</p>}
+                                {typeof item.receipt?.report === 'string' && <div className="whitespace-pre-wrap text-sm">{item.receipt.report}</div>}
+                                {item.receipt?.inspectedFrames?.map(frame => <a key={frame.frame} href={frame.url} target="_blank" rel="noreferrer" className="inline-block mr-2 text-xs underline">查看检查依据：第 {frame.frame} 帧</a>)}
+                                {item.content.operation?.type === 'director_capture' && <div className="flex flex-wrap items-center gap-2">
+                                    {onOpenDirector && <Button type="text" size="small" disabled={state.busy} onClick={onOpenDirector}>{item.status === 'succeeded' ? '打开导演台查看与采用' : '打开导演台执行渲染'}</Button>}
+                                    {item.receipt?.renderReceipt?.outputs?.map(output => <a key={output.objectKey} href={`/media/${output.objectKey}`} target="_blank" rel="noreferrer" className="text-xs underline">{output.frame === undefined ? '查看参考视频' : `查看第 ${output.frame} 帧`}</a>)}
+                                </div>}
+                                {item.content.operation?.type === 'production_capture' && item.receipt?.outputs?.map((output, index) => output.url && <a key={output.id} href={output.url} target="_blank" rel="noreferrer" className="inline-block mr-2 text-xs underline">查看第 {output.frame ?? index + 1} 帧{output.timeSeconds === undefined ? "" : ` · ${output.timeSeconds.toFixed(3)} 秒`}</a>)}
+                                {item.content.operation?.type === 'production_tool' && item.content.operation.action === 'preview' && item.receipt?.outputs?.map(output => output.url && <a key={output.id} href={output.url} target="_blank" rel="noreferrer" className="text-xs underline">查看成片预览</a>)}
+                                {item.receipt?.toolHandoff?.projectId === projectId && onToolHandoff && <div className="space-y-1"><Button type="text" size="small" disabled={state.busy} onClick={() => openTool(item.receipt!.toolHandoff!)}>打开{item.receipt.toolHandoff.tool === 'upscale' ? '超分' : '人物替换'}设置</Button><p className="text-xs" style={{ color: token.colorTextSecondary }}>打开后仍需检查参数并单独确认费用；此回执只完成工具准备。</p></div>}
+                                {item.taskIds.length > 0 && <details className="text-xs"><summary className="cursor-pointer" style={{ color: token.colorTextSecondary }}>任务回执</summary>{item.taskIds.map(id => <div key={id} className="break-all">{id}</div>)}{item.receipt?.creditsCharged !== undefined && <div>本次扣除 {item.receipt.creditsCharged} 积分</div>}</details>}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+
+                                    {/* 轮次操作按钮 */}
+                                    {turn.status !== 'completed' && (
+                                        <div className="flex flex-wrap items-center gap-1.5 pb-2 pl-2">
+                                            {ops.length > 0 && (
+                                                <span className="text-[10px] opacity-40">
+                                                    最多 {known} 积分{hasUnknown ? ' + 待确认' : ''}
+                                                </span>
+                                            )}
+                                            <div className="ml-auto flex gap-1">
+                                                {['ready', 'paused', 'executing'].includes(turn.status) && !ops.some(i => ['failed', 'review'].includes(i.status)) && (
+                                                    <button
+                                                        type="button"
+                                                        className="inline-flex h-7 items-center gap-1 rounded-full px-3 text-xs font-medium transition disabled:opacity-40"
+                                                        style={{ background: theme.accent.primary, color: theme.accent.onPrimary }}
+                                                        disabled={state.busy || ops.some(i => ['executing', 'submitted'].includes(i.status))}
+                                                        onClick={() => void execute(turn)}
+                                                    >
+                                                        <Play className="size-2.5" />
+                                                        {turn.status === 'ready' ? '执行' : '继续'}
+                                                    </button>
+                                                )}
+                                                {turn.status === 'executing' && (
+                                                    <button
+                                                        type="button"
+                                                        className="inline-flex h-7 items-center gap-1 rounded-full px-3 text-xs opacity-70 transition hover:opacity-100"
+                                                        style={{ background: theme.toolbar.activeBg }}
+                                                        onClick={() => void pause(turn)}
+                                                    >
+                                                        <Pause className="size-2.5" />暂停
+                                                    </button>
+                                                )}
+                                                {(
+                                                    <button
+                                                        type="button"
+                                                        className="inline-flex h-7 items-center gap-1 rounded-full px-3 text-xs opacity-60 transition hover:opacity-100"
+                                                        style={{ background: theme.toolbar.activeBg }}
+                                                        disabled={state.busy}
+                                                        onClick={() => void refresh(turn)}
+                                                    >
+                                                        <RefreshCw className="size-2.5" />刷新
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {turn.status === "paused" && <p className="text-xs opacity-60">暂停只停止后续步骤，已提交的供应商任务仍会继续处理。</p>}
+                                    {turn.error && (
+                                        <div className="ml-2 flex items-start gap-1.5 text-[10px] text-red-400 pb-1">
+                                            <AlertCircle className="size-3 shrink-0 mt-px" />{turn.error}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                        {/* 助手正在思考 */}
+                        {state.busy && messages.length > 0 && (
+                            <div className="flex items-center gap-2 py-1 pl-1 text-[11px] opacity-40">
+                                <Loader2 className="size-3 animate-spin" />思考中…
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 错误提示 */}
+                    {state.error && (
+                        <div className="mx-3 mb-1 flex items-start gap-1.5 rounded-lg border px-2.5 py-2 text-[10px] text-red-400" style={{ borderColor: 'rgba(248,113,113,.2)', background: 'rgba(248,113,113,.06)' }}>
+                            <AlertCircle className="size-3 shrink-0 mt-px" />{state.error}
+                        </div>
+                    )}
+
+                    {/* 制作面板快捷入口 */}
+                    {Boolean(state.snapshot?.project.content.production) && onOpenProductionExport && (
+                        <div className="mx-3 mb-1">
+                            <button
+                                type="button"
+                                className="flex h-7 w-full items-center justify-center gap-1.5 rounded-lg border text-[11px] opacity-70 transition hover:opacity-100"
+                                style={{ borderColor: theme.toolbar.border, background: theme.toolbar.itemHover }}
+                                disabled={state.busy}
+                                onClick={onOpenProductionExport}
+                            >
+                                打开制作面板
+                            </button>
+                        </div>
+                    )}
+
+                    {/* 输入区 */}
+                    <div className="shrink-0 px-3 pb-3 pt-2">
+                        <div
+                            className="flex flex-col gap-1 rounded-[18px] border px-3 pb-2.5 pt-2.5 transition-[border-color] duration-150 [border-color:var(--agent-border)] focus-within:[border-color:var(--agent-border-focus)]"
+                            style={{ background: theme.composer.chip, ['--agent-border' as string]: theme.composer.border, ['--agent-border-focus' as string]: theme.composer.borderFocus }}
+                        >
+                            <Input.TextArea
+                                className="agent-input"
+                                aria-label="创作目标"
+                                placeholder="描述创作目标，Enter 发送，Shift + Enter 换行"
+                                bordered={false}
+                                autoSize={{ minRows: 2, maxRows: 6 }}
+                                value={prompt}
+                                disabled={state.busy}
+                                style={{ padding: 0, fontSize: 13, lineHeight: 1.6, background: 'transparent' }}
+                                onChange={e => setPrompt(e.target.value)}
+                                onPressEnter={e => {
+                                    if (!e.nativeEvent.isComposing && !e.shiftKey && !disabledSend) { e.preventDefault(); void plan(); }
+                                }}
+                            />
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="flex min-w-0 items-center gap-1.5">
+                                    <button
+                                        type="button"
+                                        className="inline-flex h-7 min-w-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-medium transition hover:opacity-90"
+                                        style={{ background: theme.composer.chip, color: theme.composer.chipText, fontSize: 12 }}
+                                        title="切换规划模型"
+                                        onClick={() => setSettingsOpen(true)}
+                                    >
+                                        <span className="truncate text-xs">{planningModel ? `${planningModel.name} · ${planningModel.credits} 积分` : '未选模型'}</span>
+                                        <ChevronDown className="size-3 shrink-0 opacity-60" />
+                                    </button>
+                                    <span className="shrink-0 text-[11px]" style={{ color: theme.composer.muted }} title="本轮读取文字与结构，不读取媒体画面">已选 {selectedNodeIds.length} 个节点</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="grid size-8 shrink-0 place-items-center rounded-full transition-[transform,background-color] duration-150 enabled:hover:scale-105 enabled:active:scale-95 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2"
+                                    style={disabledSend ? { background: theme.composer.sendDisabledBg, color: theme.composer.sendDisabledText } : { background: theme.accent.primary, color: theme.accent.onPrimary }}
+                                    disabled={disabledSend}
+                                    aria-label="生成方案"
+                                    title="生成方案"
+                                    onClick={() => void plan()}
+                                >
+                                    {state.busy ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowUp className="size-4" strokeWidth={2.4} />}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+        </aside>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/creative-skills-panel.tsx
+LINES: 1-79
+========================================================================
+import { useEffect, useRef, useState } from 'react';
+import { Button, Input, Modal, Select, Switch, Tag, theme } from 'antd';
+import { Copy, Download, History, Plus, Upload } from 'lucide-react';
+import { creativeAgentApi, type CreativeSkill, type SkillDraft, type SkillVersion } from '@/services/api/creative-agent';
+import { useCreativeAgentStore } from '@/stores/use-creative-agent-store';
+import { useAuthStore } from '@/stores/use-auth-store';
+
+const empty: SkillDraft = { name: '', description: '', content: '', requirements: ['text'] };
+const capabilityNames: Record<string, string> = { text: '文字', vision: '视觉理解', image: '图片生成', video: '视频生成', audio: '音频生成' };
+
+export function CreativeSkillsPanel() {
+    const { token } = theme.useToken();
+    const skills = useCreativeAgentStore(state => state.skills);
+    const [editing, setEditing] = useState<CreativeSkill | 'new' | null>(null);
+    const [draft, setDraft] = useState<SkillDraft>(empty);
+    const [history, setHistory] = useState<{ skill: CreativeSkill; versions: SkillVersion[] } | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const uploadRef = useRef<HTMLInputElement>(null);
+    const controller = useRef(new AbortController());
+    const owner = useAuthStore(state => state.user?.id);
+    const epoch = useAuthStore(state => state.sessionEpoch);
+    useEffect(() => { const active = new AbortController(); controller.current = active; setEditing(null); setHistory(null); setDraft(empty); setError(''); setBusy(false); return () => active.abort(); }, [owner, epoch]);
+    const reload = async (client: ReturnType<typeof creativeAgentApi>) => { const result = await client.skills(); useCreativeAgentStore.getState().patch({ skills: result.skills }); };
+    async function act(action: (client: ReturnType<typeof creativeAgentApi>, valid: () => boolean) => Promise<void>) {
+        if (busy) return;
+        const active = controller.current;
+        const valid = () => !active.signal.aborted && controller.current === active;
+        setBusy(true); setError('');
+        try { await action(creativeAgentApi(active.signal), valid); } catch (error) { if (valid()) setError(error instanceof Error ? error.message : '技能操作失败'); }
+        finally { if (valid()) setBusy(false); }
+    }
+    function edit(skill: CreativeSkill | 'new') { setEditing(skill); setDraft(skill === 'new' ? empty : { name: skill.name, description: skill.description, content: skill.content, requirements: skill.requirements }); }
+    function exportSkill(skill: CreativeSkill) {
+        const blob = new Blob([JSON.stringify({ format: 'sundas-creative-skill', version: 1, skill: { name: skill.name, description: skill.description, content: skill.content, requirements: skill.requirements } }, null, 2)], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
+        anchor.href = url; anchor.download = `${skill.name.replace(/[\\/:*?"<>|]/g, '_')}.json`; anchor.click(); URL.revokeObjectURL(url);
+    }
+    async function importFile(file: File, client: ReturnType<typeof creativeAgentApi>) {
+        const text = await file.text();
+        let value: SkillDraft;
+        if (file.name.toLowerCase().endsWith('.json')) {
+            const parsed = JSON.parse(text);
+            if (parsed.format !== 'sundas-creative-skill' || parsed.version !== 1 || !parsed.skill) throw new Error('不是支持的文本技能文件');
+            value = parsed.skill;
+        } else value = { name: file.name.replace(/\.(md|txt)$/i, ''), description: '从文本文件导入', content: text, requirements: ['text'] };
+        await client.createSkill(value); await reload(client);
+    }
+    return <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-4">
+        <p className="text-xs leading-relaxed" style={{ color: token.colorTextSecondary }}>技能是提示词与创作方法。每轮固定技能版本；文本导入不会运行脚本。本轮助手仅读取文字和画布结构，视觉核验仍需实际画面检查。</p>
+        <div className="flex flex-wrap gap-1">
+            <Button type="text" icon={<Plus size={15} />} onClick={() => edit('new')}>新建</Button>
+            <Button type="text" icon={<Upload size={15} />} disabled={busy} onClick={() => uploadRef.current?.click()}>导入文本</Button>
+            <input ref={uploadRef} type="file" accept=".md,.txt,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void act(client => importFile(file, client)); }} />
+        </div>
+        {error && <p role="alert" className="text-xs" style={{ color: token.colorError }}>{error}</p>}
+        {skills.map(skill => <div key={skill.id} className="space-y-2 border-b py-3" style={{ borderColor: token.colorBorderSecondary }}>
+            <div className="flex items-center justify-between gap-2"><button type="button" className="text-left text-sm font-medium" onClick={() => edit(skill)}>{skill.name}</button><Switch size="small" checked={skill.enabled} disabled={busy} onChange={enabled => void act(async client => { await client.enableSkill(skill.id, enabled); await reload(client); })} aria-label={`启用${skill.name}`} /></div>
+            <p className="text-xs" style={{ color: token.colorTextSecondary }}>{skill.description}</p>
+            <div className="flex flex-wrap items-center gap-1 text-xs"><Tag>{skill.source === 'builtin' ? '内置' : '个人'} · v{skill.version}</Tag>{skill.requirements.map(capability => <span key={capability} style={{ color: token.colorTextSecondary }}>{capabilityNames[capability] || capability}</span>)}</div>
+            <div className="flex flex-wrap">
+                <Button size="small" type="text" icon={<Copy size={13} />} disabled={busy} onClick={() => void act(async client => { await client.copySkill(skill.id, skill.version); await reload(client); })}>复制</Button>
+                <Button size="small" type="text" icon={<Download size={13} />} onClick={() => exportSkill(skill)}>导出</Button>
+                <Button size="small" type="text" icon={<History size={13} />} disabled={busy} onClick={() => void act(async (client, valid) => { const result = await client.versions(skill.id); if (valid()) setHistory({ skill, versions: result.versions }); })}>版本</Button>
+            </div>
+        </div>)}
+        <Modal open={editing !== null} title={editing === 'new' ? '新建个人技能' : editing?.source === 'builtin' ? '内置技能' : '编辑个人技能'} onCancel={() => setEditing(null)} destroyOnHidden footer={editing && editing !== 'new' && editing.source === 'builtin' ? <Button onClick={() => setEditing(null)}>关闭</Button> : <Button type="primary" loading={busy} disabled={!draft.name.trim() || !draft.content.trim()} onClick={() => void act(async (client, valid) => { if (editing === 'new') await client.createSkill(draft); else if (editing) await client.editSkill(editing.id, draft, editing.version); await reload(client); if (valid()) setEditing(null); })}>保存新版本</Button>}>
+            <div className="space-y-3">
+                <Input aria-label="技能名称" placeholder="技能名称" value={draft.name} disabled={editing !== 'new' && editing?.source === 'builtin'} onChange={event => setDraft({ ...draft, name: event.target.value })} />
+                <Input aria-label="技能用途" placeholder="用途与触发场景" value={draft.description} disabled={editing !== 'new' && editing?.source === 'builtin'} onChange={event => setDraft({ ...draft, description: event.target.value })} />
+                <Select mode="multiple" className="w-full" aria-label="所需能力" value={draft.requirements} options={Object.entries(capabilityNames).map(([value, label]) => ({ value, label }))} disabled={editing !== 'new' && editing?.source === 'builtin'} onChange={requirements => setDraft({ ...draft, requirements })} />
+                <Input.TextArea aria-label="技能内容" rows={12} value={draft.content} readOnly={editing !== 'new' && editing?.source === 'builtin'} onChange={event => setDraft({ ...draft, content: event.target.value })} />
+            </div>
+        </Modal>
+        <Modal open={Boolean(history)} title="技能版本记录" onCancel={() => setHistory(null)} footer={null} destroyOnHidden>
+            <div className="max-h-[60vh] space-y-3 overflow-auto">{history?.versions.map(version => <details key={version.version} className="border-b pb-3" style={{ borderColor: token.colorBorderSecondary }}><summary className="cursor-pointer text-sm">v{version.version} · {version.name}</summary><pre className="mt-2 whitespace-pre-wrap text-xs">{version.content}</pre>{history.skill.source === 'personal' && version.version !== history.skill.version && <Button type="text" size="small" disabled={busy} onClick={() => void act(async (client, valid) => { await client.restoreSkill(history.skill.id, version.version, history.skill.version); await reload(client); if (valid()) setHistory(null); })}>恢复为新版本</Button>}</details>)}</div>
+        </Modal>
+    </div>;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/director/canvas-director-node-panel.tsx
+LINES: 1-68
+========================================================================
+import { useEffect, useState } from "react";
+import { Clapperboard, Move3d } from "lucide-react";
+
+import { canvasThemes, type CanvasTheme } from "@/lib/canvas-theme";
+import { resolveDirectorActiveShot, resolveDirectorPreviewSource, type DirectorNodeContentReader } from "@/lib/canvas/director/director-preview";
+import { resolveImageUrl } from "@/services/image-storage";
+import { useActiveTheme } from "@/stores/canvas/use-canvas-theme-store";
+import type { CanvasNodeData } from "@/types/canvas";
+import type { DirectorScene } from "@/types/director";
+
+export function CanvasDirectorNodePanel({ node, scene, readNodeContent, readNodeStorageKey, onOpen, professional = true }: { node: CanvasNodeData; scene: DirectorScene | null; readNodeContent: DirectorNodeContentReader; readNodeStorageKey?: DirectorNodeContentReader; onOpen: () => void; professional?: boolean }) {
+    const theme = canvasThemes[useActiveTheme()];
+    const shot = resolveDirectorActiveShot(scene, node.metadata?.directorShotId);
+    // 记录「失败的那个 URL」而非布尔量：同一个坏 URL 不再反复渲染，换成另一个 URL 时自动重试。
+    const [failedUrl, setFailedUrl] = useState<string | null>(null);
+    const coverStorageKey = node.metadata?.directorCoverStorageKey || (!node.metadata?.directorCoverUrl ? readNodeStorageKey?.(node.metadata?.directorPreviewNodeId) || readNodeStorageKey?.(shot?.previewNodeId) : undefined);
+    const [resolvedCover, setResolvedCover] = useState<{ key: string; url: string } | null>(null);
+    useEffect(() => {
+        if (!coverStorageKey) return;
+        let live = true;
+        void resolveImageUrl(coverStorageKey, node.metadata?.directorCoverUrl || "", { cacheMiss: true })
+            .then((url) => { if (live && url) setResolvedCover({ key: coverStorageKey, url }); })
+            .catch(() => { /* 旧预览或空态仍可使用。 */ });
+        return () => { live = false; };
+    }, [coverStorageKey, node.metadata?.directorCoverUrl]);
+    const coverUrl = resolvedCover && resolvedCover.key === coverStorageKey ? resolvedCover.url : node.metadata?.directorCoverUrl;
+    const preview = resolveDirectorPreviewSource({ scene, shot, coverUrl, failedUrl, previewNodeId: node.metadata?.directorPreviewNodeId, readNodeContent });
+
+    return (
+        <div
+            className="relative h-full w-full min-h-0 overflow-hidden rounded-[inherit]"
+            style={{ color: theme.node.text, background: theme.node.fill }}
+            data-director-open={preview.kind === "image" ? "preview" : "empty"}
+        >
+            {preview.kind === "image"
+                ? <img src={preview.url} alt={`${node.title} 导演台场景封面`} className="block h-full w-full object-cover" draggable={false} onError={() => setFailedUrl(preview.url)} />
+                : <DirectorPreviewState kind={preview.kind} theme={theme} />}
+            <button
+                type="button"
+                data-canvas-no-zoom
+                className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-xl px-6 py-4 text-base font-semibold shadow-lg transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 disabled:cursor-default disabled:opacity-60"
+                style={{ background: theme.accent.primary, color: theme.accent.onPrimary, border: `1px solid ${theme.toolbar.border}` }}
+                aria-label={professional ? "打开导演台" : "切换到专业模式后编辑导演台"}
+                disabled={!professional}
+                onMouseDown={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => { event.stopPropagation(); onOpen(); }}
+            >
+                <Clapperboard className="size-8" aria-hidden />
+                {professional ? "打开导演台" : "专业模式可编辑"}
+            </button>
+        </div>
+    );
+}
+
+/**
+ * 诚实空态/准备态：不绘制地面、地平线、机位或任何伪 3D 物体。
+ * 颜色全部走画布主题 token；层级靠字号/字重区分，不靠降低对比度。
+ */
+function DirectorPreviewState({ kind, theme }: { kind: "loading" | "empty"; theme: CanvasTheme }) {
+    const loading = kind === "loading";
+    return (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-3 text-center">
+            <Move3d className="size-7" style={{ color: theme.node.muted }} aria-hidden />
+            <span className="text-xs leading-5" style={{ color: theme.node.muted }}>{loading ? "正在准备场景" : "在3D空间中搭建场景并进行多视角截图"}</span>
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/director/canvas-director-onboarding.tsx
+LINES: 1-253
+========================================================================
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import {
+    advanceDirectorOnboarding,
+    createDirectorOnboardingGate,
+    loadDirectorOnboardingProgress,
+    resetDirectorOnboardingProgress,
+    resolveDirectorOnboardingView,
+    type DirectorOnboardingAction,
+    type DirectorOnboardingProgress,
+    type DirectorOnboardingStorage,
+    type DirectorOnboardingView,
+} from "@/lib/canvas/director/director-onboarding";
+
+/**
+ * 导演台首次上手引导浮层。
+ *
+ * 硬约束：
+ * - 非阻塞。不是 dialog，没有遮罩，不抢焦点，不做焦点陷阱：引导旁边就是要动手的工作台，
+ *   任何模态化都会把「照着做」变成「先关掉」。因此用 role="region" 而不是 role="dialog"。
+ * - 只用原生 button。三个动作都是真正的按钮，键盘 Tab/Enter/Space 与读屏天然可用。
+ * - 只用既有 token（CSS 变量 + Tailwind 布局类），不新增全局 CSS，不写颜色/圆角/字号字面值。
+ * - 读不到持久进度（IndexedDB 失败）时不展示：无法确认用户是否已经跳过，就不要再骚扰他。
+ */
+
+type DirectorOnboardingController = {
+    /** null 表示不展示：未加载完、已跳过、已完成、或持久层不可用。 */
+    view: DirectorOnboardingView | null;
+    /** 有动作在写盘。用于禁用按钮，避免连点产生并发写。 */
+    busy: boolean;
+    next: () => void;
+    back: () => void;
+    dismiss: () => void;
+    complete: () => void;
+    /** 重新开始引导。已跳过/已完成的用户只能靠它回到第一步。 */
+    reset: () => void;
+};
+
+/**
+ * 引导状态接线。
+ *
+ * scope 变化（切账号）会重新加载并丢弃在途结果：generation 守卫保证旧账号的进度
+ * 不会落到新账号的界面上。enabled 为 false 或 scope 为空时不读盘、不展示。
+ *
+ * 并发写保护用 gateRef（同步闭包锁）而不是只靠 busy state：同一 tick 内的重复调用
+ * （双击、程序化连点）在 busy state 反映到下一次渲染之前就已经发生，只看 state 挡不住。
+ *
+ * 关键边界：gateRef 在换代（scope/enabled 变化）时必须整体替换成全新实例，而不是对
+ * 共享的旧实例调用 release()。原因：如果旧一代的写入仍在途，release 共享实例会把
+ * 刚为新一代腾出来的锁也一起放开；而新一代锁上之后，旧写入 .finally() 里如果重新读
+ * `gateRef.current`（这时已经指向新一代的锁）去 release，会把新一代还在写的锁误放掉——
+ * generation 守卫只保护展示状态，保护不了锁。因此 run() 必须在拿锁的同一刻把
+ * `gateRef.current` 同步捕获进局部变量 `gate`，tryEnter/release 全部作用在这份捕获上，
+ * 绝不在 .then/.catch/.finally 里重新读取 `gateRef.current`。
+ */
+export function useDirectorOnboarding({ scope, enabled = true, storage }: { scope: string; enabled?: boolean; storage?: DirectorOnboardingStorage }): DirectorOnboardingController {
+    const [progress, setProgress] = useState<DirectorOnboardingProgress | null>(null);
+    const [busy, setBusy] = useState(false);
+    const generation = useRef(0);
+    const gateRef = useRef(createDirectorOnboardingGate());
+    const normalizedScope = scope.trim();
+    const active = enabled && normalizedScope.length > 0;
+
+    useEffect(() => {
+        generation.current += 1;
+        const current = generation.current;
+        // 换新实例而不是 release 旧实例：旧实例可能仍被上一代在途的写入持有。
+        gateRef.current = createDirectorOnboardingGate();
+        setProgress(null);
+        setBusy(false);
+        if (!active) return;
+        void loadDirectorOnboardingProgress(normalizedScope, storage)
+            .then((loaded) => {
+                if (generation.current === current) setProgress(loaded);
+            })
+            .catch(() => {
+                // 持久层不可用：保持不展示。引导不值得为它弹错误提示。
+            });
+    }, [active, normalizedScope, storage]);
+
+    const run = useCallback(
+        (action: DirectorOnboardingAction) => {
+            if (!active || !progress) return;
+            // 同步捕获本次调用时刻的锁实例：即使换代把 gateRef.current 换成新实例，
+            // 这次调用后续的 tryEnter/release 也只作用在捕获到的这一份上。
+            const gate = gateRef.current;
+            // 同步拦截：拿不到锁说明上一次调用还没落盘，本次直接放弃，不基于同一份旧 progress 重复发起写入。
+            if (!gate.tryEnter()) return;
+            const current = generation.current;
+            setBusy(true);
+            void advanceDirectorOnboarding(normalizedScope, progress, action, storage)
+                .then((next) => {
+                    if (generation.current === current) setProgress(next);
+                })
+                .catch(() => {
+                    // 写盘失败：停在当前步骤，用户可以再点一次。绝不在界面上假装已前进。
+                })
+                .finally(() => {
+                    // 释放捕获的 gate，不是 gateRef.current —— 换代后 ref 可能已经指向
+                    // 新一代的锁，重新读取会把新一代还在写的锁误放掉。
+                    gate.release();
+                    if (generation.current === current) setBusy(false);
+                });
+        },
+        [active, progress, normalizedScope, storage],
+    );
+
+    const next = useCallback(() => run("next"), [run]);
+    const back = useCallback(() => run("back"), [run]);
+    const dismiss = useCallback(() => run("dismiss"), [run]);
+    const complete = useCallback(() => run("complete"), [run]);
+    const reset = useCallback(() => {
+        if (!active) return;
+        const gate = gateRef.current;
+        if (!gate.tryEnter()) return;
+        // A restart supersedes the pending load for this scope. Advancing the
+        // generation prevents that older read from restoring a completed or
+        // dismissed progress record after the reset has landed.
+        generation.current += 1;
+        const current = generation.current;
+        setBusy(true);
+        void resetDirectorOnboardingProgress(normalizedScope, storage)
+            .then((next) => {
+                if (generation.current === current) setProgress(next);
+            })
+            .catch(() => {
+                if (generation.current !== current) return;
+                // 重置失败后把同一 scope 的持久进度重新读回来。重置开始时已经让旧读取
+                // 失效，若这里不补读，加载期触发重置的用户会一直停在 progress=null。
+                return loadDirectorOnboardingProgress(normalizedScope, storage)
+                    .then((loaded) => {
+                        if (generation.current === current) setProgress(loaded);
+                    })
+                    .catch(() => {
+                        // 持久层仍不可用时继续隐藏；标题栏入口允许用户稍后再次尝试。
+                    });
+            })
+            .finally(() => {
+                gate.release();
+                if (generation.current === current) setBusy(false);
+            });
+    }, [active, normalizedScope, storage]);
+
+    return { view: progress ? resolveDirectorOnboardingView(progress) : null, busy, next, back, dismiss, complete, reset };
+}
+
+/** 焦点环与既有 director 控件一致：token 化的 outline，不引入新的全局样式。 */
+const FOCUS_RING = "focus-visible:[outline:var(--stroke-2)_solid_var(--control-focus-ring)] focus-visible:[outline-offset:1px]";
+
+/**
+ * 引导卡片。
+ *
+ * scope 必须由调用方显式传入已认证用户 id —— 组件不读取 guest fallback 或当前活跃
+ * scope，避免绕过「显式用户 scope」这条边界。
+ */
+export function CanvasDirectorOnboarding({ scope, open = true, restartSignal = 0, className, storage }: { scope: string; open?: boolean; restartSignal?: number; className?: string; storage?: DirectorOnboardingStorage }) {
+    const { view, busy, next, back, dismiss, reset } = useDirectorOnboarding({ scope, enabled: open, storage });
+    const previousRestartSignal = useRef(restartSignal);
+
+    useEffect(() => {
+        if (previousRestartSignal.current === restartSignal) return;
+        previousRestartSignal.current = restartSignal;
+        reset();
+    }, [reset, restartSignal]);
+
+    if (!view) return null;
+
+    const { step, position, total, isFirst, isLast } = view;
+
+    return (
+        <section
+            className={`grid gap-[var(--space-2)] ${className || ""}`}
+            aria-label="导演台上手引导"
+            style={{
+                padding: "var(--space-3)",
+                border: "var(--stroke-1) solid var(--border-semantic)",
+                borderRadius: "var(--r-lg)",
+                background: "var(--surface)",
+                boxShadow: "var(--elevation-overlay)",
+                color: "var(--cn-text)",
+            }}
+        >
+            <header className="flex min-w-0 items-center justify-between gap-[var(--space-2)]">
+                <p className="m-0 min-w-0 truncate" style={{ fontSize: "var(--fs-label)", fontWeight: 600 }}>
+                    {step.title}
+                </p>
+                <span style={{ flex: "0 0 auto", color: "var(--cn-muted)", fontSize: "var(--fs-tiny)" }}>{`第 ${position} 步 / 共 ${total} 步`}</span>
+            </header>
+
+            {/* 步骤切换靠 aria-live 播报，不靠焦点转移：焦点必须留在用户正在操作的地方。 */}
+            <p className="m-0" aria-live="polite" style={{ color: "var(--cn-muted)", fontSize: "var(--fs-caption)", lineHeight: 1.5 }}>
+                {step.detail}
+            </p>
+
+            {/* 进度点是纯装饰，真实进度由上面的「第 N 步 / 共 M 步」文本承担。 */}
+            <div className="flex items-center gap-[var(--space-1)]" aria-hidden>
+                {Array.from({ length: total }, (_, index) => (
+                    <span
+                        key={index}
+                        style={{
+                            width: "var(--space-1-half)",
+                            height: "var(--space-1-half)",
+                            borderRadius: "var(--r-full)",
+                            background: index < position ? "var(--workspace-accent)" : "var(--cn-stroke)",
+                        }}
+                    />
+                ))}
+            </div>
+
+            <div className="flex items-center justify-between gap-[var(--space-2)]">
+                <button type="button" className={FOCUS_RING} onClick={dismiss} disabled={busy} style={{ height: "var(--space-6)", padding: "0 var(--space-2)", borderRadius: "var(--r-sm)", color: "var(--cn-muted)", fontSize: "var(--fs-tiny)" }}>
+                    跳过引导
+                </button>
+                <div className="flex items-center gap-[var(--space-1)]">
+                    <button
+                        type="button"
+                        className={FOCUS_RING}
+                        onClick={back}
+                        disabled={busy || isFirst}
+                        style={{
+                            height: "var(--space-6)",
+                            padding: "0 var(--space-3)",
+                            border: "var(--stroke-1) solid var(--control-selected-border)",
+                            borderRadius: "var(--r-sm)",
+                            background: "var(--control-selected-bg)",
+                            color: isFirst ? "var(--control-disabled-fg)" : "var(--control-selected-fg)",
+                            fontSize: "var(--fs-tiny)",
+                        }}
+                    >
+                        上一步
+                    </button>
+                    <button
+                        type="button"
+                        className={FOCUS_RING}
+                        onClick={next}
+                        disabled={busy}
+                        style={{
+                            height: "var(--space-6)",
+                            padding: "0 var(--space-3)",
+                            border: "var(--stroke-1) solid var(--workspace-accent)",
+                            borderRadius: "var(--r-sm)",
+                            background: "var(--workspace-accent)",
+                            color: "var(--btn-solid-fg)",
+                            fontSize: "var(--fs-tiny)",
+                        }}
+                    >
+                        {isLast ? "结束引导" : "下一步"}
+                    </button>
+                </div>
+            </div>
+        </section>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/director/canvas-director-workbench.tsx
+LINES: 1-937
+========================================================================
+import { App, Button, ColorPicker, Dropdown, Input, InputNumber, Modal, Select, Slider } from "antd";
+import { Switch } from "@/components/ui/base/switch";
+import type { MenuProps } from "antd";
+import { Box, BoxSelect, Camera, ChevronDown, ChevronRight, Circle, Clock3, Copy, Cuboid, Eye, EyeOff, FileUp, Focus, Folder, Image as ImageIcon, LampDesk, Lightbulb, LockKeyhole, LockKeyholeOpen, PanelLeftClose, PanelLeftOpen, Plus, ScanSearch, Search, Sparkles, Trash2, UserRound, Video, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactElement, type ReactNode } from "react";
+import { nanoid } from "nanoid";
+import { Euler, Quaternion } from "three";
+import type { AnimationClip } from "three";
+
+import { CanvasDirectorOnboarding } from "@/components/canvas/director/canvas-director-onboarding";
+import { DirectorSceneInspector, Group as DirectorGroup } from "@/components/canvas/director/director-scene-inspector";
+import { DirectorScreenshotGallery } from "@/components/canvas/director/director-screenshot-gallery";
+import { DirectorCameraScreenshotTabs, type DirectorCameraInspectorTab } from "@/components/canvas/director/director-camera-screenshot-tabs";
+import { DirectorCameraProperties } from "@/components/canvas/director/director-camera-properties";
+import { DirectorVecField } from "@/components/canvas/director/director-vec-field";
+import { DirectorPanoramaAIModal } from "@/components/canvas/director/director-panorama-ai-modal";
+import { startOperation } from "@/stores/use-operation-progress";
+import { DirectorWorkbenchRail, type DirectorWorkbenchTab } from "@/components/canvas/director/director-workbench-rail";
+import { DirectorViewport, type DirectorPoseEvaluation, type DirectorViewportHandle } from "@/components/canvas/director/director-viewport";
+import { DirectorViewportDock } from "@/components/canvas/director/director-viewport-dock";
+import { DirectorSequencer } from "@/components/canvas/director/director-sequencer";
+import { DirectorPreviewComposer } from "@/components/canvas/director/director-preview-composer";
+import { DirectorExportNotice } from "@/components/canvas/director/director-export-notice";
+import { canvasThemes } from "@/lib/canvas-theme";
+import { compileDirectorPrompt } from "@/lib/canvas/director/director-prompt-compiler";
+import { advanceDirectorPlayhead, resolveDirectorBoneRotation, resolveDirectorCameraAlignment, resolveDirectorCameraGizmoEdit, resolveDirectorCameraMoveKeyframes, resolveDirectorCameraMoveLookAtMode, resolveDirectorCameraMoveTransform, resolveDirectorDirectionalNudge, resolveDirectorKeyframeRecord, resolveDirectorMultiObjectBoneRotationEdit, resolveDirectorMultiObjectGroupTransformEdit, resolveDirectorMultiObjectTransformEdit, resolveDirectorObjectTransformEdit, snapDirectorTime, type DirectorNudgeDirection } from "@/lib/canvas/director/director-animation-semantics";
+import { createDirectorTransaction, installDirectorTerminalListeners, type DirectorTransaction } from "@/lib/canvas/director/director-gesture-transaction";
+import { DIRECTOR_PROCEDURAL_ACTOR_BONES } from "@/lib/canvas/director/director-procedural-pose";
+import { recordDirectorDiagnostic } from "@/lib/canvas/director/director-diagnostics-recorder";
+import { directorModeCapabilities, type DirectorModeCapabilities } from "@/lib/canvas/director/director-modes";
+import { resolveDirectorPlacement, resolveDirectorPlacementAnchor, snapDirectorGroundPosition, type DirectorGroundPoint } from "@/lib/canvas/director/director-placement";
+import { clampDirectorSceneToGround } from "@/lib/canvas/director/director-ground-clamp";
+import { DIRECTOR_ASPECT_RATIOS } from "@/lib/canvas/director/director-aspect-ratio";
+import { generateDirectorPanorama, recoverDirectorPanoramaTasks } from "@/lib/canvas/director/director-panorama-generation";
+import { parseDirectorImageLayout } from "@/lib/canvas/director/director-image-layout";
+import { createDirectorCameraFromPreset, DIRECTOR_CAMERA_PRESETS, type DirectorCameraPresetId } from "@/lib/canvas/director/director-camera-presets";
+import { createDirectorCameraDrawnPathKeyframes, createDirectorCameraPathKeyframes, createDirectorMotionPresetKeyframes, recordDirectorCameraPositionAtTime, recordDirectorCameraRotationAtTime, retimeDirectorCameraPathKeyframes, switchDirectorCameraLookAtMode, updateDirectorCameraOpticsAtTime, updateDirectorCameraPropertyAtTime, type DirectorCameraDrawPathKind, type DirectorCameraPathKind, type DirectorMotionPresetKind } from "@/lib/canvas/director/director-camera-paths";
+import { createDirectorActorPath, createDirectorActorPenPath, createDirectorActorPencilPath, editDirectorActorPathAtTime, removeDirectorActorPath, retimeDirectorActorPath, setDirectorActorPathFacing, updateDirectorActorPathTransform, type DirectorActorPathKind } from "@/lib/canvas/director/director-actor-paths";
+import { resolveDirectorCameraAimRotation, resolveDirectorCameraTrackValues, resolveDirectorCameraTransform, type DirectorViewMode } from "@/lib/canvas/director/director-view-modes";
+import { createDirectorActorCrowd, createDirectorActorPreset, DIRECTOR_ACTOR_CROWD_LABEL, DIRECTOR_ACTOR_PRESET_OPTIONS } from "@/lib/canvas/director/director-actor-presets";
+import { createDirectorGeometricObject, DIRECTOR_GEOMETRY_PRESET_OPTIONS } from "@/lib/canvas/director/director-geometry-presets";
+import { appendDirectorScreenshot, isDirectorOutputSnapshotCurrent, nextDirectorScreenshotName, shouldReinitializeDirectorSession } from "@/lib/canvas/director/director-session";
+import { directorAsyncSession } from "@/lib/canvas/director/director-async-session";
+import { persistDirectorImageUpload, persistDirectorLibraryAsset, persistDirectorMediaUpload, type DirectorCanvasImageHandoff } from "@/lib/canvas/director/director-library-persist";
+import { restoreDirectorPlaybackOnEnd, waitForDirectorCaptureCamera } from "@/lib/canvas/director/director-output-camera";
+import { bindDirectorCameraFollow, removeDirectorCameraBindingsForObject, replaceDirectorSceneObjects, unbindDirectorCameraFollow } from "@/lib/canvas/director/director-camera-binding";
+import { blocksDirectorShortcut, releaseDirectorFocusAfterPointer, resolveDirectorShortcut, type DirectorShortcutAction } from "@/lib/canvas/director/director-shortcuts";
+import { resolveDirectorDeleteDecision } from "@/lib/canvas/director/director-delete-target";
+import { applyDirectorUniformScale, createDirectorActor, createDirectorBillboard, createDirectorCamera, createDirectorLight, createDirectorModel, createDirectorObject, DIRECTOR_ACTOR_COLORS, DIRECTOR_KEYFRAME_EPSILON, directorBoneLabel, directorFocalLengthToFov, directorPoseBoneDeltas, directorPoseLabel, duplicateDirectorCamera, duplicateDirectorGroup, duplicateDirectorObject, groupDirectorObjects, interpolateDirectorTransform, removeDirectorSceneKeyframe, setDirectorSceneKeyframeEasing, toggleDirectorCameraLock, toggleDirectorCameraVisibility, toggleDirectorGroupCollapsed, toggleDirectorGroupLock, toggleDirectorGroupVisibility, toggleDirectorObjectLock, toggleDirectorObjectVisibility, touchDirectorScene, ungroupDirectorObjects, upsertDirectorBoneKeyframe } from "@/lib/canvas/director/director-scene";
+import { resolveDirectorSceneSelection, searchDirectorSceneItems } from "@/lib/canvas/director/director-scene-search";
+import { describeDirectorSaveStatus, resolveDirectorCloseOutcome, shouldBlockDirectorUnload, shouldOfferDirectorDraftRecovery } from "@/lib/canvas/director/director-save-wiring";
+import { useDirectorSaveCoordinator } from "@/components/canvas/director/use-director-save-coordinator";
+import { imageToDataUrl, resolvePreviewImageUrl, uploadImage } from "@/services/image-storage";
+import { requestImageQuestion } from "@/services/api/image";
+import { useAssetStore, type ImageAsset, type ModelAsset } from "@/stores/use-asset-store";
+import { useEffectiveConfig } from "@/stores/use-config-store";
+import { useDirectorWorkbenchStore } from "@/stores/canvas/use-director-workbench-store";
+import { DirectorRenderTasks } from "./director-render-tasks";
+import type { AdoptDirectorRender } from "@/services/api/canvas-director";
+import { DirectorSequenceControls } from "./director-sequence-controls";
+import { flushSync } from "react-dom";
+import { sampleDirectorSequence } from "../../../../../shared/director-sequence";
+import { useActiveTheme } from "@/stores/canvas/use-canvas-theme-store";
+import type { CanvasNodeData } from "@/types/canvas";
+import type { ReferenceImage } from "@/types/image";
+import type { DirectorCamera, DirectorCameraMove, DirectorHumanoidBone, DirectorKeyframeDeleteTarget, DirectorKeyframeEasing, DirectorLight, DirectorObject, DirectorPose, DirectorQuat, DirectorRenderMode, DirectorRig, DirectorScene, DirectorSceneOutput, DirectorScreenshot, DirectorShot, DirectorShotSize, DirectorTransform, DirectorVec3 } from "@/types/director";
+
+export function CanvasDirectorWorkbench({ open, scene, projectId, imageNodes, onboardingScope, onClose, onChange, onApply, onAdoptRender, onDeleteImageNode, onAddCanvasImage, onFlush, onShouldCaptureCover, onCaptureCover, generatePanorama = generateDirectorPanorama }: { open: boolean; scene: DirectorScene | null; projectId?: string; imageNodes: CanvasNodeData[]; onboardingScope: string; onClose: () => void; onChange: (scene: DirectorScene) => void; onApply: (output: DirectorSceneOutput) => Promise<void | { confirmed?: boolean }>; onAdoptRender?: AdoptDirectorRender; onDeleteImageNode: (nodeId: string) => void; onAddCanvasImage?: (image: Awaited<ReturnType<typeof uploadImage>>, title: string, signal: AbortSignal) => void | Promise<void | DirectorCanvasImageHandoff>; onFlush?: () => void | Promise<void>; onShouldCaptureCover?: (scene: DirectorScene, shotId: string) => boolean; onCaptureCover?: (input: { scene: DirectorScene; shotId: string; beauty: Blob }) => Promise<void>; generatePanorama?: typeof generateDirectorPanorama }) {
+    const { message, modal } = App.useApp();
+    const theme = canvasThemes[useActiveTheme()];
+    const effectiveConfig = useEffectiveConfig();
+    const viewportRef = useRef<DirectorViewportHandle>(null);
+    const [evaluatedPose, setEvaluatedPose] = useState<DirectorPoseEvaluation | null>(null);
+    const handlePoseEvaluated = useCallback((next: DirectorPoseEvaluation) => {
+        setEvaluatedPose((current) => current?.objectId === next.objectId && current.pose === next.pose && current.time === next.time
+            && Object.entries(next.rotations).every(([bone, rotation]) => rotation!.every((value, index) => Math.abs(value - (current.rotations[bone as DirectorHumanoidBone]?.[index] ?? Infinity)) < 1e-6))
+            ? current : next);
+    }, []);
+    const modelInputRef = useRef<HTMLInputElement>(null);
+    const panoramaInputRef = useRef<HTMLInputElement>(null);
+    const sceneReferenceInputRef = useRef<HTMLInputElement>(null);
+    const [panoramaUploading, setPanoramaUploading] = useState(false);
+    const [sceneReferenceUploading, setSceneReferenceUploading] = useState(false);
+    const [sceneLayoutBusy, setSceneLayoutBusy] = useState(false);
+    const [sceneLayoutMode, setSceneLayoutMode] = useState<"insert" | "replace">("insert");
+    const [sceneReferenceImage, setSceneReferenceImage] = useState<ReferenceImage | null>(null);
+    const [sceneImportView, setSceneImportView] = useState<"reference" | "history" | "assets">("reference");
+    const [sceneImportModalOpen, setSceneImportModalOpen] = useState(false);
+    const [sceneReferenceDragActive, setSceneReferenceDragActive] = useState(false);
+    const [panoramaHistoryOpen, setPanoramaHistoryOpen] = useState(false);
+    const [panoramaHistoryScope, setPanoramaHistoryScope] = useState<"all" | "canvas">("all");
+    const [panoramaAIOpen, setPanoramaAIOpen] = useState(false);
+    const [panoramaAIBusy, setPanoramaAIBusy] = useState(false);
+    const [panoramaAIStatus, setPanoramaAIStatus] = useState("");
+    useEffect(() => {
+        if (!open || !scene?.id || !projectId) return;
+        const controller = new AbortController();
+        void recoverDirectorPanoramaTasks(projectId, scene.id, controller.signal).catch((error) => {
+            if (controller.signal.aborted) return;
+            console.warn("导演台全景图历史恢复失败", error);
+        });
+        return () => controller.abort();
+    }, [open, projectId, scene?.id]);
+    const [draft, setDraft] = useState<DirectorScene | null>(null);
+    const [history, setHistory] = useState<DirectorScene[]>([]);
+    const [future, setFuture] = useState<DirectorScene[]>([]);
+    const [saving, setSaving] = useState(false);
+    const [captureBusy, setCaptureBusy] = useState(false);
+    const [captureReady, setCaptureReady] = useState(false);
+    const [cameraPreviewUrl, setCameraPreviewUrl] = useState<string | null>(null);
+    const cameraPreviewUrlRef = useRef<string | null>(null);
+    const previewPlayheadRef = useRef(0);
+    const [recording, setRecording] = useState(false);
+    const [exportNotice, setExportNotice] = useState<{ kind: "success" | "warning" | "error"; text: string } | null>(null);
+    useEffect(() => {
+        if (!exportNotice) return;
+        const timeout = window.setTimeout(() => setExportNotice(null), 6_000);
+        return () => window.clearTimeout(timeout);
+    }, [exportNotice]);
+    const [onboardingRestartSignal, setOnboardingRestartSignal] = useState(0);
+    const [navigationTab, setNavigationTab] = useState<DirectorWorkbenchTab>("cameras");
+    const [actorInspectorTab, setActorInspectorTab] = useState<"properties" | "pose" | "motion">("properties");
+    const [drawingActorId, setDrawingActorId] = useState<string | null>(null);
+    const [drawingActorKind, setDrawingActorKind] = useState<"pencil" | "pen" | null>(null);
+    const [drawingCameraKind, setDrawingCameraKind] = useState<DirectorCameraDrawPathKind | null>(null);
+    const [selectedPathKeyframe, setSelectedPathKeyframe] = useState<{ kind: "actor" | "camera"; id: string; keyframeId?: string; time?: number } | null>(null);
+    useEffect(() => {
+        if (!drawingActorId && !drawingCameraKind) return;
+        const cancel = (event: KeyboardEvent) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            setDrawingActorId(null);
+            setDrawingActorKind(null);
+            setDrawingCameraKind(null);
+        };
+        window.addEventListener("keydown", cancel, true);
+        return () => window.removeEventListener("keydown", cancel, true);
+    }, [drawingActorId, drawingCameraKind]);
+    const [sceneAddMenuOpen, setSceneAddMenuOpen] = useState(false);
+    const [leftDockCollapsed, setLeftDockCollapsed] = useState(false);
+    const [sceneSearch, setSceneSearch] = useState("");
+    const [crowdConfigOpen, setCrowdConfigOpen] = useState(false);
+    const [crowdRows, setCrowdRows] = useState(3);
+    const [crowdColumns, setCrowdColumns] = useState(3);
+    const [crowdSpacing, setCrowdSpacing] = useState(1.2);
+    const [geometryMenuOpen, setGeometryMenuOpen] = useState(false);
+    const [sceneSelection, setSceneSelection] = useState<string[]>([]);
+    const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+    const sceneSelectionAnchor = useRef<string | null>(null);
+    const [sceneInspectorView, setSceneInspectorView] = useState<"scene" | "shot">("scene");
+    const [cameraInspectorTab, setCameraInspectorTab] = useState<DirectorCameraInspectorTab>("properties");
+    const [motionPresetMenuOpen, setMotionPresetMenuOpen] = useState(false);
+    const workspaceView = useDirectorWorkbenchStore((state) => state.workspaceView);
+    const playbackScope = useDirectorWorkbenchStore((state) => state.playbackScope);
+    const sequenceLoop = useDirectorWorkbenchStore((state) => state.sequenceLoop);
+    const fixedPreviewCameraId = useDirectorWorkbenchStore((state) => state.fixedPreviewCameraId);
+    const setWorkspaceView = useDirectorWorkbenchStore((state) => state.setWorkspaceView);
+    const mode = useDirectorWorkbenchStore((state) => state.mode);
+    const viewMode = useDirectorWorkbenchStore((state) => state.viewMode);
+    const setViewMode = useDirectorWorkbenchStore((state) => state.setViewMode);
+    const setMode = useDirectorWorkbenchStore((state) => state.setMode);
+    const selectedObjectId = useDirectorWorkbenchStore((state) => state.selectedObjectId);
+    const selectedLightId = useDirectorWorkbenchStore((state) => state.selectedLightId);
+    const transformMode = useDirectorWorkbenchStore((state) => state.transformMode);
+    const renderMode = useDirectorWorkbenchStore((state) => state.renderMode);
+    const playhead = useDirectorWorkbenchStore((state) => state.playhead);
+    previewPlayheadRef.current = playhead;
+    const playing = useDirectorWorkbenchStore((state) => state.playing);
+    const selectedBone = useDirectorWorkbenchStore((state) => state.selectedBone);
+    const autoKey = useDirectorWorkbenchStore((state) => state.autoKey);
+    const sequencerHeight = useDirectorWorkbenchStore((state) => state.sequencerHeight);
+    const sequencerVisible = useDirectorWorkbenchStore((state) => state.sequencerVisible);
+    const setSelectedObjectId = useDirectorWorkbenchStore((state) => state.setSelectedObjectId);
+    const setSelectedLightId = useDirectorWorkbenchStore((state) => state.setSelectedLightId);
+    const setTransformMode = useDirectorWorkbenchStore((state) => state.setTransformMode);
+    const setRenderMode = useDirectorWorkbenchStore((state) => state.setRenderMode);
+    const setPlayhead = useDirectorWorkbenchStore((state) => state.setPlayhead);
+    const setPlaying = useDirectorWorkbenchStore((state) => state.setPlaying);
+    const setSelectedBone = useDirectorWorkbenchStore((state) => state.setSelectedBone);
+    const setAutoKey = useDirectorWorkbenchStore((state) => state.setAutoKey);
+    const setSequencerHeight = useDirectorWorkbenchStore((state) => state.setSequencerHeight);
+    const setSequencerVisible = useDirectorWorkbenchStore((state) => state.setSequencerVisible);
+    const resetWorkbench = useDirectorWorkbenchStore((state) => state.reset);
+    useEffect(() => {
+        if (!sequencerVisible && actorInspectorTab === "motion") setActorInspectorTab("properties");
+    }, [actorInspectorTab, sequencerVisible]);
+    useEffect(() => {
+        if (!sequencerVisible && cameraInspectorTab === "motion") setCameraInspectorTab("properties");
+    }, [cameraInspectorTab, sequencerVisible]);
+    const changeViewportMode = (next: DirectorViewMode) => {
+        if (next !== viewMode && (next === "camera" || viewMode === "camera")) {
+            setSelectedObjectId(null);
+            setSelectedLightId(null);
+            setSelectedBone(null);
+            setSelectedGroupId(null);
+            setSceneSelection([]);
+            sceneSelectionAnchor.current = null;
+            setSceneInspectorView(next === "camera" ? "shot" : "scene");
+            setCameraInspectorTab("properties");
+        }
+        setViewMode(next);
+    };
+    useEffect(() => {
+        const penProperties = drawingActorKind === "pen" && actorInspectorTab === "properties";
+        if (drawingActorId && (!open || workspaceView !== "scene" || (actorInspectorTab !== "motion" && !penProperties) || selectedObjectId !== drawingActorId)) {
+            setDrawingActorId(null);
+            setDrawingActorKind(null);
+        }
+    }, [actorInspectorTab, drawingActorId, drawingActorKind, open, selectedObjectId, workspaceView]);
+    useEffect(() => {
+        if (drawingCameraKind && (!open || workspaceView !== "scene" || selectedObjectId !== null)) setDrawingCameraKind(null);
+    }, [drawingCameraKind, open, selectedObjectId, workspaceView]);
+    const assets = useAssetStore((state) => state.assets);
+    const modelAssets = useMemo(() => assets.filter((asset): asset is ModelAsset => asset.kind === "model"), [assets]);
+    const imageAssets = useMemo(() => assets.filter((asset): asset is ImageAsset => asset.kind === "image"), [assets]);
+
+    // 模式决定显示什么：时间轴、关键帧、骨骼、摄影机工具与可选渲染视图都从这里派生。
+    const capabilities = directorModeCapabilities(mode);
+
+    const draftRef = useRef<DirectorScene | null>(null);
+    const openRef = useRef(open);
+    openRef.current = open;
+    const sessionRef = useRef(new AbortController());
+    useEffect(() => {
+        const controller = new AbortController();
+        sessionRef.current = controller;
+        openRef.current = open;
+        if (!open) controller.abort();
+        setPanoramaUploading(false);
+        setPanoramaAIBusy(false);
+        setPanoramaAIStatus("");
+        setSceneReferenceUploading(false);
+        setSceneReferenceImage(null);
+        setSceneLayoutBusy(false);
+        setCaptureBusy(false);
+        setSaving(false);
+        setRecording(false);
+        return () => { controller.abort(); openRef.current = false; };
+    }, [open, scene?.id, projectId, onboardingScope]);
+    const stagedRef = useRef<DirectorTransaction | null>(null);
+    const initializedSceneIdRef = useRef<string | null>(null);
+    const onChangeRef = useRef(onChange);
+    const onFlushRef = useRef(onFlush);
+    useEffect(() => { onChangeRef.current = onChange; onFlushRef.current = onFlush; }, [onChange, onFlush]);
+
+    const closingRef = useRef(false);
+    const recoveryPromptedRef = useRef<string | null>(null);
+    const [retrying, setRetrying] = useState(false);
+
+    // 按 scene.id 持有唯一 coordinator：flush 先把 request.scene 写回项目，再等持久化完成。
+    const saveController = useDirectorSaveCoordinator({
+        sceneId: scene?.id ?? null,
+        initialScene: scene,
+        persistScene: (next) => onChangeRef.current(next),
+        flushPersistence: () => onFlushRef.current?.(),
+    });
+    const saveControllerRef = useRef(saveController);
+    saveControllerRef.current = saveController;
+    const saveIndicator = describeDirectorSaveStatus(saveController.progress);
+
+    const retrySave = async () => {
+        setRetrying(true);
+        try {
+            if (await saveController.retry()) {
+                recordDirectorDiagnostic("DIRECTOR_SAVE_RETRY_RECOVERED", { sceneId: draftRef.current?.id, revision: saveController.progress.revision, userInitiated: true });
+                message.success("已保存到项目");
+                return;
+            }
+            // 只有真的存在合法本地候选才敢说草稿已保留。
+            const draftStored = Boolean(saveController.restoreCandidate());
+            recordDirectorDiagnostic("DIRECTOR_SAVE_RETRY_FAILED", { sceneId: draftRef.current?.id, revision: saveController.progress.revision, draftStored, userInitiated: true });
+            if (!draftStored) recordDirectorDiagnostic("DIRECTOR_SAVE_DRAFT_UNAVAILABLE", { sceneId: draftRef.current?.id, revision: saveController.progress.revision });
+            if (draftStored) message.error("远端保存失败，本地草稿已保留，可稍后重试");
+            else message.error("远端和本地都未保存，请不要关闭导演台并继续重试");
+        } finally {
+            setRetrying(false);
+        }
+    };
+
+    const writeDraft = useCallback((next: DirectorScene | null) => {
+        draftRef.current = next;
+        setDraft(next);
+    }, []);
+
+    /**
+     * 仅镜像当前 draft 到项目 directorScenes，不产生 canonical 提交。
+     * 用于取消预览、idle pagehide、卸载兜底 —— 这些都不是新的用户改动。
+     */
+    const mirrorDraft = useCallback(() => {
+        const current = draftRef.current;
+        if (!current || initializedSceneIdRef.current !== current.id) return;
+        onChangeRef.current(current);
+    }, []);
+
+    /** 真实 canonical 提交：先交给 coordinator（本地草稿 + 远端保存），再镜像到项目。 */
+    const commitDraft = useCallback(() => {
+        const current = draftRef.current;
+        if (!current || initializedSceneIdRef.current !== current.id) return;
+        saveControllerRef.current?.commitScene(current);
+        onChangeRef.current(current);
+    }, []);
+
+    const writeAndPublish = useCallback((next: DirectorScene) => {
+        // 唯一的场景写入出口：任何来源（gizmo、检查器、方向键、关键帧、模板）都在这里
+        // 统一被「不许钻到地面以下」归一化，避免各入口各写一份夹取逻辑而出现遗漏。
+        const clamped = clampDirectorSceneToGround(next);
+        writeDraft(clamped);
+        saveControllerRef.current?.commitScene(clamped);
+        onChangeRef.current(clamped);
+    }, [writeDraft]);
+
+    // 会话初始化只认 scene id：同 id 的父级镜像回流不得重建会话。
+    useEffect(() => {
+        if (!open || !scene) return;
+        if (!shouldReinitializeDirectorSession({ initializedSceneId: initializedSceneIdRef.current, nextSceneId: scene.id })) return;
+        // 旧场景可能存着陷到地面以下的对象/机位：打开时先归一化一次，之后所有编辑都维持这个约束。
+        const next = clampDirectorSceneToGround(structuredClone(scene));
+        next.shots = next.shots.map((shot) => ({ ...shot, fps: shot.fps || 24 }));
+        stagedRef.current?.end("cancel");
+        initializedSceneIdRef.current = scene.id;
+        writeDraft(next);
+        setHistory([]);
+        setFuture([]);
+        setSceneSelection([]);
+        setSelectedGroupId(null);
+        sceneSelectionAnchor.current = null;
+        resetWorkbench();
+    }, [open, resetWorkbench, scene, writeDraft]);
+
+    // 打开会话时检查合法本地恢复候选：同一场景只提示一次，恢复/放弃都必须有明确结果。
+    useEffect(() => {
+        if (!open || !scene) return;
+        if (recoveryPromptedRef.current === scene.id) return;
+        recoveryPromptedRef.current = scene.id;
+
+        const controller = saveControllerRef.current;
+        const candidate = controller?.restoreCandidate() ?? null;
+        if (!controller || !candidate) return;
+        if (!shouldOfferDirectorDraftRecovery({ candidate, authoritativeScene: scene })) return;
+
+        modal.confirm({
+            title: "发现未保存的本地草稿",
+            content: `这个镜头存在一份比项目更新的本地草稿（修订 ${candidate.revision}）。恢复后会立即写回项目并保存。`,
+            okText: "恢复草稿",
+            cancelText: "放弃草稿",
+            closable: false,
+            mask: { closable: false },
+            keyboard: false,
+            onOk: () => {
+                // 草稿可能是旧版本写的，恢复时同样要过一遍地面约束，避免恢复完就陷进地面。
+                const restored = { ...candidate, scene: clampDirectorSceneToGround(candidate.scene) };
+                if (!controller.restoreDraft(restored)) {
+                    message.error("草稿恢复失败，已保留当前场景");
+                    return;
+                }
+                writeDraft(restored.scene);
+                message.success("已恢复本地草稿并写回项目");
+            },
+            onCancel: () => {
+                if (controller.discardDraft()) message.success("已放弃本地草稿");
+                else message.error("草稿删除失败，下次打开可能仍会提示");
+            },
+        });
+    }, [message, modal, open, scene, writeDraft]);
+
+    const activeShot = draft?.shots?.find((item) => item.id === draft.activeShotId) || draft?.shots?.[0] || null;
+    const visibleSceneItems = useMemo(() => draft ? searchDirectorSceneItems(draft, sceneSearch) : [], [draft, sceneSearch]);
+    const selectedSceneObjects = useMemo(() => draft?.objects.filter((object) => sceneSelection.includes(object.id)) || [], [draft, sceneSelection]);
+    const viewportSelectedObjectIds = useMemo(() => sceneSelection.length === selectedSceneObjects.length ? sceneSelection : selectedObjectId ? [selectedObjectId] : [], [sceneSelection, selectedObjectId, selectedSceneObjects.length]);
+    const selectedCamera = draft?.cameras.find((camera) => sceneSelection.includes(camera.id)) || null;
+    const activeCamera = draft?.cameras?.find((item) => item.id === activeShot?.cameraId) || draft?.cameras?.[0] || null;
+    useEffect(() => {
+        const revokePreview = () => {
+            if (!cameraPreviewUrlRef.current) return;
+            URL.revokeObjectURL(cameraPreviewUrlRef.current);
+            cameraPreviewUrlRef.current = null;
+        };
+        if (!open || !captureReady || (mode !== "camera" && viewMode !== "camera") || cameraInspectorTab !== "properties" || !activeCamera) {
+            revokePreview();
+            setCameraPreviewUrl(null);
+            return;
+        }
+
+        let cancelled = false;
+        let captureInFlight = false;
+        const refreshPreview = async () => {
+            if (cancelled || captureInFlight) return;
+            captureInFlight = true;
+            try {
+                const blob = await viewportRef.current?.captureCameraPreview(previewPlayheadRef.current);
+                if (!blob || cancelled) return;
+                const nextUrl = URL.createObjectURL(blob);
+                revokePreview();
+                cameraPreviewUrlRef.current = nextUrl;
+                setCameraPreviewUrl(nextUrl);
+            } catch (error) {
+                if (!cancelled) console.warn("摄影机预览生成失败", error);
+            } finally {
+                captureInFlight = false;
+            }
+        };
+        void refreshPreview();
+        const interval = playing ? window.setInterval(() => void refreshPreview(), 500) : null;
+        return () => {
+            cancelled = true;
+            if (interval !== null) window.clearInterval(interval);
+            revokePreview();
+            setCameraPreviewUrl(null);
+        };
+    }, [activeCamera, cameraInspectorTab, captureReady, draft, mode, open, playing, playing ? null : playhead, viewMode]);
+    const selectedObject = draft?.objects?.find((item) => item.id === selectedObjectId) || null;
+    const selectedPoseRotations = selectedObject && evaluatedPose?.objectId === selectedObject.id
+        && evaluatedPose.pose === (selectedObject.pose || "stand") && Math.abs(evaluatedPose.time - playhead) < 1e-5
+        ? evaluatedPose.rotations : undefined;
+    const selectedGroup = draft?.groups?.find((item) => item.id === selectedGroupId) || null;
+    const selectedLight = draft?.lights?.find((item) => item.id === selectedLightId) || null;
+    // 写入关键帧的目的时间用吸附值；取值/显示/手势起点一律用 raw playhead，
+    // 否则处在两个帧格之间时 AutoKey OFF 的增量会从错误起点计算而产生漂移。
+    const playbackSequence = playbackScope === "sequence" ? draft?.cameraSequence : undefined;
+    const playbackFps = playbackSequence?.fps || activeShot?.fps || 24;
+    const playbackDuration = playbackSequence ? playbackSequence.durationFrames / playbackSequence.fps : activeShot?.duration || 0;
+    const fixedCamera = draft?.cameras.some(camera => camera.id === fixedPreviewCameraId) ? fixedPreviewCameraId : undefined;
+    const previewCameraId = playbackSequence ? sampleDirectorSequence(playbackSequence, Math.round(playhead * playbackFps), fixedCamera || undefined).cameraId : activeShot?.cameraId;
+    const previewScene = draft && playbackSequence && workspaceView === "preview" ? { ...draft, shots: draft.shots.map(shot => shot.id === activeShot?.id ? { ...shot, cameraId: previewCameraId! } : shot) } : draft;
+    const snappedPlayhead = snapDirectorTime(playhead, playbackFps);
+    useEffect(() => {
+        const time = useDirectorWorkbenchStore.getState().playhead;
+        setPlayhead(Math.max(0, Math.min(time, Math.max(0, playbackDuration - 1 / playbackFps))));
+    }, [playbackScope, playbackDuration, playbackFps, setPlayhead]);
+    useEffect(() => {
+        setSelectedPathKeyframe((current) => current?.time !== undefined && Math.abs(current.time - playhead) > 1e-5 ? null : current);
+    }, [playhead]);
+    const selectedObjectRendered = selectedObject ? interpolateDirectorTransform(selectedObject.transform, selectedObject.keyframes, playhead) : null;
+    const multiSelectionTransformObject = draft?.objects.find((item) => item.id === sceneSelection.at(-1)) || null;
+    const multiSelectionRendered = multiSelectionTransformObject ? interpolateDirectorTransform(multiSelectionTransformObject.transform, multiSelectionTransformObject.keyframes, playhead) : null;
+
+    useEffect(() => {
+        if (!playing || !activeShot || recording) return;
+        let frame = 0;
+        let last = performance.now();
+        let pending = 0;
+        const frameInterval = 1 / playbackFps;
+        const tick = (now: number) => {
+            pending += Math.max(0, (now - last) / 1000);
+            last = now;
+            if (pending >= frameInterval) {
+                const elapsed = Math.floor(pending / frameInterval) * frameInterval;
+                pending -= elapsed;
+                const next = useDirectorWorkbenchStore.getState().playhead + elapsed;
+                if (playbackSequence && !sequenceLoop && next >= playbackDuration - frameInterval) {
+                    setPlayhead(playbackDuration - frameInterval);
+                    setPlaying(false);
+                    return;
+                }
+                setPlayhead(advanceDirectorPlayhead(useDirectorWorkbenchStore.getState().playhead, elapsed, playbackDuration));
+            }
+            frame = requestAnimationFrame(tick);
+        };
+        frame = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(frame);
+    }, [activeShot, playing, recording, setPlayhead, setPlaying, playbackFps, playbackDuration, playbackSequence, sequenceLoop]);
+
+    const commit = useCallback((updater: (current: DirectorScene) => DirectorScene) => {
+        // 普通提交前先终结暂存手势，避免新动作消费旧 base。
+        stagedRef.current?.end("commit");
+        const current = draftRef.current;
+        if (!current) return;
+        setHistory((items) => [...items.slice(-49), structuredClone(current)]);
+        setFuture([]);
+        writeAndPublish(touchDirectorScene(updater(current)));
+    }, [writeAndPublish]);
+
+    /** 暂存型手势（数值滑杆）：实时预览写草稿但不产生历史，也不镜像到项目。 */
+    const stagedTransaction = useMemo(() => createDirectorTransaction<DirectorScene>({
+        read: () => draftRef.current,
+        // 取消：恢复快照且绝不发布被取消的值。
+        restore: (snapshot) => writeDraft(snapshot),
+        commit: (from) => {
+            setHistory((items) => [...items.slice(-49), from]);
+            setFuture([]);
+            // 手势成功终态是真实 canonical 提交。
+            commitDraft();
+        },
+        setActive: () => undefined,
+    }), [commitDraft, writeDraft]);
+    stagedRef.current = stagedTransaction;
+
+    const stageGesture = useCallback((updater: (current: DirectorScene) => DirectorScene) => {
+        const current = draftRef.current;
+        if (!current) return;
+        stagedTransaction.begin();
+        writeDraft(clampDirectorSceneToGround(touchDirectorScene(updater(current))));
+    }, [stagedTransaction, writeDraft]);
+
+    /** 无历史但持久的变化（标题、rig/motionClips 等）同样要镜像。 */
+    const replaceWithoutHistory = useCallback((updater: (current: DirectorScene) => DirectorScene) => {
+        const current = draftRef.current;
+        if (current) writeAndPublish(touchDirectorScene(updater(current)));
+    }, [writeAndPublish]);
+
+    // 暂存手势的终止生命周期：常驻安装，非活跃时 end 为空操作。
+    useEffect(() => installDirectorTerminalListeners(stagedTransaction, {
+        window,
+        document,
+        isHidden: () => document.visibilityState === "hidden",
+    }), [stagedTransaction]);
+
+    // 切换选择/骨骼、关闭或卸载前必须先终止旧手势，不能让新选择消费旧 base。
+    useEffect(() => () => stagedTransaction.end("cancel"), [open, selectedBone, selectedObjectId, stagedTransaction]);
+
+    // 离开页面：active 预览由 end("commit") 完成真实提交，idle 只镜像；落盘统一交给 controller。
+    useEffect(() => {
+        const onPageHide = () => {
+            if (stagedTransaction.active()) stagedTransaction.end("commit");
+            else mirrorDraft();
+            // 只调用 handlePageHide：dirty 时它自己会 persist + flush，组件再叠一次就是重复落盘。
+            void saveControllerRef.current?.handlePageHide();
+        };
+        // 异步 flush 不可能阻塞卸载：这里只同步声明「仍有未确认改动」，让浏览器自己弹保护。
+        const onBeforeUnload = (event: BeforeUnloadEvent) => {
+            const controller = saveControllerRef.current;
+            if (!controller || !shouldBlockDirectorUnload(controller.progress)) return;
+            event.preventDefault();
+            event.returnValue = "";
+        };
+        window.addEventListener("pagehide", onPageHide);
+        window.addEventListener("beforeunload", onBeforeUnload);
+        return () => {
+            window.removeEventListener("pagehide", onPageHide);
+            window.removeEventListener("beforeunload", onBeforeUnload);
+        };
+    }, [mirrorDraft, stagedTransaction]);
+
+    // 卸载兜底：只把最新 draft 镜像回项目，不制造新的 canonical revision。
+    useEffect(() => () => {
+        stagedRef.current?.end("cancel");
+        mirrorDraft();
+    }, [mirrorDraft]);
+
+    const undo = () => {
+        const previous = history.at(-1);
+        if (!previous || !draft) return;
+        setHistory((items) => items.slice(0, -1));
+        setFuture((items) => [structuredClone(draft), ...items].slice(0, 50));
+        writeAndPublish(previous);
+        setSceneSelection([]);
+        setSelectedGroupId(null);
+        sceneSelectionAnchor.current = null;
+    };
+    const redo = () => {
+        const next = future[0];
+        if (!next || !draft) return;
+        setFuture((items) => items.slice(1));
+        setHistory((items) => [...items, structuredClone(draft)].slice(-50));
+        writeAndPublish(next);
+        setSceneSelection([]);
+        setSelectedGroupId(null);
+        sceneSelectionAnchor.current = null;
+    };
+
+    /**
+     * 关闭统一入口：取消未结束的预览、镜像当前 draft，再按 prepareClose 决策是否真的退出。
+     * 这里只镜像不提交：取消预览不是新的 canonical 变化。
+     */
+    const closeWorkbench = () => {
+        if (closingRef.current) return;
+        closingRef.current = true;
+        stagedTransaction.end("cancel");
+        mirrorDraft();
+        void (async () => {
+            let decision;
+            try {
+                decision = resolveDirectorCloseOutcome(await saveController.prepareClose());
+            } catch {
+                message.error("关闭前的保存检查失败，已留在导演台");
+                closingRef.current = false;
+                return;
+            }
+
+            if (decision.kind === "close") {
+                const current = draftRef.current;
+                const shot = current?.shots.find((item) => item.id === current.activeShotId) || current?.shots[0];
+                if (current && shot && onCaptureCover && onShouldCaptureCover?.(current, shot.id) && viewportRef.current) {
+                    const session = directorAsyncSession(sessionRef.current.signal);
+                    try {
+                        const beauty = await viewportRef.current.capture("beauty");
+                        session.assertCurrent();
+                        void onCaptureCover({ scene: current, shotId: shot.id, beauty }).catch((error) => {
+                            if ((error instanceof DOMException && error.name === "AbortError")) return;
+                            message.warning("导演台封面保存失败，下次打开镜头后可重试");
+                        });
+                    } catch (error) {
+                        if ((error instanceof DOMException && error.name === "AbortError")) return;
+                        message.warning("导演台截图失败，下次打开镜头后可重试");
+                    }
+                }
+                sessionRef.current.abort();
+                onClose();
+                return;
+            }
+            if (decision.kind === "blocked") {
+                recordDirectorDiagnostic("DIRECTOR_CLOSE_BLOCKED", { sceneId: draftRef.current?.id, saveOutcome: "stay", revision: saveController.progress.revision, draftStored: saveController.progress.draftStored });
+                message.error(decision.message);
+                closingRef.current = false;
+                return;
+            }
+
+            // 确认框存续期间保持上锁，否则重复点击会叠出多个弹窗。
+            modal.confirm({
+                title: "远端保存失败",
+                content: decision.message,
+                okText: "仍然离开",
+                cancelText: "留在导演台",
+                closable: false,
+                mask: { closable: false },
+                keyboard: false,
+                onOk: () => { sessionRef.current.abort(); onClose(); },
+                onCancel: () => {
+                    closingRef.current = false;
+                },
+            });
+        })();
+    };
+
+    const updateObject = (id: string, patch: Partial<DirectorObject>) => commit((current) => ({ ...current, objects: current.objects.map((item) => (item.id === id ? { ...item, ...patch } : item)) }));
+    const updateLight = (id: string, patch: Partial<DirectorLight>) => commit((current) => ({ ...current, lights: current.lights.map((item) => (item.id === id ? { ...item, ...patch } : item)) }));
+    const updateShot = (id: string, patch: Partial<DirectorShot>) => commit((current) => ({ ...current, shots: current.shots.map((item) => (item.id === id ? { ...item, ...patch } : item)) }));
+    const removeScreenshot = (screenshot: DirectorScreenshot) => {
+        commit((current) => ({ ...current, shots: current.shots.map((item) => (item.screenshots?.some((entry) => entry.id === screenshot.id) ? { ...item, screenshots: (item.screenshots || []).filter((entry) => entry.id !== screenshot.id) } : item)) }));
+        message.success("截图已删除");
+    };
+    const selectSceneItem = (id: string, shift: boolean) => {
+        setSelectedGroupId(null);
+        const next = resolveDirectorSceneSelection(visibleSceneItems.map((item) => item.id), sceneSelection, sceneSelectionAnchor.current, id, shift);
+        setSceneSelection(next);
+        if (!shift || next.length === 1) sceneSelectionAnchor.current = id;
+        if (next.length > 1) {
+            setSelectedObjectId(null);
+            setSelectedLightId(null);
+            return;
+        }
+        const item = visibleSceneItems.find((entry) => entry.id === id);
+        if (item?.kind === "object") {
+            if (mode === "camera") setMode("layout");
+            setSelectedLightId(null);
+            setSelectedObjectId(id);
+        } else if (item?.kind === "light") {
+            if (mode === "camera") setMode("layout");
+            setSelectedLightId(id);
+        } else if (item?.kind === "camera") {
+            setSceneInspectorView("shot");
+            setMode("camera");
+            setSelectedObjectId(null);
+            setSelectedLightId(null);
+            if (activeShot) updateShot(activeShot.id, { cameraId: id });
+        }
+    };
+    const selectGroup = (id: string) => {
+        setSceneSelection([]);
+        sceneSelectionAnchor.current = null;
+        setSelectedGroupId(id);
+        setSelectedObjectId(null);
+        setSelectedLightId(null);
+    };
+    const createGroupFromSelection = () => {
+        const current = draftRef.current;
+        const ids = selectedSceneObjects.map((object) => object.id);
+        if (!current || ids.length < 2) return;
+        const next = groupDirectorObjects(current, ids);
+        const created = next.groups?.find((group) => !current.groups?.some((existing) => existing.id === group.id));
+        if (!created || next === current) return;
+        commit(() => next);
+        selectGroup(created.id);
+    };
+    const dissolveGroup = (id: string) => {
+        commit((current) => ungroupDirectorObjects(current, id));
+        setSelectedGroupId(null);
+    };
+    const duplicateGroup = (id: string) => {
+        const current = draftRef.current;
+        if (!current) return;
+        const next = duplicateDirectorGroup(current, id);
+        const duplicate = next.groups?.find((group) => !current.groups?.some((existing) => existing.id === group.id));
+        if (!duplicate || next === current) return;
+        commit(() => next);
+        selectGroup(duplicate.id);
+    };
+    const removeGroup = (id: string) => {
+        const memberIds = draftRef.current?.objects.filter((object) => object.groupId === id).map((object) => object.id) || [];
+        commit((current) => {
+            const cameras = current.cameras.map((camera) => memberIds.reduce((nextCamera, objectId) => removeDirectorCameraBindingsForObject(nextCamera, objectId, current, playhead), camera));
+            const groups = current.groups?.filter((group) => group.id !== id);
+            return { ...current, groups: groups?.length ? groups : undefined, objects: current.objects.filter((object) => object.groupId !== id), cameras };
+        });
+        setSelectedGroupId(null);
+        setSceneSelection((selected) => selected.filter((selectedId) => !memberIds.includes(selectedId)));
+        if (memberIds.includes(selectedObjectId || "")) {
+            setSelectedObjectId(null);
+            setSelectedBone(null);
+        }
+    };
+    const removeObject = (id: string) => {
+        const groupId = draftRef.current?.objects.find((item) => item.id === id)?.groupId;
+        commit((current) => {
+            const objects = current.objects.filter((item) => item.id !== id);
+            const groups = current.groups?.filter((group) => objects.some((object) => object.groupId === group.id));
+            return { ...current, objects, groups: groups?.length ? groups : undefined, cameras: current.cameras.map((camera) => removeDirectorCameraBindingsForObject(camera, id, current, playhead)) };
+        });
+        if (groupId && !draftRef.current?.objects.some((item) => item.id !== id && item.groupId === groupId)) setSelectedGroupId(null);
+        if (selectedObjectId === id) {
+            setSelectedObjectId(null);
+            setSelectedBone(null);
+        }
+        setSceneSelection((ids) => ids.filter((selected) => selected !== id));
+    };
+    const removeLight = (id: string) => {
+        commit((current) => ({ ...current, lights: current.lights.filter((item) => item.id !== id) }));
+        if (selectedLightId === id) setSelectedLightId(null);
+        setSceneSelection((ids) => ids.filter((selected) => selected !== id));
+    };
+    const removeCamera = (id: string) => {
+        if (!draft || draft.cameras.length <= 1) {
+            message.warning("至少保留一台摄影机");
+            return;
+        }
+        if (draft.cameraSequence?.cuts.some(cut => cut.cameraId === id)) { message.warning("请先替换序列中引用此机位的切点，再删除摄影机"); return; }
+        const fallback = draft.cameras.find((item) => item.id !== id);
+        if (!fallback) return;
+        commit((current) => ({
+            ...current,
+            cameras: current.cameras.filter((item) => item.id !== id),
+            shots: current.shots.map((shot) => shot.cameraId === id ? { ...shot, cameraId: fallback.id } : shot),
+        }));
+        setSceneSelection((ids) => ids.filter((selected) => selected !== id));
+    };
+
+    const copyObject = (id: string) => {
+        const source = draftRef.current?.objects.find((item) => item.id === id);
+        if (!source) return;
+        const copy = duplicateDirectorObject(source);
+        commit((current) => ({ ...current, objects: [...current.objects, copy] }));
+        setSelectedLightId(null);
+        setSelectedObjectId(copy.id);
+        setSceneSelection([copy.id]);
+        sceneSelectionAnchor.current = copy.id;
+    };
+    const copyCamera = (id: string) => {
+        const source = draftRef.current?.cameras.find((item) => item.id === id);
+        if (!source || !activeShot) return;
+        const copy = duplicateDirectorCamera(source);
+        commit((current) => ({ ...current, cameras: [...current.cameras, copy], shots: current.shots.map((shot) => shot.id === activeShot.id ? { ...shot, cameraId: copy.id } : shot) }));
+        setSelectedObjectId(null);
+        setSelectedLightId(null);
+        setSceneInspectorView("shot");
+        setSceneSelection([copy.id]);
+        sceneSelectionAnchor.current = copy.id;
+    };
+
+    /**
+     * 所有「新增到场景」的唯一入口。
+     * 在 commit 内读取一次 placement intent：因此模型上传等异步路径拿到的是
+     * 「点击添加完成那一刻」的意图，而不是发起上传时捕获的过时坐标。
+     * 锚点只提供 XZ，Y 严格保留构造器给定值，再交给 resolveDirectorPlacement 做碰撞避让。
+     */
+    const addObject = (object: DirectorObject) => {
+        commit((current) => {
+            const anchored = resolveDirectorPlacementAnchor({
+                intent: viewportRef.current?.readPlacementIntent() ?? null,
+                fallback: object.transform.position,
+            });
+            const position = resolveDirectorPlacement({ object: { ...object, transform: { ...object.transform, position: anchored } }, existing: current.objects, gridSnap: current.gridSnap });
+            return { ...current, objects: [...current.objects, { ...object, transform: { ...object.transform, position } }] };
+        });
+        setSelectedObjectId(object.id);
+        setMode(object.kind === "actor" ? "pose" : "layout");
+    };
+
+    const addPrimitive = (primitive: DirectorObject["primitive"], name: string) => addObject(createDirectorObject(primitive, name));
+
+    const addActor = () => {
+        const actorCount = draft?.objects.filter((item) => item.kind === "actor").length || 0;
+        addObject(createDirectorActor(`演员 ${actorCount + 1}`, [0, 0, 0], DIRECTOR_ACTOR_COLORS[actorCount % DIRECTOR_ACTOR_COLORS.length]));
+    };
+
+    const addActorPreset = (preset: (typeof DIRECTOR_ACTOR_PRESET_OPTIONS)[number]["id"]) => {
+        if (preset === "geometric") {
+            setGeometryMenuOpen((open) => !open);
+            return;
+        }
+        const option = DIRECTOR_ACTOR_PRESET_OPTIONS.find((item) => item.id === preset)!;
+        const actorCount = draft?.objects.filter((item) => item.kind === "actor").length || 0;
+        addObject(createDirectorActorPreset(preset, `${option.label} ${actorCount + 1}`));
+    };
+
+    /** Crowd preset is one undoable scene edit; actors are spaced around the current placement anchor. */
+    const addActorCrowd = (rows = 3, columns = 3, spacing = 1.2) => {
+        const group = (draft?.objects.reduce((highest, item) => {
+            const match = item.kind === "actor" ? item.name.match(/^群众 (\d+)-\d+$/) : null;
+            return match ? Math.max(highest, Number(match[1]) || 0) : highest;
+        }, 0) || 0) + 1;
+        const actors = createDirectorActorCrowd(group, rows, columns, spacing);
+        const intent = viewportRef.current?.readPlacementIntent() ?? null;
+        commit((current) => {
+            const anchor = resolveDirectorPlacementAnchor({ intent, fallback: [0, 0, 0] });
+            const placed: DirectorObject[] = [];
+            actors.forEach((actor) => {
+                const offset = actor.transform.position;
+                const requested: DirectorVec3 = [anchor[0] + offset[0], actor.transform.position[1], anchor[2] + offset[2]];
+                const position = resolveDirectorPlacement({ object: { ...actor, transform: { ...actor.transform, position: requested } }, existing: [...current.objects, ...placed], gridSnap: current.gridSnap });
+                placed.push({ ...actor, transform: { ...actor.transform, position } });
+            });
+            return { ...current, objects: [...current.objects, ...placed] };
+        });
+        setSelectedObjectId(actors.at(-1)?.id ?? null);
+    };
+
+    const addModelAsset = (asset: ModelAsset) => addObject(createDirectorModel({ name: asset.title, assetId: asset.id, storageKey: asset.data.storageKey, url: asset.data.url, mimeType: asset.data.mimeType }));
+
+    const setPanorama = (url: string, storageKey?: string, name?: string) => {
+        commit((current) => ({ ...current, panorama: { url, storageKey, name, rotation: current.panorama?.rotation ?? 0 } }));
+        setPanoramaHistoryOpen(false);
+        setNavigationTab("panorama");
+    };
+
+    const uploadPanorama = async (file?: File) => {
+        if (!file) return;
+        if (!file.type.startsWith("image/")) { message.error("请选择图片文件"); return; }
+        setPanoramaUploading(true);
+        const session = directorAsyncSession(sessionRef.current.signal);
+        try {
+            const { uploaded, persist } = await persistDirectorImageUpload({
+                source: file,
+                signal: session.signal,
+                toAsset: (image) => ({ kind: "image", title: file.name, coverUrl: image.url, tags: ["全景图"], source: "导演台", data: { dataUrl: image.url, storageKey: image.storageKey, width: image.width, height: image.height, bytes: image.bytes, mimeType: image.mimeType }, metadata: { source: "director-panorama" } }),
+            });
+            session.assertCurrent();
+            setPanorama(uploaded.url, uploaded.storageKey, file.name);
+            message[persist.confirmed ? "success" : "warning"](persist.confirmed ? "全景图已加入场景和素材库" : "全景图已保存在这台设备，稍后请检查是否同步完成");
+        } catch (error) {
+            if (session.current()) message.error(error instanceof Error ? error.message : "全景图上传失败");
+        } finally {
+            if (session.current()) setPanoramaUploading(false);
+        }
+    };
+
+    const startPanoramaGeneration = (file: File) => {
+        const sceneId = draftRef.current?.id;
+        if (!sceneId || panoramaAIBusy) return;
+        const session = directorAsyncSession(sessionRef.current.signal);
+        setPanoramaAIBusy(true);
+        setPanoramaAIStatus("正在提交生成任务…");
+        void generatePanorama({
+            file,
+            config: effectiveConfig,
+            sceneId,
+            projectId,
+            signal: session.signal,
+            onTaskUpdate: (task) => { if (session.current()) setPanoramaAIStatus(task.progress != null ? `正在生成 · ${Math.round(task.progress)}%` : "正在生成…"); },
+        }).then((result) => {
+            session.assertCurrent();
+            const ratio = result.height > 0 ? result.width / result.height : 0;
+            if (Math.abs(ratio - 2) > 0.08) message.warning("图片已生成，但不是 2:1 全景比例；在历史记录中选用前请检查效果");
+            else message.success("全景图已生成，可在历史记录中选用");
+            setPanoramaAIOpen(false);
+        }).catch((error) => {
+            if (!session.current()) return;
+            const text = error instanceof Error ? error.message : "全景图生成失败";
+            setPanoramaAIStatus(text);
+            message.error(text);
+        }).finally(() => { if (session.current()) setPanoramaAIBusy(false); });
+    };
+
+    const uploadModel = async (file?: File) => {
+        if (!file || !/\.(glb|gltf)$/i.test(file.name)) return;
+        const session = directorAsyncSession(sessionRef.current.signal);
+        try {
+            const { uploaded, persist } = await persistDirectorMediaUpload({
+                source: file,
+                prefix: "model",
+                signal: session.signal,
+                toAsset: (media) => ({ kind: "model", title: file.name.replace(/\.(glb|gltf)$/i, ""), coverUrl: "", tags: ["3D模型"], source: "导演台", data: { url: media.url, storageKey: media.storageKey, bytes: media.bytes, mimeType: media.mimeType, fileName: file.name }, metadata: { source: "director" } }),
+            });
+            session.assertCurrent();
+            const asset = useAssetStore.getState().assets.find((item): item is ModelAsset => item.id === persist.assetId && item.kind === "model");
+            if (asset) addModelAsset(asset);
+            message[persist.confirmed ? "success" : "warning"](persist.confirmed ? "3D 模型已加入场景和素材库" : "3D 模型已加入场景；文件目前只在这台设备上");
+        } catch (error) {
+            if (session.current()) message.error(error instanceof Error ? error.message : "3D 模型上传失败");
+        }
+    };
+
+    const addBillboard = (node: CanvasNodeData) => {
+        if (!node.metadata?.content) return;
+        addObject(createDirectorBillboard(node.title, node.metadata.content, node.metadata.storageKey, node.id));
+    };
+
+    const uploadSceneReference = async (file?: File) => {
+        if (!file) return;
+        if (!file.type.startsWith("image/")) { message.error("请选择图片文件"); return; }
+        setSceneReferenceUploading(true);
+        const session = directorAsyncSession(sessionRef.current.signal);
+        try {
+            const uploaded = await uploadImage(file);
+            session.assertCurrent();
+            const name = file.name.replace(/\.[^.]+$/, "") || "场景参考";
+            const canvasHandoff = await onAddCanvasImage?.(uploaded, name, session.signal);
+            session.assertCurrent();
+            const persist = await persistDirectorLibraryAsset({
+                asset: { kind: "image", title: name, coverUrl: uploaded.url, tags: ["导演台参考图"], source: "导演台", data: { dataUrl: uploaded.url, storageKey: uploaded.storageKey, width: uploaded.width, height: uploaded.height, bytes: uploaded.bytes, mimeType: uploaded.mimeType }, metadata: { source: "director-scene-reference", sceneId: draftRef.current?.id } },
+                signal: session.signal,
+                existingAssetId: canvasHandoff?.assetId,
+                existingPersisted: canvasHandoff?.persisted,
+                pendingRemoteUpload: uploaded.pendingRemoteUpload,
+            });
+            session.assertCurrent();
+            setSceneReferenceImage({ id: nanoid(), name, type: uploaded.mimeType, dataUrl: uploaded.url, url: uploaded.url, storageKey: uploaded.storageKey, width: uploaded.width, height: uploaded.height, bytes: uploaded.bytes });
+            addObject(createDirectorBillboard(name, uploaded.url, uploaded.storageKey));
+            message[persist.confirmed ? "success" : "warning"](persist.confirmed ? "参考图片已加入当前场景" : "参考图片已保存在这台设备，并加入当前场景");
+        } catch (error) {
+            if (session.current()) message.error(error instanceof Error ? error.message : "参考图片添加失败");
+        } finally {
+            if (session.current()) setSceneReferenceUploading(false);
+        }
+    };
+
+    const analyzeSceneReference = async () => {
+        if (!sceneReferenceImage || sceneLayoutBusy) return;
+        if (!effectiveConfig.textModel.trim()) { message.error("请先在模型设置中选择支持图片理解的文本模型"); return; }
+        setSceneLayoutBusy(true);
+        const session = directorAsyncSession(sessionRef.current.signal);
+        try {
+            const dataUrl = await imageToDataUrl(sceneReferenceImage);
+            session.assertCurrent();
+            const answer = await requestImageQuestion({ ...effectiveConfig, model: effectiveConfig.textModel }, [{
+                role: "user",
+                content: [
+

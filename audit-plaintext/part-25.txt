@@ -1,0 +1,5479 @@
+SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
+This is uncompressed source text, not a directory index or archive.
+Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
+Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+
+========================================================================
+FILE: web/src/styles/globals.css
+LINES: 1-2229
+========================================================================
+@import "tailwindcss";
+@import "./canvas-redesigned.css";
+@import "./shell-redesign.css";
+@import "./pages-redesign.css";
+@import "./creation-redesign.css";
+@import "./jimeng-theme.css";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@source "../../../node_modules/streamdown/dist/*.js";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --color-brand: var(--brand);
+    --color-brand-ink: var(--brand-ink);
+    --color-brand-soft: var(--brand-soft);
+    --color-rail: var(--bg-rail);
+    --color-page: var(--bg-page);
+    --color-raised: var(--bg-raised);
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-border: var(--border);
+    --color-ring: var(--ring);
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+    --font-heading: "CapCut Sans", "FZYaShiHeiS", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+    --font-sans: "CapCut Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-input: var(--input);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* sundas brand palette — restyled to Jimeng AI (即梦) dark app spec:
+ * #121212 page / #171717 rail / #1A1A1A card / #202020 raised,
+ * white-alpha text ladder, single accent #D8FF3E (cyan #00CAE0, orange #E56603).
+ * See ~/.workbuddy/skills/jimeng-ui-style/SKILL.md */
+:root {
+    --radius: 0.5rem;
+    --brand: #D8FF3E;
+    --brand-ink: #11130A;
+    --brand-soft: rgba(216, 255, 62, 0.12);
+    --border: rgba(255, 255, 255, 0.08);
+    --ring: rgba(216, 255, 62, 0.55);
+    --background: #F7F8FA;
+    --foreground: #1D2129;
+    --card: #FFFFFF;
+    --card-foreground: #1D2129;
+    --popover: #FFFFFF;
+    --popover-foreground: #1D2129;
+    --primary: #D8FF3E;
+    --primary-foreground: #11130A;
+    --secondary: #F2F3F5;
+    --secondary-foreground: #1D2129;
+    --muted: #F2F3F5;
+    --muted-foreground: #4E5969;
+    --accent: #EDEEF1;
+    --accent-foreground: #1D2129;
+    --destructive: oklch(0.577 0.245 27.325);
+    --input: #C9CDD4;
+    --chart-1: #D8FF3E;
+    --chart-2: #00CAE0;
+    --chart-3: #E3FF6B;
+    --chart-4: #4E5969;
+    --chart-5: #86909C;
+    --sidebar: #F7F8FA;
+    --sidebar-foreground: #1D2129;
+    --sidebar-primary: #D8FF3E;
+    --sidebar-primary-foreground: #11130A;
+    --sidebar-accent: #EDEEF1;
+    --sidebar-accent-foreground: #1D2129;
+    --sidebar-border: #E5E6EB;
+    --sidebar-ring: rgba(216, 255, 62, 0.55);
+    /* Jimeng tokens */
+    --bg-page: #121212;
+    --bg-rail: #171717;
+    --bg-card: #1A1A1A;
+    --bg-raised: #202020;
+    --line: rgba(255, 255, 255, 0.08);
+    --line-soft: rgba(255, 255, 255, 0.04);
+    --line-strong: rgba(255, 255, 255, 0.12);
+    --text-1: #FFFFFF;
+    --text-2: rgba(255, 255, 255, 0.88);
+    --text-3: rgba(255, 255, 255, 0.70);
+    --text-4: rgba(255, 255, 255, 0.60);
+    --text-5: rgba(255, 255, 255, 0.40);
+    --text-6: rgba(255, 255, 255, 0.20);
+    --accent-hover: #E3FF6B;
+    --accent-active: #B8E81C;
+    --cyan: #00CAE0;
+    --orange: #E56603;
+}
+
+.dark {
+    --background: #121212;
+    --foreground: #FFFFFF;
+    --border: rgba(255, 255, 255, 0.08);
+    --ring: rgba(216, 255, 62, 0.55);
+    --card: #1A1A1A;
+    --card-foreground: #FFFFFF;
+    --popover: #1F1F1F;
+    --popover-foreground: #FFFFFF;
+    --primary: #D8FF3E;
+    --primary-foreground: #11130A;
+    --secondary: #202020;
+    --secondary-foreground: #FFFFFF;
+    --muted: #202020;
+    --muted-foreground: rgba(255, 255, 255, 0.60);
+    --accent: #202020;
+    --accent-foreground: #FFFFFF;
+    --destructive: #F5483B;
+    --input: rgba(255, 255, 255, 0.12);
+    --chart-1: #D8FF3E;
+    --chart-2: #00CAE0;
+    --chart-3: #E3FF6B;
+    --chart-4: rgba(255, 255, 255, 0.60);
+    --chart-5: rgba(255, 255, 255, 0.40);
+    --sidebar: #171717;
+    --sidebar-foreground: #FFFFFF;
+    --sidebar-primary: #D8FF3E;
+    --sidebar-primary-foreground: #11130A;
+    --sidebar-accent: rgba(255, 255, 255, 0.08);
+    --sidebar-accent-foreground: #FFFFFF;
+    --sidebar-border: rgba(255, 255, 255, 0.08);
+    --sidebar-ring: rgba(216, 255, 62, 0.55);
+    /* Jimeng tokens */
+    --bg-page: #121212;
+    --bg-rail: #171717;
+    --bg-card: #1A1A1A;
+    --bg-raised: #202020;
+    --line: rgba(255, 255, 255, 0.08);
+    --line-soft: rgba(255, 255, 255, 0.04);
+    --line-strong: rgba(255, 255, 255, 0.12);
+    --text-1: #FFFFFF;
+    --text-2: rgba(255, 255, 255, 0.88);
+    --text-3: rgba(255, 255, 255, 0.70);
+    --text-4: rgba(255, 255, 255, 0.60);
+    --text-5: rgba(255, 255, 255, 0.40);
+    --text-6: rgba(255, 255, 255, 0.20);
+    --accent-hover: #E3FF6B;
+    --accent-active: #B8E81C;
+    --cyan: #00CAE0;
+    --orange: #E56603;
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+    html,
+    body {
+        height: 100%;
+        overflow: hidden;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+    /* Jimeng: 纯 #121212 底，无氛围光晕 */
+    .dark body,
+    body {
+        background: transparent;
+    }
+    textarea {
+        resize: none;
+    }
+    textarea::-webkit-resizer {
+        display: none;
+    }
+    html {
+        @apply font-sans;
+    }
+}
+
+@layer utilities {
+    .ai-title-aurora {
+        background: linear-gradient(90deg, #111827 0%, #111827 36%, #6b7280 54%, #111827 72%, #111827 100%);
+        background-size: 220% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: ai-title-aurora 7s ease-in-out infinite;
+    }
+
+    .dark .ai-title-aurora {
+        background: linear-gradient(90deg, #fafaf9 0%, #fafaf9 36%, #a8a29e 54%, #fafaf9 72%, #fafaf9 100%);
+        background-size: 220% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+    }
+
+    @keyframes ai-title-aurora {
+        0%,
+        100% {
+            background-position: 0% 50%;
+            filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
+        }
+        50% {
+            background-position: 100% 50%;
+            filter: drop-shadow(0 12px 28px rgba(28, 25, 23, 0.08));
+        }
+    }
+
+    .hide-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    .hide-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* 筛选胶囊：即梦 chip —— 28px 高、999 圆角、1px 白 12% 描边、12px 文字 */
+    .prompt-filter-tag.ant-tag-checkable {
+        margin: 0;
+        display: inline-flex;
+        align-items: center;
+        height: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
+        padding: 0 12px;
+        background: rgba(255, 255, 255, 0.04);
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 1;
+        transition:
+            background-color 140ms cubic-bezier(0.4, 0, 0.2, 1),
+            border-color 140ms cubic-bezier(0.4, 0, 0.2, 1),
+            color 140ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .prompt-filter-tag.ant-tag-checkable:hover {
+        border-color: rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.06);
+        color: #ffffff;
+    }
+
+    .prompt-filter-tag.ant-tag-checkable.is-active,
+    .prompt-filter-tag.ant-tag-checkable-checked {
+        border-color: rgba(216, 255, 62, 0.55);
+        background: rgba(216, 255, 62, 0.12);
+        color: #e3ff6b;
+        font-weight: 500;
+    }
+
+    .dark .prompt-filter-tag.ant-tag-checkable {
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    .dark .prompt-filter-tag.ant-tag-checkable:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: #ffffff;
+    }
+
+    .dark .prompt-filter-tag.ant-tag-checkable.is-active,
+    .dark .prompt-filter-tag.ant-tag-checkable-checked {
+        border-color: rgba(216, 255, 62, 0.55);
+        background: rgba(216, 255, 62, 0.12);
+        box-shadow: none;
+        color: #e3ff6b !important;
+        font-weight: 500;
+    }
+
+    .thin-scrollbar {
+        scrollbar-color: transparent transparent;
+        scrollbar-width: thin;
+    }
+
+    .thin-scrollbar::-webkit-scrollbar {
+        height: 4px;
+        width: 4px;
+    }
+
+    .thin-scrollbar::-webkit-scrollbar-thumb {
+        background: transparent;
+        border-radius: 999px;
+    }
+
+    /*
+     * 面板内滚动条：只在内容真的溢出时出现，且样式贴合深色面板。
+     * 轨道透明、滑块半透明并在 hover 时加深，滚动条宽度收窄到 6px，不挤压圆角边框。
+     */
+    .panel-scrollbar {
+        scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+        scrollbar-gutter: auto;
+        scrollbar-width: thin;
+    }
+
+    .panel-scrollbar::-webkit-scrollbar {
+        height: 6px;
+        width: 6px;
+    }
+
+    .panel-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .panel-scrollbar::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.16);
+        background-clip: padding-box;
+        border: 1px solid transparent;
+        border-radius: 999px;
+    }
+
+    .panel-scrollbar:hover::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.28);
+    }
+
+    .panel-scrollbar::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(255, 255, 255, 0.4);
+    }
+
+    .panel-scrollbar::-webkit-scrollbar-corner {
+        background: transparent;
+    }
+
+    .hover-scrollbar {
+        scrollbar-color: transparent transparent;
+        scrollbar-width: thin;
+    }
+
+    .hover-scrollbar::-webkit-scrollbar {
+        height: 5px;
+        width: 5px;
+    }
+
+    .hover-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+        border-radius: 999px;
+    }
+
+    .hover-scrollbar::-webkit-scrollbar-thumb {
+        background: transparent;
+        border-radius: 999px;
+    }
+
+    .hover-scrollbar-hint {
+        position: relative;
+    }
+
+    .hover-scrollbar-hint::after {
+        background: rgba(120, 113, 108, 0.42);
+        border-radius: 999px;
+        bottom: 4px;
+        content: "";
+        height: 3px;
+        left: 12px;
+        opacity: 0;
+        pointer-events: none;
+        position: absolute;
+        right: 12px;
+        transition: opacity 0.18s ease;
+    }
+
+    .hover-scrollbar-hint.scrollbar-active::after {
+        opacity: 1;
+    }
+
+    .canvas-control-select.ant-select .ant-select-selector,
+    .canvas-control-number.ant-input-number {
+        border-color: rgba(120, 113, 108, 0.32) !important;
+        box-shadow: none !important;
+    }
+
+    .canvas-compact-control.canvas-control-select.ant-select {
+        height: 100%;
+    }
+
+    .canvas-compact-control.canvas-control-select.ant-select .ant-select-selector,
+    .canvas-compact-control.canvas-control-number.ant-input-number {
+        height: 100% !important;
+    }
+
+    .canvas-compact-control.canvas-control-select.ant-select .ant-select-selection-item,
+    .canvas-compact-control.canvas-control-select.ant-select .ant-select-selection-placeholder {
+        align-items: center;
+        display: flex;
+    }
+
+    .canvas-compact-control.canvas-control-select.ant-select .ant-select-selection-item,
+    .canvas-compact-control.canvas-control-select.ant-select .ant-select-selection-placeholder,
+    .canvas-compact-control.canvas-control-select.ant-select .ant-select-selection-search-input,
+    .canvas-compact-control.canvas-control-number.ant-input-number .ant-input-number-input {
+        height: 100% !important;
+        line-height: 1 !important;
+    }
+
+    .canvas-composer-icon.ant-btn {
+        flex: 0 0 32px;
+        width: 32px;
+    }
+
+    .canvas-composer-tools {
+        container-type: inline-size;
+    }
+
+    .canvas-composer-mode-button {
+        width: 32px;
+    }
+
+    .canvas-composer-tools .canvas-composer-mode-button span,
+    .canvas-composer-tools .canvas-model-picker-text,
+    .canvas-composer-tools .canvas-select-chevron,
+    .canvas-composer-tools .canvas-composer-icon.ant-btn > span:not(.ant-btn-icon) {
+        display: none;
+    }
+
+    .canvas-composer-tools .canvas-composer-model-picker {
+        width: 32px;
+        min-width: 32px;
+        justify-content: center;
+        gap: 0;
+        padding-inline: 0;
+    }
+
+    @container (min-width: 440px) {
+        .canvas-composer-mode-button {
+            padding-inline: 8px;
+            width: auto;
+        }
+
+        .canvas-composer-tools .canvas-composer-mode-button span {
+            display: inline;
+            font-size: 12px;
+            line-height: 1;
+        }
+
+        .canvas-composer-icon.ant-btn {
+            flex: 0 1 auto;
+            max-width: 170px;
+            width: auto !important;
+        }
+
+        .canvas-composer-tools .canvas-composer-icon.ant-btn > span:not(.ant-btn-icon) {
+            display: inline-flex;
+            min-width: 0;
+        }
+
+        .canvas-composer-tools .canvas-composer-model-picker {
+            width: auto;
+            min-width: 9rem;
+            justify-content: flex-start;
+            gap: 0.5rem;
+            padding-inline: 0.75rem;
+        }
+
+        .canvas-composer-tools .canvas-model-picker-text,
+        .canvas-composer-tools .canvas-select-chevron {
+            display: inline;
+        }
+    }
+
+    .canvas-control-select.ant-select-focused .ant-select-selector,
+    .canvas-control-number.ant-input-number-focused {
+        border-color: #a8a29e !important;
+    }
+
+    .dark .canvas-control-select.ant-select .ant-select-selector,
+    .dark .canvas-control-number.ant-input-number {
+        border-color: rgba(214, 211, 209, 0.2) !important;
+    }
+
+    .dark .canvas-control-select.ant-select-focused .ant-select-selector,
+    .dark .canvas-control-number.ant-input-number-focused {
+        border-color: #78716c !important;
+    }
+
+    .canvas-image-settings-popover .ant-popover-inner {
+        border-radius: 18px;
+        box-shadow: 0 18px 54px rgba(28, 25, 23, 0.16);
+        padding: 18px;
+    }
+
+    .canvas-image-settings-popover .ant-popover-content {
+        max-height: calc(100vh - 96px);
+        overflow-y: auto;
+    }
+
+    .canvas-image-settings-popover .ant-segmented {
+        border-radius: 999px;
+        padding: 3px;
+    }
+
+    .canvas-image-settings-popover .ant-segmented-item {
+        border-radius: 999px;
+    }
+
+    .dark .canvas-image-settings-popover .ant-popover-inner {
+        box-shadow: 0 18px 54px rgba(0, 0, 0, 0.45);
+    }
+
+    .canvas-node-info-modal .ant-modal-header {
+        padding-right: 0;
+    }
+
+    .canvas-node-info-modal .ant-modal-title {
+        line-height: 1;
+    }
+
+    .canvas-node-info-modal .ant-modal-close {
+        top: 21px;
+    }
+
+    @keyframes canvas-batch-child-in {
+        from {
+            opacity: 0;
+            transform: translate(var(--batch-from-x), var(--batch-from-y)) rotate(var(--batch-from-rotate)) scale(0.72);
+        }
+
+        72% {
+            opacity: 1;
+            transform: translate(0, 0) rotate(-1deg) scale(1.015);
+        }
+
+        to {
+            opacity: 1;
+            transform: translate(0, 0) rotate(0) scale(1);
+        }
+    }
+
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+}
+
+.agent-streamdown {
+    overflow-wrap: anywhere;
+}
+
+.agent-streamdown > :first-child {
+    margin-top: 0;
+}
+
+.agent-streamdown > :last-child {
+    margin-bottom: 0;
+}
+
+.agent-streamdown [data-streamdown="code-block"] {
+    position: relative;
+    display: block;
+    contain: none;
+    contain-intrinsic-size: none !important;
+    width: 100%;
+    margin-block: 0.35rem;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0.4rem;
+    background: color-mix(in srgb, currentColor 5%, transparent);
+}
+
+.agent-streamdown [data-streamdown="code-block-header"] {
+    display: none;
+}
+
+.agent-streamdown [data-streamdown="code-block"] > div:has(> [data-streamdown="code-block-actions"]) {
+    position: absolute;
+    top: 0.2rem;
+    right: 0.2rem;
+    z-index: 1;
+    height: auto;
+    margin: 0;
+}
+
+.agent-streamdown [data-streamdown="code-block-body"] {
+    min-height: 0;
+    padding: 0.4rem 2rem 0.4rem 0.6rem;
+    overflow-x: auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent !important;
+    font-size: 0.75rem;
+    line-height: 1.15rem;
+}
+
+.agent-streamdown [data-streamdown="code-block-body"] code > span {
+    display: block;
+}
+
+.agent-streamdown [data-streamdown="code-block-actions"] {
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0.3rem;
+    background: transparent;
+    box-shadow: none;
+    opacity: 0;
+    transition: opacity 150ms ease;
+}
+
+.agent-streamdown [data-streamdown="code-block"]:hover [data-streamdown="code-block-actions"],
+.agent-streamdown [data-streamdown="code-block-actions"]:focus-within {
+    opacity: 0.58;
+}
+
+.agent-streamdown [data-streamdown="code-block-actions"] button {
+    padding: 0.25rem;
+    border-radius: 0.3rem;
+}
+
+.agent-streamdown [data-streamdown="code-block-actions"] button:hover {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.agent-streamdown [data-streamdown="inline-code"] {
+    padding: 0.12rem 0.35rem;
+    border: 0;
+    border-radius: 0.3rem;
+    background: color-mix(in srgb, currentColor 7%, transparent);
+    font-size: 0.88em;
+}
+
+.agent-streamdown [data-streamdown="link"] {
+    color: inherit;
+    text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+    text-underline-offset: 0.2em;
+}
+
+[data-streamdown="link-safety-modal"] {
+    padding: 1rem;
+    background: rgb(28 25 23 / 24%);
+    backdrop-filter: blur(8px);
+}
+
+[data-streamdown="link-safety-modal"] > div {
+    max-width: 24rem;
+    gap: 1rem;
+    padding: 1.25rem;
+    border-color: color-mix(in srgb, currentColor 12%, transparent);
+    border-radius: 1rem;
+    box-shadow: 0 20px 60px rgb(28 25 23 / 18%);
+}
+
+[data-streamdown="link-safety-modal"] > div > button {
+    top: 0.9rem;
+    right: 0.9rem;
+}
+
+[data-streamdown="link-safety-modal"] > div > div:first-of-type {
+    gap: 0.25rem;
+    padding-right: 2rem;
+}
+
+[data-streamdown="link-safety-modal"] > div > div:first-of-type > div {
+    gap: 0.5rem;
+    font-size: 1rem;
+}
+
+[data-streamdown="link-safety-modal"] > div > div:nth-of-type(2) {
+    max-height: 7rem;
+    padding: 0.75rem;
+    border: 1px solid color-mix(in srgb, currentColor 9%, transparent);
+    background: color-mix(in srgb, currentColor 4%, transparent);
+    font-size: 0.7rem;
+    line-height: 1.15rem;
+    overflow-wrap: anywhere;
+}
+
+[data-streamdown="link-safety-modal"] > div > div:last-child {
+    justify-content: flex-end;
+}
+
+[data-streamdown="link-safety-modal"] > div > div:last-child button {
+    flex: none;
+    min-width: 7rem;
+    padding: 0.5rem 0.8rem;
+    border-radius: 0.6rem;
+    font-size: 0.75rem;
+}
+
+/* ===== 画布库卡片交互层 =====
+   外观（尺寸/描边/字号/图标块）统一在 jimeng-theme.css 的 .jm-canvas-*，
+   这里只补首页卡片没有的三件事：选中态、图标位勾选框、hover 操作条。 */
+.canvas-card {
+    outline: none;
+}
+
+/* 选中态用实色（#D8FF3E 10% 叠在卡面 #1e1e1e 上的结果），
+   避免换成半透明背景后卡面被页面底色透穿 */
+.canvas-card.is-selected,
+.canvas-card.is-selected:hover {
+    border-color: var(--jm-accent-line);
+    background: #1b2b34;
+}
+
+/* 中心图形位（竖卡里图标居中，不再占一行）；勾选框脱出到卡面左上角，
+   与右上操作条一左一右，不遮挡中心图形 */
+.canvas-card-badge {
+    position: static;
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+}
+
+.canvas-card-check {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: grid;
+    width: 20px;
+    height: 20px;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.34);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        opacity 160ms ease,
+        background 160ms ease,
+        border-color 160ms ease;
+}
+
+.canvas-card:hover .canvas-card-check,
+.canvas-card:focus-within .canvas-card-check,
+.canvas-card.is-selected .canvas-card-check {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.canvas-card-check.is-checked {
+    border-color: var(--jm-accent);
+    background: var(--jm-accent);
+}
+
+.canvas-card.is-selected .canvas-card-badge .jm-canvas-icon {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* 右上操作条：覆盖在标题行预留的空白上，不挤压正文 */
+.canvas-card-actions {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    padding: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 9px;
+    background: rgba(38, 38, 38, 0.96);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-2px);
+    transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.canvas-card:hover .canvas-card-actions,
+.canvas-card:focus-within .canvas-card-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+}
+
+.canvas-card-action {
+    display: grid;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    border-radius: 7px;
+    color: var(--muted-foreground);
+    transition: background 160ms ease, color 160ms ease;
+}
+
+.canvas-card-action:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--foreground);
+}
+
+.canvas-card-action.is-danger:hover {
+    background: rgba(239, 68, 68, 0.16);
+    color: #fca5a5;
+}
+
+@media (hover: none) {
+    .canvas-card-check {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .canvas-card-actions {
+        opacity: 1;
+        pointer-events: auto;
+        transform: none;
+    }
+}
+
+/* Admin console: neutral studio surfaces shared with the user workspace. */
+.admin-shell, body.admin-theme {
+    --admin-bg: #fafaf9;
+    --admin-panel: #ffffff;
+    --admin-panel-soft: #f5f5f4;
+    --admin-ink: #1c1917;
+    --admin-muted: #78716c;
+    --admin-line: #e7e5e4;
+    --admin-line-strong: #d6d3d1;
+    --admin-sidebar: #171717;
+    --admin-sidebar-text: #FFFFFF;
+    --admin-sidebar-muted: rgba(255, 255, 255, 0.60);
+    --admin-sidebar-line: rgba(255, 255, 255, 0.08);
+    --admin-accent: #D8FF3E;
+    --admin-accent-ink: #FFFFFF;
+    --admin-accent-soft: rgba(216, 255, 62, 0.18);
+    --admin-positive: #3f7a4c;
+    --admin-positive-soft: rgba(63, 122, 76, 0.09);
+    --admin-positive-line: rgba(63, 122, 76, 0.2);
+    --admin-warning: #9a6a18;
+    --admin-warning-soft: rgba(154, 106, 24, 0.1);
+    --admin-warning-line: rgba(154, 106, 24, 0.22);
+    --admin-danger: #b64838;
+    --admin-danger-soft: rgba(182, 72, 56, 0.09);
+    --admin-danger-line: rgba(182, 72, 56, 0.22);
+}
+
+.dark .admin-shell, .dark body.admin-theme {
+    --admin-bg: #121212;
+    --admin-panel: #1A1A1A;
+    --admin-panel-soft: #202020;
+    --admin-ink: #FFFFFF;
+    --admin-muted: rgba(255, 255, 255, 0.60);
+    --admin-line: rgba(255, 255, 255, 0.08);
+    --admin-line-strong: rgba(255, 255, 255, 0.12);
+    --admin-sidebar: #171717;
+    --admin-sidebar-text: #FFFFFF;
+    --admin-sidebar-muted: rgba(255, 255, 255, 0.60);
+    --admin-accent-soft: rgba(216, 255, 62, 0.12);
+    --admin-positive: #22C55E;
+    --admin-positive-soft: rgba(34, 197, 94, 0.12);
+    --admin-positive-line: rgba(34, 197, 94, 0.24);
+    --admin-warning: #F5A623;
+    --admin-warning-soft: rgba(245, 166, 35, 0.12);
+    --admin-warning-line: rgba(245, 166, 35, 0.24);
+    --admin-danger: #F5483B;
+    --admin-danger-soft: rgba(245, 72, 59, 0.12);
+    --admin-danger-line: rgba(245, 72, 59, 0.24);
+}
+
+.admin-shell {
+    background: var(--admin-bg);
+    color: var(--admin-ink);
+}
+
+.admin-shell .ant-table-wrapper .ant-table {
+    background: transparent;
+}
+
+.admin-shell .ant-table-wrapper .ant-table-thead > tr > th {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    background: var(--admin-panel-soft);
+}
+
+.admin-shell .ant-table-wrapper .ant-table-tbody > tr > td {
+    border-color: var(--admin-line);
+}
+
+.admin-shell .ant-table-wrapper .ant-table-tbody > tr:last-child > td {
+    border-bottom: 0;
+}
+
+.admin-shell .ant-table-wrapper .ant-pagination {
+    margin: 16px 20px;
+}
+
+.admin-shell .ant-tabs-top > .ant-tabs-nav {
+    margin-bottom: 20px;
+}
+
+.admin-shell .ant-tabs-top > .ant-tabs-nav::before {
+    border-color: var(--admin-line);
+}
+
+.admin-shell .ant-form-item-label > label {
+    font-size: 12px;
+}
+
+.admin-shell .ant-btn {
+    box-shadow: none;
+}
+
+.admin-shell .ant-btn-text:not(:disabled):hover {
+    background: color-mix(in srgb, var(--admin-ink) 5%, transparent);
+}
+
+.admin-shell .ant-table-column-sorter {
+    color: var(--admin-muted);
+}
+
+.admin-shell ::selection {
+    background: var(--admin-accent);
+    color: var(--admin-accent-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-shell *,
+    .admin-shell *::before,
+    .admin-shell *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}
+
+.admin-shell .ant-input-number,
+body.admin-theme .ant-input-number {
+    width: 100%;
+}
+
+.admin-quick-link {
+    background: var(--admin-panel);
+}
+
+/* 后台侧栏「返回前台」：品牌绿底 + 纯黑文字/图标（不依赖 Tailwind 任意值类，避免被构建裁掉） */
+.admin-sidebar-cta {
+    background-color: var(--admin-accent);
+    color: var(--brand-ink);
+    box-shadow: none;
+    transition:
+        background-color 0.18s ease,
+        transform 0.18s ease;
+}
+
+.admin-sidebar-cta:hover {
+    background-color: #E3FF6B;
+    color: var(--brand-ink);
+    box-shadow: none;
+}
+
+.admin-sidebar-cta:active {
+    transform: translateY(1px);
+}
+
+.admin-sidebar-cta:focus-visible {
+    outline: 2px solid var(--admin-accent);
+    outline-offset: 2px;
+}
+
+.admin-sidebar-cta svg {
+    color: #000;
+    stroke: currentColor;
+}
+
+
+.admin-quick-link:hover {
+    background: var(--admin-panel-soft);
+}
+
+@media (max-width: 640px) {
+    .admin-shell .ant-tabs-tab + .ant-tabs-tab {
+        margin-left: 16px;
+    }
+}
+
+
+/* Thin, auto-hiding scrollbars: no thumb while idle; appears while the container scrolls. */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: transparent;
+}
+
+.scrollbar-active {
+    scrollbar-color: rgba(120, 113, 108, 0.52) transparent;
+}
+
+.scrollbar-active::-webkit-scrollbar-thumb {
+    background: rgba(120, 113, 108, 0.52);
+}
+
+.scrollbar-active::-webkit-scrollbar-thumb:hover {
+    background: rgba(120, 113, 108, 0.72);
+}
+
+/* ===== Modal：只保留柔和投影 ===== */
+/* antd v6 里 .ant-modal 是无圆角的方框，圆角/背景都在 .ant-modal-container 上。
+   所以贴边画出来的 1px 描边（box-shadow ring / ::before 渐变环）会在圆角卡片四角
+   露出直角线（方形框线），这里整组去掉，改由容器自身的圆角与投影负责层次。 */
+.ant-modal {
+    position: relative;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.ant-modal::before {
+    content: none;
+}
+
+/* ===== 其他浮层：与 Modal 统一的渐变发丝描边 ===== */
+/* Popover / Popconfirm / Dropdown / Select 下拉 / DatePicker 面板 / Drawer */
+.ant-popover-inner,
+.ant-dropdown-menu,
+.ant-picker-panel,
+.ant-drawer-content {
+    position: relative;
+}
+
+/* Select dropdown 本身就是定位浮层，必须保留 antd 的 absolute 定位。
+   装饰描边可直接依附它，不能为描边把浮层改成普通文档流。 */
+.ant-select-dropdown {
+    max-width: calc(100vw - 24px);
+}
+
+.ant-popover-inner::before,
+.ant-dropdown-menu::before,
+.ant-select-dropdown::before,
+.ant-picker-panel::before,
+.ant-drawer-content::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+        165deg,
+        rgba(255, 255, 255, 0.12) 0%,
+        rgba(255, 255, 255, 0.08) 100%
+    );
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+}
+
+/* Drawer 只露出一条边，外发光弱化，避免喧宾夺主 */
+.ant-drawer-content {
+    box-shadow: -24px 0 64px rgba(0, 0, 0, 0.45);
+}
+
+/* message 轻提示：小体量，仅保留投影微光 */
+.ant-message-notice-wrapper {
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* ===== 多语言排版微调（语言切换时同步到 <html lang>）=====
+   切换语言不会改变布局结构；这里只做字距/断行级别的保守校准。
+   新增语言时按需扩展选择器（如 html[lang="ko-KR"]）。 */
+
+/* 英文：文案比中文长，放宽字距、收紧大标题行高，避免溢出 */
+html[lang="en-US"] .home-hero-title {
+    letter-spacing: -0.03em;
+    line-height: 1.04;
+    text-wrap: balance;
+}
+
+html[lang="en-US"] .auth-form-title {
+    letter-spacing: -0.015em;
+}
+
+/* 英文：全局允许长单词在窄容器内断行，防止撑破卡片/表格 */
+html[lang="en-US"] .site-footer,
+html[lang="en-US"] .auth-card,
+html[lang="en-US"] .home-composer {
+    overflow-wrap: break-word;
+}
+
+/* ===== 提示词库：内容区跟随统一页面栅格（jm-page-inner）=====
+   筛选条件已内联在内容区顶部，不再有脱离文档流的侧栏，因此这里只做清场。 */
+.prompts-layout {
+    display: block;
+}
+
+/* ===== 我的资产：卡片质感、无封面占位、空态图标 ===== */
+.asset-card {
+    box-shadow: none;
+}
+
+.asset-card:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+}
+
+.dark .asset-card {
+    box-shadow: none;
+}
+
+.dark .asset-card:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+}
+
+.asset-card-fallback {
+    background-color: #202020;
+}
+
+/* 文本资产占位：右上角一枚低对比引号，弱化「空」的观感 */
+.asset-card-fallback-quote {
+    position: absolute;
+    top: 2px;
+    right: 14px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 64px;
+    line-height: 1;
+    color: rgba(216, 255, 62, 0.16);
+    pointer-events: none;
+    user-select: none;
+}
+
+.asset-empty-icon {
+    border-color: rgba(255, 255, 255, 0.08);
+    background-color: #202020;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.asset-icon-btn {
+    outline: none;
+}
+
+.asset-icon-btn:hover {
+    background-color: var(--muted);
+    color: var(--foreground);
+}
+
+.asset-icon-btn:focus-visible {
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px rgba(216, 255, 62, 0.65);
+}
+
+.asset-icon-btn.is-danger:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+/* 画布连线流光：迁移自 BeefTV 的连接高亮，选中/拖拽时沿路径流动。 */
+@keyframes canvas-connection-flow {
+    to {
+        stroke-dashoffset: -16;
+    }
+}
+
+/* 画布节点容器：常态不描边，层级由投影与表面明度承担（BeefTV 视觉合同）。 */
+.canvas-node-shell {
+    box-shadow: none;
+    transition: transform 160ms ease-out, box-shadow 200ms ease, border-color 160ms ease;
+}
+
+/* 画布节点标题行：屏幕上恒定字号，靠不透明度表达激活态。 */
+.canvas-node-external-header {
+    transition: opacity 160ms ease, color 160ms ease;
+}
+
+/* ===========================================================================
+   导演台（迁移自 BeefTV）：3D 工作台专用样式。
+   原样平移，选择器全部以 .director- / [data-director-*] 开头，不会影响画布与后台。
+   =========================================================================== */
+
+.director-sequencer {
+    position: relative;
+    color: rgba(255, 255, 255, 0.86);
+    font-size: var(--fs-caption);
+}
+
+.director-viewport-shell {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.director-viewport-shell[data-drawing-actor-path="true"] canvas,
+.director-viewport-shell[data-drawing-camera-path="true"] canvas {
+    cursor: crosshair !important;
+}
+
+.director-viewport-notice {
+    position: absolute;
+    /* 可恢复故障必须压过右上角的新手引导，否则真实点击会被引导卡片截获。 */
+    z-index: var(--z-toast);
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    border: var(--stroke-1) solid var(--director-sequencer-border);
+    border-radius: var(--r-lg);
+    background: var(--director-dock-surface);
+    box-shadow: var(--shadow-xl);
+    color: var(--director-dock-fg-strong);
+}
+
+.director-viewport-notice.is-cover {
+    inset: 50% auto auto 50%;
+    max-width: 320px;
+    justify-items: start;
+    text-align: left;
+    transform: translate(-50%, -50%);
+}
+
+.director-viewport-notice.is-corner {
+    top: var(--space-3);
+    right: var(--space-3);
+    max-width: 280px;
+}
+
+.director-viewport-notice-title {
+    font-size: var(--fs-label);
+    font-weight: 600;
+}
+
+.director-viewport-notice-text {
+    margin: 0;
+    color: var(--director-dock-fg);
+    font-size: var(--fs-tiny);
+    line-height: 1.5;
+}
+
+.director-viewport-notice-action {
+    height: var(--space-8);
+    padding: 0 var(--space-3);
+    justify-self: start;
+    border: var(--stroke-1) solid var(--director-sequencer-border);
+    border-radius: var(--r-sm);
+    background: var(--director-dock-active-surface);
+    color: var(--director-dock-fg-strong);
+    font-size: var(--fs-tiny);
+    transition: background var(--motion-dur-fast) var(--motion-ease-out);
+}
+
+.director-viewport-notice-action:hover {
+    background: var(--director-control-hover);
+}
+
+.director-viewport-dock {
+    position: absolute;
+    z-index: var(--z-toolbar);
+    bottom: var(--director-dock-bottom);
+    left: 50%;
+    display: flex;
+    max-width: calc(100% - var(--space-6));
+    align-items: center;
+    gap: var(--space-half);
+    padding: var(--space-1);
+    overflow-x: auto;
+    border: var(--stroke-1) solid var(--director-sequencer-border);
+    border-radius: var(--r-lg);
+    background: var(--director-dock-surface);
+    box-shadow: var(--shadow-xl);
+    color: var(--director-dock-fg);
+    transform: translateX(-50%);
+    backdrop-filter: blur(var(--space-4));
+}
+
+.director-viewport-dock-button {
+    display: grid;
+    width: var(--director-dock-button-size);
+    height: var(--director-dock-button-size);
+    flex: 0 0 var(--director-dock-button-size);
+    place-items: center;
+    border-radius: var(--r-md);
+    transition: background var(--motion-dur-fast) var(--motion-ease-out), color var(--motion-dur-fast) var(--motion-ease-out), transform var(--motion-dur-fast) var(--motion-ease-out);
+}
+
+.director-viewport-dock-button > svg {
+    width: var(--space-4);
+    height: var(--space-4);
+}
+
+.director-viewport-dock-button:hover {
+    background: var(--director-control-hover);
+    color: var(--director-dock-fg-strong);
+}
+
+.director-viewport-dock-button:active {
+    transform: translateY(1px);
+}
+
+.director-viewport-dock-button.is-active {
+    background: var(--director-dock-active-surface);
+    color: var(--director-dock-fg-strong);
+    box-shadow: inset 0 0 0 var(--stroke-1) var(--director-sequencer-border);
+}
+
+.director-viewport-dock-divider {
+    width: var(--stroke-1);
+    height: var(--space-5);
+    flex: 0 0 var(--stroke-1);
+    margin: 0 var(--space-half);
+    background: var(--director-sequencer-border);
+}
+
+/* 一级模式切换。位于工作台顶栏（跟随明暗主题），因此用主题感知的语义 token，
+   不能用 --director-dock-* 那套常暗色，否则亮色主题下会看不见。
+   选中态用 control-selected 角色，而不是主操作色：它表达「当前视图」而非主要命令。 */
+.director-workbench-topbar {
+    position: absolute;
+    z-index: var(--z-toolbar);
+    inset: 0 0 auto;
+    display: grid;
+    grid-template-columns: 280px max-content minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-2);
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    pointer-events: none;
+}
+
+.director-workbench-topbar-group {
+    display: flex;
+    min-width: 0;
+    min-height: 48px;
+    flex: none;
+    align-items: center;
+    gap: var(--space-1);
+    border: var(--stroke-1) solid;
+    border-radius: var(--r-full);
+    padding: var(--space-1) var(--space-2);
+    box-shadow: var(--shadow-xl);
+    backdrop-filter: blur(18px);
+    pointer-events: auto;
+    white-space: nowrap;
+}
+
+.director-workbench-topbar-project {
+    justify-self: start;
+    box-sizing: border-box;
+    width: 280px;
+    min-height: 52px;
+    height: 52px;
+    border-width: 0 var(--stroke-1) var(--stroke-1) 0;
+    border-radius: 0;
+    padding: 0 var(--space-4);
+    box-shadow: none;
+    backdrop-filter: none;
+}
+
+[data-director-workbench="true"][data-left-dock-collapsed="true"] .director-workbench-topbar {
+    grid-template-columns: 48px max-content minmax(0, 1fr);
+}
+
+[data-director-workbench="true"][data-left-dock-collapsed="true"] .director-workbench-topbar-project {
+    width: 48px;
+    gap: 0;
+    justify-content: space-between;
+    padding-inline: 0;
+}
+
+[data-director-workbench="true"][data-left-dock-collapsed="true"] .director-workbench-topbar-project > span {
+    display: none;
+}
+
+[data-director-workbench="true"][data-left-dock-collapsed="true"] .director-workbench-topbar-project > button {
+    width: 24px;
+    height: 32px;
+    flex: 0 0 24px;
+    padding: 0;
+}
+
+.director-workbench-topbar-tools {
+    justify-self: center;
+    gap: var(--space-half);
+    padding-inline: var(--space-1);
+}
+
+.director-workbench-topbar-tools [aria-label="导演台模式"] .director-mode-switch-button {
+    padding-inline: var(--space-1);
+}
+
+.director-workbench-topbar-actions {
+    position: absolute;
+    top: 0;
+    right: 280px;
+    justify-self: end;
+    width: max-content;
+    max-width: 100%;
+}
+
+[data-director-workbench="true"][data-workspace-view="preview"] .director-workbench-topbar-actions {
+    right: var(--space-2);
+}
+
+.director-workbench-topbar-tools [aria-label="导演台工作区视图"] .director-mode-switch-button {
+    height: var(--space-10);
+    border-radius: var(--r-full);
+    padding-inline: var(--space-1);
+    font-size: var(--fs-caption);
+}
+
+.director-workbench-sidebar {
+    box-sizing: border-box;
+    padding-top: 52px;
+}
+
+.director-workbench-rail-only {
+    padding-inline: 0;
+}
+
+.director-workbench-scene-tree {
+    display: flex;
+    height: 100%;
+    min-height: 160px;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.director-workbench-scene-tree-list {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.director-workbench-property-inspector {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.director-workbench-property-dock {
+    box-sizing: border-box;
+    padding-top: 0;
+}
+
+.director-workbench-preview-label {
+    top: 68px;
+}
+
+@media (max-width: 1023px) {
+    .director-workbench-topbar {
+        position: relative;
+        inset: auto;
+        display: flex;
+        height: 48px;
+        flex: 0 0 48px;
+        align-items: center;
+        justify-content: flex-start;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 0 var(--space-2);
+        border-bottom: var(--stroke-1) solid var(--director-sequencer-border);
+        pointer-events: auto;
+    }
+
+    .director-workbench-topbar-group {
+        min-height: 40px;
+        padding-block: 0;
+        box-shadow: none;
+    }
+
+    .director-workbench-topbar-project {
+        width: max-content;
+        height: 40px;
+        min-height: 40px;
+        border-width: var(--stroke-1);
+        border-radius: var(--r-full);
+        padding-inline: var(--space-2);
+    }
+
+    [data-director-workbench="true"][data-workspace-view] .director-workbench-topbar-actions {
+        position: static;
+        top: auto;
+        right: auto;
+    }
+
+    [data-director-workbench="true"][data-left-dock-collapsed="true"] .director-workbench-topbar {
+        grid-template-columns: none;
+    }
+
+    [data-director-workbench="true"][data-left-dock-collapsed="true"] .director-workbench-topbar-project {
+        width: max-content;
+        gap: var(--space-1);
+        padding-inline: var(--space-2);
+    }
+
+    [data-director-workbench="true"][data-left-dock-collapsed="true"] .director-workbench-topbar-project > span {
+        display: inline;
+    }
+
+    [data-director-workbench="true"][data-left-dock-collapsed="true"] .director-workbench-topbar-project > button {
+        width: var(--space-8);
+        height: var(--space-8);
+        flex: 0 0 var(--space-8);
+    }
+
+    .director-workbench-sidebar {
+        padding-top: 0;
+    }
+
+    .director-workbench-property-dock {
+        padding-top: 0;
+    }
+
+    .director-workbench-preview-label {
+        top: var(--space-3);
+    }
+}
+
+.director-mode-switch {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-half);
+    white-space: nowrap;
+}
+
+.director-mode-switch-button {
+    flex: none;
+    height: var(--space-6);
+    padding: 0 var(--space-2);
+    border: var(--stroke-1) solid transparent;
+    border-radius: var(--r-sm);
+    color: var(--foreground);
+    font-size: var(--fs-tiny);
+    opacity: 0.62;
+    transition: background var(--motion-dur-fast-calc) var(--motion-ease-out), opacity var(--motion-dur-fast-calc) var(--motion-ease-out);
+}
+
+.director-mode-switch-button:hover {
+    background: var(--surface-card-hover);
+    opacity: 1;
+}
+
+.director-mode-switch-button.is-active {
+    border-color: var(--control-selected-border);
+    background: var(--control-selected-bg);
+    color: var(--control-selected-fg);
+    font-weight: 500;
+    opacity: 1;
+}
+
+.director-mode-switch-button:focus-visible {
+    outline: var(--stroke-2) solid var(--control-focus-ring);
+    outline-offset: 1px;
+}
+
+.director-preview-composer {
+    position: absolute;
+    z-index: 20;
+    bottom: var(--space-3);
+    left: 50%;
+    display: flex;
+    width: min(500px, calc(100% - 32px));
+    min-height: 56px;
+    align-items: center;
+    padding: 9px 16px;
+    transform: translateX(-50%);
+    border: var(--stroke-1) solid var(--director-sequencer-border);
+    border-radius: 20px;
+    background: var(--director-dock-surface);
+    box-shadow: var(--shadow-xl);
+    backdrop-filter: blur(18px);
+}
+
+.director-scene-control-bar {
+    position: absolute;
+    z-index: var(--z-toolbar);
+    bottom: 20px;
+    left: 50%;
+    display: flex;
+    width: min(360px, calc(100% - var(--space-8)));
+    align-items: center;
+    gap: 8px;
+    transform: translateX(-50%);
+}
+
+.director-preview-control-dock {
+    position: absolute;
+    z-index: var(--z-toolbar);
+    bottom: var(--director-dock-bottom);
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.director-preview-control-dock .director-viewport-dock {
+    position: relative;
+    inset: auto;
+    left: auto;
+    bottom: auto;
+    transform: none;
+}
+
+.director-scene-control-bar .director-viewport-dock {
+    position: relative;
+    inset: auto;
+    left: auto;
+    bottom: auto;
+    flex: 0 0 auto;
+    max-width: 100%;
+    width: 128px;
+    height: 48px;
+    justify-content: center;
+    gap: 8px;
+    padding: 7px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    transform: none;
+}
+
+.director-scene-control-bar .director-scene-composer {
+    position: relative;
+    left: auto;
+    bottom: auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    height: 48px;
+    min-height: 48px;
+    flex: 0 0 224px;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) 32px;
+    align-items: center;
+    gap: 0;
+    padding: 0 8px;
+    border-radius: 999px;
+    transform: none;
+}
+
+.director-scene-composer .ant-input {
+    width: 100%;
+    min-height: 24px !important;
+    grid-column: 2;
+    grid-row: 1;
+    flex: 0 1 auto;
+}
+
+.director-scene-composer-actions {
+    display: contents;
+    min-height: 0;
+}
+
+.director-scene-composer-actions button {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--director-dock-fg);
+    transition: background-color 140ms ease, opacity 140ms ease;
+}
+
+.director-scene-composer-actions button:first-child {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+.director-scene-composer-actions button:hover:not(:disabled) {
+    background: var(--director-control-hover);
+}
+
+.director-scene-composer-actions button:last-child {
+    grid-column: 3;
+    grid-row: 1;
+    background: var(--director-dock-fg-strong);
+    color: var(--director-dock-surface);
+}
+
+.director-scene-composer-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.director-scene-composer-actions button[data-unavailable="true"]:disabled {
+    background: var(--director-control-hover);
+    color: var(--director-dock-fg);
+    opacity: 0.45;
+}
+
+.director-scene-composer-actions svg {
+    width: 18px;
+    height: 18px;
+}
+
+.director-composer-submit-spinner {
+    width: 15px;
+    height: 15px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: director-composer-spin 700ms linear infinite;
+}
+
+@keyframes director-composer-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+    .director-scene-control-bar {
+        bottom: var(--director-dock-bottom);
+        flex-direction: column-reverse;
+        align-items: stretch;
+        gap: var(--space-1);
+        width: min(480px, calc(100% - var(--space-8)));
+    }
+
+    .director-scene-control-bar .director-viewport-dock {
+        max-width: 100%;
+        align-self: center;
+    }
+
+    .director-scene-control-bar .director-scene-composer {
+        display: flex;
+        width: 100%;
+        height: auto;
+        min-height: 84px;
+        flex: 0 0 auto;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 2px;
+        padding: 8px 10px 6px;
+    }
+
+    .director-scene-composer .ant-input {
+        min-height: 38px !important;
+    }
+
+    .director-scene-composer-actions {
+        display: flex;
+        min-height: 32px;
+        align-items: center;
+        justify-content: space-between;
+    }
+}
+
+.director-preview-composer .ant-input {
+    min-height: 32px !important;
+    padding: 5px 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: var(--foreground) !important;
+    box-shadow: none !important;
+    font-size: var(--fs-caption);
+    line-height: 1.6;
+    resize: none;
+}
+
+.director-preview-composer .ant-input::placeholder {
+    color: color-mix(in srgb, var(--foreground) 43%, transparent);
+}
+
+.director-actor-colors {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: var(--space-1-half);
+}
+
+.director-workbench-property-dock,
+.director-workbench-sidebar {
+    --director-sequencer-border: var(--cn-stroke);
+}
+
+.director-actor-inspector {
+    display: flex;
+    flex-direction: column;
+    /* 注意：设计令牌里没有 --space-4（只有 1/2/3/6/8），这里一律写死 16px，
+       否则整条声明会失效、间距变成 0。 */
+    padding-bottom: 16px;
+}
+
+.director-actor-inspector > :first-child {
+    display: flex;
+    height: 52px;
+    flex: 0 0 52px;
+    align-items: center;
+    padding-inline: 16px;
+    border-bottom: var(--stroke-1) solid var(--director-sequencer-border);
+}
+
+/* 分段式标签页：一个浅色凹槽里嵌三枚胶囊，比三个浮空按钮更像「同一组选项」。 */
+.director-inspector-tabs {
+    display: inline-flex;
+    width: max-content;
+    align-items: center;
+    gap: 2px;
+    margin: 12px 16px 0;
+    padding: 3px;
+    border-radius: 10px;
+    background: var(--cn-fill);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.director-inspector-tab {
+    height: 26px;
+    min-width: 52px;
+    padding: 0 12px;
+    border-radius: 8px;
+    color: var(--cn-muted);
+    font-size: 12.5px;
+    line-height: 1;
+    transition: background 160ms var(--motion-ease-out, ease), color 160ms var(--motion-ease-out, ease), box-shadow 160ms var(--motion-ease-out, ease);
+}
+
+.director-inspector-tab:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--cn-text);
+}
+
+.director-inspector-tab[aria-selected="true"] {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* 分组：小号大写标题 + 渐隐发丝线，把「变换 / 外观」从一堆字段里拎出来。 */
+.director-inspector-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 18px 16px 0;
+}
+
+.director-inspector-group-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--cn-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+}
+
+.director-inspector-group-title > i {
+    height: 1px;
+    flex: 1;
+    background: linear-gradient(to right, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0));
+}
+
+/* 字段标签：更小、更淡、带一点字距，让数值成为视觉主体。 */
+.director-field {
+    display: block;
+}
+
+.director-field-label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--cn-muted);
+    font-size: 11.5px;
+    letter-spacing: 0.02em;
+}
+
+.director-actor-motion-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 16px;
+    padding: 0 16px 16px;
+    border-bottom: var(--stroke-1) solid var(--director-sequencer-border);
+    font-size: 12px;
+}
+
+.director-actor-path-create {
+    width: 100%;
+    min-height: 36px;
+    border-radius: var(--r-md);
+    background: var(--cn-text);
+    color: var(--background);
+    font-weight: 600;
+}
+
+.director-actor-path-create:hover { opacity: 0.9; }
+
+.director-actor-inspector > label {
+    margin: 18px 16px 0;
+}
+
+.director-actor-inspector input[aria-label="名称"] {
+    height: 30px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--cn-fill);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    color: var(--cn-text);
+    font-size: 12.5px;
+    transition: background 140ms var(--motion-ease-out, ease), box-shadow 140ms var(--motion-ease-out, ease);
+}
+
+.director-actor-inspector input[aria-label="名称"]:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.director-actor-inspector input[aria-label="名称"]:focus {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.55), 0 0 0 2px rgba(216, 255, 62, 0.16);
+}
+
+.director-actor-inspector > section,
+.director-actor-inspector > .space-y-3,
+.director-actor-inspector > .border-y {
+    margin: var(--space-4) var(--space-4) 0;
+}
+
+.director-actor-axis-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+}
+
+.director-actor-axis-input {
+    display: flex;
+    height: 30px;
+    min-width: 0;
+    align-items: center;
+    gap: 4px;
+    padding-left: 7px;
+    border-radius: 8px;
+    background: var(--cn-fill);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    color: var(--cn-muted);
+    font-size: 12px;
+    transition: background 140ms var(--motion-ease-out, ease), box-shadow 140ms var(--motion-ease-out, ease);
+}
+
+.director-actor-axis-input:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.director-actor-axis-input:focus-within {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.55), 0 0 0 2px rgba(216, 255, 62, 0.16);
+}
+
+/* 轴字母沿用三维软件惯例：X 红 / Y 绿 / Z 蓝，和视口里的 gizmo 箭头一一对应。 */
+.director-actor-axis-input > span:first-child {
+    flex: 0 0 9px;
+    color: var(--cn-muted);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-align: center;
+}
+
+.director-actor-axis-grid > .director-actor-axis-input:nth-child(1) > span:first-child { color: #ff8b8b; }
+.director-actor-axis-grid > .director-actor-axis-input:nth-child(2) > span:first-child { color: #7fdfa6; }
+.director-actor-axis-grid > .director-actor-axis-input:nth-child(3) > span:first-child { color: #86b0ff; }
+
+.director-actor-axis-key {
+    display: grid;
+    width: 14px;
+    height: 16px;
+    flex: 0 0 14px;
+    margin-right: 2px;
+    place-items: center;
+    border-radius: 5px;
+    color: var(--cn-muted);
+    background: transparent;
+    opacity: 0.55;
+    transition: background 140ms var(--motion-ease-out, ease), opacity 140ms var(--motion-ease-out, ease);
+}
+
+.director-actor-axis-key:hover { background: rgba(255, 255, 255, 0.1); opacity: 1; }
+.director-actor-axis-key > span {
+    width: 6px;
+    height: 6px;
+    transform: rotate(45deg);
+    border: 1px solid currentColor;
+    border-radius: 1px;
+}
+.director-actor-axis-key[aria-pressed="true"] {
+    color: var(--workspace-accent);
+    opacity: 1;
+}
+.director-actor-axis-key[aria-pressed="true"] > span { background: currentColor; }
+
+.director-actor-axis-input input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--cn-text);
+    font-size: 11.5px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    appearance: textfield;
+}
+
+.director-actor-axis-input input::-webkit-inner-spin-button,
+.director-actor-axis-input input::-webkit-outer-spin-button {
+    margin: 0;
+    appearance: none;
+}
+
+/* 统一缩放：自绘滑轨（已填充部分走 --director-scale-fill），数值改成同尺寸的小胶囊。 */
+.director-scale-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* 与 .dsp-row 同一约束：左滑块吃满剩余宽度，右数值框固定宽度（不依赖 w-[72px] 工具类）。 */
+.director-scale-row > input[type="range"] {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+}
+
+.director-scale-row > .director-scale-value.ant-input-number {
+    flex: 0 0 72px;
+    width: 72px;
+    min-width: 72px;
+    max-width: 72px;
+}
+
+.director-scale-slider {
+    height: 18px;
+    min-width: 0;
+    flex: 1;
+    background: transparent;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.director-scale-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(
+        to right,
+        var(--workspace-accent) 0 var(--director-scale-fill, 0%),
+        rgba(255, 255, 255, 0.18) var(--director-scale-fill, 0%) 100%
+    );
+}
+
+.director-scale-slider::-webkit-slider-thumb {
+    width: 12px;
+    height: 12px;
+    margin-top: -4px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+    transition: transform 140ms var(--motion-ease-out, ease);
+    -webkit-appearance: none;
+}
+
+.director-scale-slider:hover::-webkit-slider-thumb { transform: scale(1.15); }
+.director-scale-slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px rgba(216, 255, 62, 0.35); }
+
+.director-scale-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.director-scale-slider::-moz-range-progress {
+    height: 4px;
+    border-radius: 999px;
+    background: var(--workspace-accent);
+}
+
+.director-scale-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 0;
+    border-radius: 50%;
+    background: #ffffff;
+}
+
+.director-scale-value.ant-input-number {
+    height: 30px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--cn-fill);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    transition: background 140ms var(--motion-ease-out, ease), box-shadow 140ms var(--motion-ease-out, ease);
+}
+
+.director-scale-value.ant-input-number:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.director-scale-value.ant-input-number-focused {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.55);
+}
+
+.director-scale-value .ant-input-number-input {
+    height: 28px;
+    padding-inline: 8px;
+    color: var(--cn-text);
+    font-size: 12px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+.director-actor-color-input {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.director-actor-color-swatch {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    overflow: hidden;
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 1px 3px rgba(0, 0, 0, 0.35);
+    transition: box-shadow 140ms var(--motion-ease-out, ease);
+}
+
+.director-actor-color-swatch:hover {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3), 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+.director-actor-color-swatch input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.director-actor-hex-input {
+    display: flex;
+    height: 30px;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    gap: var(--space-1);
+    padding-inline: 10px;
+    border-radius: 8px;
+    background: var(--cn-fill);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    color: var(--cn-muted);
+    font-size: 12px;
+    transition: background 140ms var(--motion-ease-out, ease), box-shadow 140ms var(--motion-ease-out, ease);
+}
+
+.director-actor-hex-input:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.director-actor-hex-input:focus-within {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.55), 0 0 0 2px rgba(216, 255, 62, 0.16);
+}
+
+.director-actor-hex-input input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--cn-text);
+    font-size: 12px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.director-actor-color {
+    width: var(--director-color-swatch-size);
+    height: var(--director-color-swatch-size);
+    flex: 0 0 var(--director-color-swatch-size);
+    border: var(--stroke-1) solid var(--director-sequencer-border);
+    border-radius: var(--r-full);
+    box-shadow: inset 0 0 0 var(--stroke-1) var(--director-swatch-inset);
+}
+
+.director-actor-color.is-active {
+    outline: var(--stroke-2) solid var(--workspace-accent);
+    outline-offset: var(--space-half);
+}
+
+.director-pose-section {
+    display: grid;
+    gap: var(--space-1);
+}
+
+.director-actor-inspector > .director-pose-section {
+    margin-top: 21px;
+}
+
+.director-inspector-section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 28px;
+    color: var(--cn-muted);
+    font-size: 13px;
+}
+
+
+
+========================================================================
+FILE: web/src/styles/globals.css
+LINES: 2230-3009
+========================================================================
+.director-inspector-section-title > span:last-child:not(:only-child) {
+    color: var(--workspace-accent);
+}
+
+.director-pose-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-1);
+}
+
+.director-pose-button {
+    min-width: 0;
+    height: var(--director-pose-button-height);
+    padding: 0 var(--space-2);
+    overflow: hidden;
+    border: 0;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--cn-text) 8%, transparent);
+    color: var(--cn-text);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: background var(--motion-dur-fast) var(--motion-ease-out), color var(--motion-dur-fast) var(--motion-ease-out);
+}
+
+.director-pose-button:hover {
+    background: color-mix(in srgb, var(--cn-text) 12%, transparent);
+    color: var(--cn-text);
+}
+
+.director-pose-button.is-active {
+    background: color-mix(in srgb, var(--cn-text) 18%, transparent);
+    color: var(--cn-text);
+}
+
+.director-actor-inspector > .director-pose-adjust-header {
+    margin-top: 16px;
+    padding: 16px 16px 0;
+    border-top: 1px solid var(--director-sequencer-border);
+}
+
+.director-pose-adjust-header > div {
+    height: 28px;
+    color: var(--cn-text);
+    font-size: 13px;
+}
+
+.director-actor-inspector > .director-pose-controls {
+    margin: 4px 16px 0;
+}
+
+.director-pose-controls h4 {
+    color: var(--cn-muted);
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 1;
+}
+
+.director-pose-controls .director-bone-axis-row {
+    grid-template-columns: 48px minmax(0, 1fr) 70px;
+}
+
+.director-pose-controls .director-bone-axis-row > span {
+    color: var(--cn-muted);
+    font-size: 13px;
+    font-weight: 400;
+    opacity: 1;
+}
+
+/* 角度数值框固定列宽，别让内容把滑块挤扁 */
+.director-pose-controls .director-bone-axis-row > .ant-input-number {
+    width: 70px;
+    min-width: 70px;
+    max-width: 70px;
+}
+
+.director-pose-controls .ant-slider-rail {
+    height: 4px;
+    background: color-mix(in srgb, var(--cn-text) 25%, transparent);
+}
+
+.director-pose-controls .ant-slider-track {
+    height: 4px;
+    background: var(--cn-text);
+}
+
+.director-pose-controls .ant-slider-handle::after {
+    background: var(--cn-text);
+    border: 1px solid var(--background);
+    box-shadow: none;
+}
+
+.director-pose-controls .ant-input-number {
+    width: 70px;
+    min-width: 0;
+    height: 28px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--cn-fill);
+    box-shadow: none;
+}
+
+.director-pose-controls .ant-input-number-input {
+    height: 28px;
+    padding: 0 8px;
+    color: var(--cn-text);
+    font-size: 13px;
+    text-align: center;
+}
+
+.director-pose-controls .ant-input-number:focus-within {
+    background: color-mix(in srgb, var(--cn-text) 13%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .director-viewport-dock-button,
+    .director-viewport-notice-action,
+    .director-pose-button {
+        transition: none;
+    }
+}
+
+.director-sequencer-resizer {
+    position: absolute;
+    z-index: 2;
+    inset: -4px 0 auto;
+    height: 8px;
+    cursor: ns-resize;
+}
+
+.director-sequencer-resizer::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 50%;
+    width: 44px;
+    height: 2px;
+    border-radius: var(--r-full);
+    background: rgba(255, 255, 255, 0.28);
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity var(--motion-dur-fast) var(--motion-ease-out);
+}
+
+.director-sequencer:hover .director-sequencer-resizer::after,
+.director-sequencer-resizer:focus-visible::after {
+    opacity: 1;
+}
+
+.director-sequencer-body {
+    position: relative;
+    height: calc(100% - 40px);
+    min-height: 0;
+}
+
+.director-sequencer-preview-header {
+    position: relative;
+    display: flex;
+    height: 42px;
+    flex: 0 0 42px;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid;
+    padding: 0 var(--space-3);
+}
+
+.director-sequencer-preview-time {
+    position: absolute;
+    left: 50%;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: var(--fs-caption);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.director-sequencer-preview-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: auto;
+}
+
+.director-sequencer-preview-actions input[type="range"] {
+    width: clamp(76px, 11vw, 136px);
+    height: 24px;
+    accent-color: var(--director-accent, #f0b36a);
+    cursor: ew-resize;
+}
+
+.director-sequencer-preview-body {
+    position: relative;
+    height: calc(100% - 42px);
+    min-height: 0;
+    overflow: auto;
+}
+
+.director-sequencer-preview-grid {
+    position: relative;
+    display: grid;
+    min-width: max(100%, calc(var(--director-sequencer-base-width) * var(--director-sequencer-track-scale, 1)));
+    grid-template-rows: 28px minmax(36px, 1fr);
+}
+
+.director-sequencer-preview-ruler,
+.director-sequencer-preview-track {
+    position: relative;
+    min-width: 0;
+    border-bottom: 1px solid var(--director-sequencer-border);
+    background-color: var(--director-sequencer-surface-raised);
+    background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(20% - 1px), var(--director-sequencer-grid) 20%);
+}
+
+.director-sequencer-preview-ruler {
+    cursor: ew-resize;
+}
+
+.director-sequencer-preview-ruler .director-sequencer-tick {
+    top: 7px;
+}
+
+.director-sequencer-preview-track {
+    overflow: hidden;
+    border-radius: var(--r-xs);
+    background-color: var(--director-sequencer-surface);
+    cursor: ew-resize;
+    touch-action: pan-y;
+}
+
+.director-sequencer-preview-track:focus-visible {
+    outline: 1px solid var(--director-accent, #f0b36a);
+    outline-offset: -1px;
+}
+
+.director-sequencer-preview-clip {
+    position: absolute;
+    inset: 4px 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(125, 162, 255, 0.34);
+    border-radius: var(--r-sm);
+    background: rgba(95, 129, 202, 0.2);
+    padding: 0 var(--space-3);
+    color: rgba(223, 232, 255, 0.86);
+    font-size: var(--fs-micro);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.director-sequencer-preview-playhead {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #f0b36a;
+    pointer-events: none;
+}
+
+@media (max-width: 560px) {
+    .director-sequencer-preview-header {
+        padding-inline: var(--space-2);
+    }
+
+    .director-sequencer-preview-time {
+        left: 42%;
+        font-size: var(--fs-micro);
+    }
+
+    .director-sequencer-preview-actions {
+        gap: var(--space-1);
+    }
+
+    .director-sequencer-preview-actions input[type="range"] {
+        width: 64px;
+    }
+}
+
+.director-sequencer-grid {
+    position: relative;
+    display: grid;
+    min-width: calc(var(--director-sequencer-base-width) * var(--director-sequencer-track-scale, 1));
+    grid-template-columns: var(--director-sequencer-label-width) minmax(640px, 1fr);
+}
+
+.director-sequencer-global-playhead {
+    position: absolute;
+    z-index: 1;
+    top: 28px;
+    bottom: 0;
+    right: 0;
+    left: var(--director-sequencer-label-width);
+    pointer-events: none;
+}
+
+.director-sequencer-global-playhead > i {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: #f0b36a;
+}
+
+.director-sequencer-label,
+.director-sequencer-track {
+    min-width: 0;
+    height: var(--director-sequencer-row-height);
+    border-bottom: 1px solid var(--director-sequencer-border);
+}
+
+.director-sequencer-row {
+    display: contents;
+}
+
+.director-sequencer-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: var(--director-sequencer-label-width);
+    padding: 0 var(--space-3);
+    color: rgba(255, 255, 255, 0.64);
+    text-align: left;
+    white-space: nowrap;
+    transition: background var(--motion-dur-fast) var(--motion-ease-out), color var(--motion-dur-fast) var(--motion-ease-out);
+}
+
+.director-sequencer-row-select {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    align-items: center;
+    gap: var(--space-2);
+    color: inherit;
+    text-align: left;
+}
+
+.director-sequencer-row.director-sequencer-camera-row > .director-sequencer-label {
+    padding-inline: var(--space-2);
+    background: color-mix(in srgb, #28646a 55%, transparent);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.director-sequencer-row.director-sequencer-camera-row.is-selected > .director-sequencer-label,
+.director-sequencer-row.director-sequencer-camera-row > .director-sequencer-label:hover {
+    background: color-mix(in srgb, #28646a 72%, transparent);
+    color: #fff;
+}
+
+.director-sequencer-row.director-sequencer-camera-row > .director-sequencer-track {
+    background-color: color-mix(in srgb, #28646a 55%, transparent);
+}
+
+.director-sequencer-camera-label {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.director-sequencer-main-label {
+    display: flex;
+    min-width: 0;
+    height: 100%;
+    align-items: center;
+    gap: var(--space-1);
+    padding-inline: var(--space-2);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: var(--fs-caption);
+}
+
+.director-sequencer-main-label.is-actor {
+    background: color-mix(in srgb, #0b9db4 70%, #171b1d);
+}
+
+.director-sequencer-main-label.is-camera {
+    background: color-mix(in srgb, #28646a 65%, #171b1d);
+}
+
+.director-sequencer-main-toggle {
+    display: grid;
+    flex: 0 0 18px;
+    height: 24px;
+    place-items: center;
+    color: rgba(255, 255, 255, 0.76);
+}
+
+.director-sequencer-main-toggle:disabled {
+    opacity: 0.35;
+}
+
+.director-sequencer-main-name {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.director-sequencer-channel-label {
+    padding-left: var(--space-6);
+}
+
+.director-sequencer-camera-name {
+    display: flex;
+    min-width: 0;
+    height: 100%;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: var(--space-2);
+    overflow: hidden;
+    color: inherit;
+    text-align: left;
+}
+
+.director-sequencer-camera-action {
+    flex: 0 0 auto;
+    border-radius: var(--r-xs);
+    padding: 2px var(--space-1);
+    color: rgba(255, 255, 255, 0.78);
+    font-size: var(--fs-micro);
+    white-space: nowrap;
+}
+
+.director-sequencer-camera-action:hover,
+.director-sequencer-camera-action:focus-visible {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.director-sequencer-camera-label.is-compact {
+    justify-content: space-between;
+    padding: 0 var(--space-3);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.director-sequencer-label:hover,
+.director-sequencer-row.is-selected > .director-sequencer-label {
+    background: rgba(255, 255, 255, 0.075);
+    color: rgba(255, 255, 255, 0.96);
+}
+
+.director-sequencer-label.is-indent {
+    padding-left: var(--space-6);
+    color: rgba(255, 255, 255, 0.46);
+}
+
+.director-sequencer-ruler-label,
+.director-sequencer-ruler {
+    height: 28px;
+    border-bottom-color: var(--director-sequencer-border);
+    background: var(--director-sequencer-surface-raised);
+}
+
+.director-sequencer-ruler-label {
+    padding-left: var(--space-3);
+    color: rgba(255, 255, 255, 0.42);
+    font-size: var(--fs-micro);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.director-sequencer-ruler {
+    position: relative;
+    cursor: ew-resize;
+    background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(20% - 1px), var(--director-sequencer-grid) 20%);
+}
+
+.director-sequencer-tick {
+    position: absolute;
+    top: var(--space-2);
+    color: rgba(255, 255, 255, 0.38);
+    font-size: var(--fs-micro);
+    transform: translateX(-50%);
+}
+
+.director-sequencer-playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: #f0b36a;
+    pointer-events: none;
+}
+
+.director-sequencer-track {
+    position: relative;
+    overflow: hidden;
+    background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(20% - 1px), var(--director-sequencer-grid) 20%);
+}
+
+.director-sequencer-track-content {
+    position: absolute;
+    inset: 0;
+}
+
+.director-sequencer-key {
+    position: absolute;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    border-radius: 1px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.38);
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+/* 可删除关键帧：8px 菱形本体太小，用透明外框把命中区扩到 18px，保留视觉尺寸。
+   hover / focus 都走 outline，不覆写 box-shadow —— 基础规则的 hairline 保持原样。
+   focus-visible 与 hover 同特异性，靠源码顺序让焦点环压过悬停环。 */
+.director-sequencer-key.is-actionable {
+    padding: 0;
+    border: 0;
+    outline-offset: 2px;
+    cursor: pointer;
+    transition: outline-color var(--motion-dur-fast-calc) var(--motion-ease-out);
+}
+
+.director-sequencer-key.is-actionable::after {
+    position: absolute;
+    inset: -5px;
+    content: "";
+}
+
+.director-sequencer-key.is-actionable:hover {
+    outline: var(--stroke-2) solid color-mix(in srgb, var(--control-focus-ring) 55%, transparent);
+}
+
+.director-sequencer-key.is-actionable:focus-visible {
+    outline: var(--stroke-2) solid var(--control-focus-ring);
+}
+
+.director-sequencer-key.is-actionable.is-selected {
+    outline: var(--stroke-2) solid var(--control-focus-ring);
+    outline-offset: 2px;
+}
+
+.director-sequencer-clip {
+    position: absolute;
+    top: 5px;
+    bottom: 5px;
+    display: flex;
+    align-items: center;
+    min-width: 30px;
+    padding: 0 var(--space-2);
+    overflow: hidden;
+    border: 1px solid;
+    border-radius: var(--r-xs);
+    font-size: var(--fs-micro);
+}
+
+.director-sequencer-transport,
+.director-sequencer-icon,
+.director-sequencer-tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--space-8);
+    border-radius: var(--r-sm);
+    color: rgba(255, 255, 255, 0.62);
+    transition: background var(--motion-dur-fast) var(--motion-ease-out), color var(--motion-dur-fast) var(--motion-ease-out);
+}
+
+.director-sequencer-transport,
+.director-sequencer-icon {
+    width: var(--space-8);
+}
+
+.director-sequencer-tool {
+    gap: var(--space-1);
+    padding: 0 var(--space-2);
+    font-size: var(--fs-micro);
+}
+
+.director-sequencer-shot-select {
+    width: var(--director-sequencer-shot-select-width);
+    height: var(--space-8);
+    padding: 0 var(--space-2);
+    overflow: hidden;
+    border: 1px solid var(--director-sequencer-border);
+    border-radius: var(--r-sm);
+    background: var(--director-sequencer-surface-raised);
+    color: rgba(255, 255, 255, 0.72);
+    font-size: var(--fs-micro);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.director-sequencer-transport:hover,
+.director-sequencer-icon:hover,
+.director-sequencer-tool:hover,
+.director-sequencer-icon.is-active,
+.director-sequencer-tool.is-active {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+.app-workspace-shell.is-creation-workspace,
+
+/* ===========================================================================
+   导演台设计令牌。
+   BeefTV 的 3D 工作台组件只吃语义变量、不写裸色；sundas 没有这套 token，
+   这里补一份暗色取值，全部挂在 [data-director-workbench] 上，
+   避免污染画布、后台等其它区域的全局样式。
+   =========================================================================== */
+:root {
+    /* 与 BeefTV 保持一致：工作台整层必须低于 antd 弹层基准（1000），
+       否则 Dropdown / Select / Tooltip 会被工作台盖住，看得见但点不到。
+       画布内的浮层最高 z-100，500 足以覆盖。 */
+    --z-toolbar: 60;
+    --z-popover: 200;
+    --z-toast: 500;
+}
+
+[data-director-workbench] {
+    color-scheme: dark;
+
+    /* 表面 / 描边 / 层级 */
+    --surface: #16181b;
+    --surface-hover: #1d2024;
+    --border: rgba(255, 255, 255, 0.1);
+    --border-semantic: rgba(255, 255, 255, 0.16);
+    --stroke-1: 1px;
+    --stroke-2: 2px;
+    --elevation-overlay: 0 24px 60px rgba(0, 0, 0, 0.55);
+
+    /* 文本与控件 */
+    --cn-text: #ededed;
+    --cn-muted: rgba(255, 255, 255, 0.62);
+    --cn-stroke: rgba(255, 255, 255, 0.16);
+    --cn-fill: rgba(255, 255, 255, 0.05);
+    --btn-solid-fg: #101010;
+    --control-disabled-fg: rgba(255, 255, 255, 0.32);
+    --control-focus-ring: #d8ff3e;
+    --control-selected-bg: rgba(216, 255, 62, 0.18);
+    --control-selected-border: rgba(216, 255, 62, 0.55);
+    --control-selected-fg: #d8ff3e;
+    --workspace-accent: #d8ff3e;
+
+    /* 字号 / 圆角 / 间距 */
+    --fs-micro: 10px;
+    --fs-tiny: 11px;
+    --fs-caption: 11.5px;
+    --fs-label: 12.5px;
+    --r-sm: 6px;
+    --r-md: 8px;
+    --r-lg: 12px;
+    --r-full: 999px;
+    --space-1: 4px;
+    --space-1-half: 6px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-6: 24px;
+    --space-8: 32px;
+
+    /* 状态色 */
+    --status-success: #34d399;
+    --status-warning: #fbbf24;
+    --status-error: #f87171;
+
+    /* 导演台专用：时间线、视口 Dock */
+    --director-sequencer-surface: #101214;
+    --director-sequencer-border: rgba(255, 255, 255, 0.11);
+    --director-dock-surface: rgba(17, 19, 21, 0.92);
+    --director-dock-fg: rgba(255, 255, 255, 0.62);
+    --director-dock-fg-strong: rgba(255, 255, 255, 0.96);
+    --director-dock-active-surface: rgba(255, 255, 255, 0.14);
+    --director-control-hover: rgba(255, 255, 255, 0.09);
+}
+
+/* ===========================================================================
+   一句话生成分镜 · 需求输入框（.sb-brief-input）
+   antd 的 TextArea + showCount 会把字数统计绝对定位到输入框「下沿之外」
+   （bottom: -22px），既不占高度也不被边框包住，视觉上等于凭空多出一行，
+   再叠加 minRows: 2 就成了看起来 3 行的空文本域。
+   这里把统计收进框内右下角，输入框改为默认单行、随内容增高。
+   =========================================================================== */
+.sb-brief-input.ant-input-textarea-show-count {
+    margin-bottom: 0;
+}
+
+.sb-brief-input .ant-input-data-count {
+    position: absolute;
+    right: 10px;
+    bottom: 5px;
+    margin: 0;
+    font-size: 11px;
+    line-height: 18px;
+    font-variant-numeric: tabular-nums;
+    color: inherit;
+    opacity: 0.36;
+    pointer-events: none;
+    transition: opacity 160ms var(--motion-ease-out, ease);
+}
+
+.sb-brief-input:focus-within .ant-input-data-count {
+    opacity: 0.62;
+}
+
+/* 单行时与弹窗内其它控件（32px）对齐；给统计留位，长文本换行不压到数字上 */
+.sb-brief-input textarea.ant-input {
+    padding-block: 5px;
+    padding-inline-end: 64px;
+    line-height: 22px;
+}
+
+/* ============================================================
+ * 即梦风全局补丁：滚动条、astryx 创作页主题覆盖、焦点反馈
+ * ============================================================ */
+
+/* 即梦滚动条：8px，thumb 白 16%，hover 24%，track 透明 */
+html {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.24);
+}
+
+/* 输入类控件聚焦：即梦式 3px 浅蓝光圈（非 antd 默认大光晕） */
+.dark .ant-input-affix-wrapper:focus-within,
+.dark .ant-input:focus,
+.dark .ant-input:focus-visible,
+.dark .ant-select-focused .ant-select-selector {
+    border-color: rgba(216, 255, 62, 0.6) !important;
+    box-shadow: 0 0 0 3px rgba(216, 255, 62, 0.14) !important;
+}
+
+/* astryx 创作页（create/image/video）：令牌对齐即梦三档深灰与文字透明度阶梯。
+ * 选择器加 [data-astryx-theme] 提高优先级，压过运行时注入的 scoped 主题。 */
+.creation-shell[data-astryx-theme] {
+    --color-background-body: #121212;
+    --color-background-surface: #1A1A1A;
+    --color-background-card: #1A1A1A;
+    --color-background-popover: #1F1F1F;
+    --color-background-muted: #202020;
+    --color-border: rgba(255, 255, 255, 0.08);
+    --color-border-emphasized: rgba(255, 255, 255, 0.12);
+    --color-neutral: rgba(255, 255, 255, 0.1);
+    --color-overlay: rgba(0, 0, 0, 0.8);
+    --color-overlay-hover: rgba(255, 255, 255, 0.05);
+    --color-overlay-pressed: rgba(255, 255, 255, 0.1);
+    --color-text-primary: #FFFFFF;
+    --color-text-secondary: rgba(255, 255, 255, 0.7);
+    --color-text-disabled: rgba(255, 255, 255, 0.4);
+    --color-icon-primary: #FFFFFF;
+    --color-icon-secondary: rgba(255, 255, 255, 0.6);
+    --color-icon-disabled: rgba(255, 255, 255, 0.2);
+    --color-skeleton: #202020;
+    --color-shadow: rgba(0, 0, 0, 0.45);
+    --color-info: #D8FF3E;
+    --color-text-info: #E3FF6B;
+    --font-family-body: "CapCut Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+    --font-family-heading: "CapCut Sans", "FZYaShiHeiS", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+}
+
+/* 数字（积分、时长）统一 tabular-nums */
+.tabular-nums,
+[class*="credit"],
+[class*="stats-value"] {
+    font-variant-numeric: tabular-nums;
+}
+
+
+========================================================================
+FILE: web/src/styles/jimeng-theme.css
+LINES: 1-1467
+========================================================================
+/* ============================================================================
+ * 即梦（Jimeng）视觉层 —— 单一权威样式层
+ * 依据 https://jimeng.jianying.com/ 应用内暗色规范：
+ *   表面   #121212 页面 / #171717 侧栏 / #1A1A1A 卡面 / #202020 内嵌
+ *   层级   全部靠白色透明度（描边 .04/.08/.12，文字 .88/.70/.60/.40/.20）
+ *   强调   单一青柠 #D8FF3E（青 #00CAE0 仅 AI 语义，橙 #E56603 仅价格）
+ *   形状   控件 8 / 卡片 12 / 功能卡 16 / 合成器 24 / 胶囊 999，描边永远 1px
+ *   质感   1px 描边 + blur，卡片无阴影；只有浮层允许 0 8px 32px rgba(0,0,0,.28)
+ * 本文件在 globals.css 末尾引入，用于收敛历史「青柠绿 + 暖黑」遗留视觉。
+ * ========================================================================== */
+
+/* ---------------------------------------------------------------- 1. 令牌 */
+:root {
+    /* 表面 */
+    --bg-page: #121212;
+    --bg-rail: #171717;
+    --bg-card: #1a1a1a;
+    --bg-raised: #202020;
+    --bg-media: #333333;
+    --bg-glass: linear-gradient(rgba(26, 26, 26, 0.72), rgba(42, 42, 42, 0.72));
+    --bg-glass-card: linear-gradient(126deg, rgba(26, 26, 26, 0.9), rgba(26, 26, 26, 0.6));
+    /* 描边 */
+    --line: rgba(255, 255, 255, 0.08);
+    --line-soft: rgba(255, 255, 255, 0.04);
+    --line-strong: rgba(255, 255, 255, 0.12);
+    /* 文字阶梯 */
+    --text-1: #ffffff;
+    --text-2: rgba(255, 255, 255, 0.88);
+    --text-3: rgba(255, 255, 255, 0.7);
+    --text-4: rgba(255, 255, 255, 0.6);
+    --text-5: rgba(255, 255, 255, 0.4);
+    --text-6: rgba(255, 255, 255, 0.2);
+    /* 强调 */
+    --jm-accent: #d8ff3e;
+    --jm-accent-hover: #e3ff6b;
+    --jm-accent-active: #b8e81c;
+    --jm-accent-soft: rgba(216, 255, 62, 0.12);
+    --jm-accent-line: rgba(216, 255, 62, 0.55);
+    /* 强调色上的文字：青柠底必须用深墨字，白字读不清 */
+    --jm-accent-ink: #11130a;
+    --cyan: #00cae0;
+    --orange: #e56603;
+    --warm: #fcf2eb;
+    /* 语义 */
+    --success: #22c55e;
+    --warning: #f5a623;
+    --danger: #f5483b;
+    /* 圆角 */
+    --r-badge: 4px;
+    --r-control: 8px;
+    --r-card: 12px;
+    --r-feature: 16px;
+    --r-composer: 24px;
+    --r-pill: 999px;
+    /* 动效 */
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-control: cubic-bezier(0.4, 0, 0.2, 1);
+    --dur-1: 140ms;
+    --dur-2: 220ms;
+    --dur-3: 350ms;
+    /* 浮层阴影 */
+    --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.5);
+    --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+/* ------------------------------------------------------- 2. 基础排版/表面 */
+html.dark,
+html {
+    color-scheme: dark;
+    --font-sans: "CapCut Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    --font-heading: "FZYaShiHeiS", "CapCut Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+    --font-num: Montserrat, "CapCut Sans", "PingFang SC", Arial, sans-serif;
+}
+
+html,
+body {
+    font-family: var(--font-sans);
+    background: var(--bg-page);
+    color: var(--text-1);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+/* 标题一律 600，标题层级只靠字号与透明度，不靠 700/900 */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+h1 {
+    font-size: 30px;
+    line-height: 38px;
+    letter-spacing: -0.01em;
+}
+
+h2 {
+    font-size: 20px;
+    line-height: 28px;
+}
+
+h3 {
+    font-size: 15px;
+    line-height: 22px;
+}
+
+/* 数字统一等宽，避免积分/时长跳动 */
+.jm-num,
+.tabular-nums {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
+
+/* 选中文本：品牌青柠 24% */
+::selection {
+    background: rgba(216, 255, 62, 0.28);
+    color: #fff;
+}
+
+/* 焦点可见性：3px 青柠光圈，不用默认虚线框 */
+*:focus-visible {
+    outline: 2px solid var(--jm-accent-line);
+    outline-offset: 2px;
+}
+
+/* ------------------------------------------------- 3. 剥离旧版装饰性残留 */
+
+/* 页面级点阵/网格纹理（规范明确禁止）。资产页、404、画布刷新壳均使用内联 class，
+   这里按属性选择器兜底，保证任何遗留写法都不再露出纹理。 */
+[class*="radial-gradient"],
+[class*="bg-[radial-gradient"] {
+    background-image: none !important;
+}
+
+/* 旧「品牌绿」文本/描边兜底 */
+.text-lime-300,
+.bg-lime-300,
+.bg-lime-400 {
+    background-color: var(--jm-accent) !important;
+    color: var(--jm-accent-ink) !important;
+}
+
+/* 旧版彩色渐变/发光阴影统一压掉（卡片不允许投影） */
+.jm-no-glow {
+    box-shadow: none !important;
+    filter: none !important;
+}
+
+/* ----------------------------------------------------------- 4. antd 控件 */
+
+/* 4.1 按钮：主按钮青柠底配深墨字 */
+html.dark .ant-btn {
+    border-radius: var(--r-control);
+    font-weight: 500;
+    box-shadow: none !important;
+    transition:
+        background-color var(--dur-1) var(--ease-control),
+        border-color var(--dur-1) var(--ease-control),
+        color var(--dur-1) var(--ease-control),
+        opacity var(--dur-1) var(--ease-control);
+}
+
+html.dark .ant-btn-color-primary.ant-btn-variant-solid {
+    background: var(--jm-accent) !important;
+    color: var(--jm-accent-ink) !important;
+}
+
+html.dark .ant-btn-color-primary.ant-btn-variant-solid:hover:not(:disabled) {
+    background: var(--jm-accent-hover) !important;
+}
+
+html.dark .ant-btn-color-primary.ant-btn-variant-solid:active:not(:disabled) {
+    background: var(--jm-accent-active) !important;
+}
+
+html.dark .ant-btn-variant-outlined,
+html.dark .ant-btn-default {
+    border-color: var(--line-strong) !important;
+    background: transparent !important;
+    color: var(--text-2) !important;
+}
+
+html.dark .ant-btn-variant-outlined:hover:not(:disabled),
+html.dark .ant-btn-default:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: var(--text-1) !important;
+}
+
+html.dark .ant-btn-text {
+    color: var(--text-3) !important;
+}
+
+html.dark .ant-btn-text:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: var(--text-1) !important;
+}
+
+html.dark .ant-btn:disabled,
+html.dark .ant-btn[disabled] {
+    opacity: 0.4;
+    box-shadow: none !important;
+}
+
+/* 4.2 输入类 */
+html.dark .ant-input,
+html.dark .ant-input-affix-wrapper,
+html.dark .ant-input-number,
+html.dark .ant-select-selector,
+html.dark .ant-picker,
+html.dark textarea.ant-input {
+    border-radius: var(--r-control) !important;
+    border-color: var(--line-strong) !important;
+    background: var(--bg-card) !important;
+    color: #fafbff !important;
+    box-shadow: none !important;
+}
+
+html.dark .ant-input::placeholder,
+html.dark .ant-input-affix-wrapper input::placeholder,
+html.dark textarea.ant-input::placeholder {
+    color: var(--text-5) !important;
+}
+
+html.dark .ant-input:hover,
+html.dark .ant-input-affix-wrapper:hover,
+html.dark .ant-input-number:hover,
+html.dark .ant-picker:hover {
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+html.dark .ant-input:focus,
+html.dark .ant-input-affix-wrapper-focused,
+html.dark .ant-input-affix-wrapper:focus-within,
+html.dark .ant-select-focused .ant-select-selector,
+html.dark .ant-picker-focused {
+    border-color: rgba(216, 255, 62, 0.6) !important;
+    box-shadow: 0 0 0 3px rgba(216, 255, 62, 0.14) !important;
+}
+
+/* 4.2.1 复合输入框（带前后缀、搜索、数字框、日期、下拉搜索）的边框和焦点环统一由外层容器承担。
+   内层原生 input 若再吃一遍 .ant-input 的边框/底色/焦点阴影，就会出现「框中框」的实线矩形和双层青柠焦点环。
+   这里把内层彻底放平：无边框、无圆角、无底色、无阴影、无 outline。 */
+html.dark .ant-input-affix-wrapper .ant-input,
+html.dark .ant-input-affix-wrapper .ant-input:hover,
+html.dark .ant-input-affix-wrapper .ant-input:focus,
+html.dark .ant-input-affix-wrapper .ant-input:focus-visible,
+html.dark .ant-input-affix-wrapper textarea.ant-input,
+html.dark .ant-input-affix-wrapper textarea.ant-input:focus,
+html.dark .ant-input-number .ant-input-number-input,
+html.dark .ant-input-number .ant-input-number-input:hover,
+html.dark .ant-input-number .ant-input-number-input:focus,
+html.dark .ant-select .ant-select-selection-search-input,
+html.dark .ant-select .ant-select-selection-search-input:focus,
+html.dark .ant-picker .ant-picker-input > input,
+html.dark .ant-picker .ant-picker-input > input:hover,
+html.dark .ant-picker .ant-picker-input > input:focus {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+html.dark .ant-input-search .ant-input-search-button {
+    border-radius: 0 var(--r-control) var(--r-control) 0 !important;
+}
+
+/* 4.3 Tabs：品牌青柠选中态（青柠文字 + 青柠下划线），不再用白字胶囊
+   作用域排除管理后台（body.admin-theme 走自己的墨色主题）。 */
+html.dark body:not(.admin-theme) .ant-tabs-top > .ant-tabs-nav::before,
+html.dark body:not(.admin-theme) .ant-tabs-bottom > .ant-tabs-nav::before {
+    display: none !important;
+}
+
+html.dark body:not(.admin-theme) .ant-tabs .ant-tabs-tab {
+    padding: 0 2px 10px !important;
+    height: auto;
+    border-radius: 0;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-3);
+    transition: color var(--dur-1) var(--ease-control);
+}
+
+html.dark body:not(.admin-theme) .ant-tabs .ant-tabs-tab + .ant-tabs-tab {
+    margin-left: 24px !important;
+}
+
+html.dark body:not(.admin-theme) .ant-tabs .ant-tabs-tab:hover,
+html.dark body:not(.admin-theme) .ant-tabs .ant-tabs-tab:hover .ant-tabs-tab-btn {
+    background: transparent;
+    color: var(--text-1);
+}
+
+html.dark body:not(.admin-theme) .ant-tabs .ant-tabs-tab.ant-tabs-tab-active {
+    background: transparent !important;
+}
+
+html.dark body:not(.admin-theme) .ant-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+    color: var(--brand) !important;
+    font-weight: 600;
+    text-shadow: none !important;
+}
+
+/* 恢复 ink-bar：品牌青柠短下划线 */
+html.dark body:not(.admin-theme) .ant-tabs .ant-tabs-ink-bar {
+    display: block !important;
+    height: 2px !important;
+    border-radius: 999px;
+    background: var(--brand) !important;
+}
+
+html.dark body:not(.admin-theme) .ant-tabs-nav-list {
+    gap: 0;
+}
+
+/* 4.4 分段控件：品牌青柠激活胶囊 */
+html.dark body:not(.admin-theme) .ant-segmented {
+    padding: 2px;
+    border-radius: var(--r-pill);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+html.dark body:not(.admin-theme) .ant-segmented .ant-segmented-item {
+    border-radius: var(--r-pill);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-3);
+    transition:
+        color var(--dur-1) var(--ease-control),
+        background-color var(--dur-1) var(--ease-control);
+}
+
+html.dark body:not(.admin-theme) .ant-segmented .ant-segmented-item:hover:not(.ant-segmented-item-selected) {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1);
+}
+
+html.dark body:not(.admin-theme) .ant-segmented .ant-segmented-item-selected,
+html.dark body:not(.admin-theme) .ant-segmented .ant-segmented-thumb {
+    background: rgba(216, 255, 62, 0.16) !important;
+    color: var(--brand) !important;
+    box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.34) !important;
+    font-weight: 600;
+}
+
+html.dark body:not(.admin-theme) .ant-segmented .ant-segmented-item-selected svg {
+    color: var(--brand);
+}
+
+/* 4.5 浮层：Modal / Drawer / Dropdown / Select / Popover / Tooltip */
+html.dark .ant-modal .ant-modal-content {
+    border-radius: var(--r-feature);
+    border: 1px solid var(--line);
+    background: var(--bg-card);
+    box-shadow: var(--shadow-modal);
+    padding: 24px;
+}
+
+html.dark .ant-modal .ant-modal-header {
+    margin-bottom: 16px;
+    background: transparent;
+}
+
+html.dark .ant-modal .ant-modal-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-1);
+}
+
+html.dark .ant-modal .ant-modal-close {
+    border-radius: var(--r-control);
+    color: var(--text-4);
+}
+
+html.dark .ant-modal .ant-modal-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-1);
+}
+
+html.dark .ant-modal .ant-modal-footer {
+    margin-top: 24px;
+    padding-top: 0;
+    border-top: 0;
+}
+
+html.dark .ant-modal-mask,
+html.dark .ant-drawer-mask {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: none;
+}
+
+html.dark .ant-drawer .ant-drawer-content {
+    background: var(--bg-rail);
+}
+
+html.dark .ant-drawer .ant-drawer-header {
+    border-bottom: 1px solid var(--line);
+    padding: 16px 20px;
+}
+
+html.dark .ant-drawer .ant-drawer-title {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+html.dark .ant-dropdown .ant-dropdown-menu,
+html.dark .ant-select-dropdown,
+html.dark .ant-picker-panel-container,
+html.dark .ant-popover .ant-popover-inner {
+    border-radius: var(--r-card);
+    border: 1px solid var(--line);
+    background: #1f1f1f;
+    box-shadow: var(--shadow-pop);
+    padding: 4px;
+}
+
+html.dark .ant-dropdown .ant-dropdown-menu-item,
+html.dark .ant-select-dropdown .ant-select-item {
+    min-height: 34px;
+    border-radius: var(--r-control);
+    padding: 0 10px;
+    font-size: 13px;
+    color: var(--text-2);
+}
+
+html.dark .ant-dropdown .ant-dropdown-menu-item:hover,
+html.dark .ant-select-dropdown .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-1);
+}
+
+html.dark .ant-select-dropdown .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-1) !important;
+    font-weight: 500;
+}
+
+html.dark .ant-popover .ant-popover-inner {
+    padding: 12px;
+}
+
+html.dark .ant-popover .ant-popover-arrow::before {
+    background: #1f1f1f;
+}
+
+html.dark .ant-tooltip .ant-tooltip-inner {
+    min-height: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-control);
+    background: rgba(28, 28, 28, 0.96);
+    color: var(--text-2);
+    font-size: 12px;
+    line-height: 18px;
+    box-shadow: none;
+}
+
+html.dark .ant-tooltip .ant-tooltip-arrow::before {
+    background: rgba(28, 28, 28, 0.96);
+}
+
+/* 4.6 消息与通知：暗卡 + 1px 描边（antd 静态方法不继承主题） */
+html.dark .ant-message .ant-message-notice-content {
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    background: #1f1f1f;
+    color: var(--text-2);
+    font-size: 13px;
+    box-shadow: var(--shadow-pop);
+}
+
+html.dark .ant-notification .ant-notification-notice {
+    border: 1px solid var(--line);
+    border-radius: var(--r-feature);
+    background: var(--bg-card);
+    color: var(--text-2);
+    box-shadow: var(--shadow-modal);
+    padding: 16px 18px;
+}
+
+html.dark .ant-notification .ant-notification-notice-message {
+    margin-bottom: 4px;
+    color: var(--text-1);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+html.dark .ant-notification .ant-notification-notice-description {
+    color: var(--text-3);
+    font-size: 12.5px;
+    line-height: 1.7;
+}
+
+html.dark .ant-notification .ant-notification-notice-close {
+    color: var(--text-4);
+    border-radius: var(--r-control);
+}
+
+html.dark .ant-notification .ant-notification-notice-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-1);
+}
+
+html.dark .ant-notification .ant-notification-notice-btn {
+    margin-top: 12px;
+}
+
+/* 4.7 表格、分页、表单标签 */
+html.dark .ant-table {
+    background: transparent;
+    font-size: 13px;
+}
+
+html.dark .ant-table-thead > tr > th {
+    border-bottom: 1px solid var(--line) !important;
+    background: transparent !important;
+    color: var(--text-4) !important;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+html.dark .ant-table-tbody > tr > td {
+    border-bottom: 1px solid var(--line-soft) !important;
+    color: var(--text-2);
+}
+
+html.dark .ant-table-tbody > tr:hover > td {
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+html.dark .ant-pagination .ant-pagination-item,
+html.dark .ant-pagination .ant-pagination-prev,
+html.dark .ant-pagination .ant-pagination-next {
+    border-radius: var(--r-control);
+    border-color: var(--line);
+    background: transparent;
+    font-size: 13px;
+}
+
+html.dark .ant-pagination .ant-pagination-item-active {
+    border-color: var(--jm-accent-line);
+    background: var(--jm-accent-soft);
+}
+
+html.dark .ant-pagination .ant-pagination-item-active a {
+    color: var(--jm-accent) !important;
+}
+
+html.dark .ant-form-item .ant-form-item-label > label {
+    color: var(--text-4);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* 4.8 开关 / 滑块 / 复选 */
+html.dark .ant-switch {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+html.dark .ant-switch.ant-switch-checked {
+    background: var(--jm-accent);
+}
+
+html.dark .ant-switch .ant-switch-handle::before {
+    box-shadow: none;
+}
+
+/* 自研开关（data-slot="switch"）：开态原本是 bg-foreground（暗色下整条纯白，
+   thumb 也是浅色，二者糊成一块看不清）。统一换成强调色轨道 + 白色拇指。 */
+[data-slot="switch"][data-state="on"] {
+    background: var(--workspace-accent, var(--jm-accent)) !important;
+}
+
+[data-slot="switch"][data-state="on"] .sc-switch-thumb {
+    border-color: transparent !important;
+    background: #ffffff !important;
+}
+
+[data-slot="switch"][data-state="off"] {
+    background: rgba(255, 255, 255, 0.1) !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+[data-slot="switch"][data-state="off"] .sc-switch-thumb {
+    background: #9e9e9e !important;
+}
+
+[data-slot="switch"]:focus-visible {
+    outline: 2px solid var(--workspace-accent, var(--jm-accent));
+    outline-offset: 2px;
+}
+
+html.dark .ant-slider .ant-slider-rail {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+html.dark .ant-slider .ant-slider-track {
+    background: var(--jm-accent);
+}
+
+html.dark .ant-slider .ant-slider-handle::after {
+    box-shadow: 0 0 0 2px var(--jm-accent);
+}
+
+html.dark .ant-checkbox .ant-checkbox-inner,
+html.dark .ant-radio .ant-radio-inner {
+    border-radius: 4px;
+    border-color: var(--line-strong);
+    background: transparent;
+}
+
+html.dark .ant-radio .ant-radio-inner {
+    border-radius: 50%;
+}
+
+html.dark .ant-checkbox-checked .ant-checkbox-inner,
+html.dark .ant-radio-checked .ant-radio-inner {
+    border-color: var(--jm-accent) !important;
+    background: var(--jm-accent) !important;
+}
+
+/* 4.9 空态 / 骨架 / 加载 */
+html.dark .ant-empty .ant-empty-description {
+    color: var(--text-5);
+    font-size: 12px;
+}
+
+html.dark .ant-skeleton .ant-skeleton-content .ant-skeleton-title,
+html.dark .ant-skeleton .ant-skeleton-content .ant-skeleton-paragraph > li,
+html.dark .ant-skeleton .ant-skeleton-avatar {
+    background: linear-gradient(90deg, #202020, #2a2a2a, #202020);
+    background-size: 200% 100%;
+    animation: jm-skeleton 2s linear infinite;
+}
+
+@keyframes jm-skeleton {
+    from {
+        background-position: 100% 0;
+    }
+    to {
+        background-position: -100% 0;
+    }
+}
+
+/* 4.10 标签 / 徽章 / 卡片内嵌块 */
+html.dark .ant-tag {
+    border-radius: var(--r-badge);
+    border-color: var(--line);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-3);
+    font-size: 11px;
+}
+
+/* ------------------------------------------------------ 5. 即梦组件类 */
+
+/* 5.1 页面骨架：标题左对齐 30/600，说明 14/22 --text-3 */
+.jm-page {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    background: var(--bg-page);
+    overscroll-behavior: contain;
+    /* 常驻槽位，滚动条出现/消失时内容不左右跳动 */
+    scrollbar-gutter: stable;
+}
+
+/* 长列表页要一条「常态可见」的细滚动条。
+   注意：全局 * 规则是 scrollbar-width: thin + 透明色（overlay 滚动条，只在滚动时露头），
+   这里必须显式改回 auto —— 只要 scrollbar-width 是 thin，Chrome 就会忽略 ::-webkit-scrollbar，
+   overlay 滚动条在 macOS 上静止时不可见。改回 auto 后经典滚动条常驻，由下面的 webkit 规则上色。
+   .jm-page.scrollbar-active 是为了压过 globals.css 里的 .scrollbar-active（滚动时会被加上）。 */
+.jm-page,
+.jm-page.scrollbar-active {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+}
+
+.jm-page::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.jm-page::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* 2px 透明描边 + content-box 裁切：视觉上是一条 6px 圆头滑块，居中在 10px 轨道里 */
+.jm-page::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    background-clip: content-box;
+}
+
+.jm-page:hover::-webkit-scrollbar-thumb,
+.jm-page.scrollbar-active::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.32);
+    background-clip: content-box;
+}
+
+.jm-page-inner {
+    width: 100%;
+    max-width: 1360px;
+    margin: 0 auto;
+    padding: 32px 40px 64px;
+}
+
+/* 触屏/窄屏用系统 overlay 滚动条，不占 10px 槽位 */
+@media (max-width: 767px) {
+    .jm-page {
+        scrollbar-gutter: auto;
+    }
+
+    .jm-page::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+    }
+}
+
+.jm-page-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.jm-page-title {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 30px;
+    line-height: 38px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-1);
+}
+
+.jm-page-desc {
+    margin: 8px 0 0;
+    max-width: 640px;
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--text-3);
+}
+
+.jm-section-title {
+    margin: 0;
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 600;
+    color: var(--text-1);
+}
+
+/* 5.2 胶囊 tab 行（替代下划线 tab） */
+.jm-segment {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.jm-segment-item {
+    display: inline-flex;
+    height: 36px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: transparent;
+    color: var(--text-3);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        background-color var(--dur-1) var(--ease-control),
+        color var(--dur-1) var(--ease-control);
+}
+
+.jm-segment-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-1);
+}
+
+.jm-segment-item[aria-selected="true"],
+.jm-segment-item.is-active {
+    background: var(--jm-accent-soft);
+    box-shadow: inset 0 0 0 1px var(--jm-accent-line);
+    color: var(--jm-accent);
+}
+
+/* 5.3 chip / 筛选胶囊 */
+.jm-chip {
+    display: inline-flex;
+    height: 28px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        background-color var(--dur-1) var(--ease-control),
+        border-color var(--dur-1) var(--ease-control),
+        color var(--dur-1) var(--ease-control);
+}
+
+.jm-chip:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--text-2);
+}
+
+.jm-chip.is-active,
+.jm-chip[aria-pressed="true"] {
+    border-color: var(--jm-accent-line);
+    background: var(--jm-accent-soft);
+    color: var(--jm-accent);
+}
+
+/* 5.4 卡片 */
+.jm-card {
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    background: var(--bg-card);
+    box-shadow: none;
+}
+
+.jm-card-feature {
+    border: 1px solid var(--line);
+    border-radius: var(--r-feature);
+    background: var(--bg-glass-card);
+    box-shadow: none;
+}
+
+.jm-card-hover {
+    transition:
+        background-color var(--dur-2) var(--ease-out),
+        border-color var(--dur-2) var(--ease-out);
+}
+
+.jm-card-hover:hover {
+    border-color: var(--line-strong);
+    background: #1f1f1f;
+}
+
+/* 5.5 主按钮反白（页面级一级动作，非表单提交） */
+.jm-btn {
+    display: inline-flex;
+    height: 36px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 16px;
+    border: 1px solid transparent;
+    border-radius: var(--r-control);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        background-color var(--dur-1) var(--ease-control),
+        border-color var(--dur-1) var(--ease-control),
+        color var(--dur-1) var(--ease-control);
+}
+
+.jm-btn-primary {
+    background: var(--jm-accent);
+    color: var(--jm-accent-ink);
+}
+
+.jm-btn-primary:hover {
+    background: var(--jm-accent-hover);
+}
+
+.jm-btn-primary:active {
+    background: var(--jm-accent-active);
+}
+
+.jm-btn-primary:disabled {
+    background: rgba(255, 255, 255, 0.16);
+    color: var(--text-6);
+    cursor: not-allowed;
+}
+
+.jm-btn-secondary {
+    border-color: var(--line-strong);
+    background: transparent;
+    color: var(--text-2);
+}
+
+.jm-btn-secondary:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1);
+}
+
+.jm-btn-ghost {
+    background: transparent;
+    color: var(--text-3);
+}
+
+.jm-btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-1);
+}
+
+/* 5.6 搜索框（大） */
+.jm-search {
+    display: flex;
+    height: 36px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    width: 300px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-4);
+    transition:
+        border-color var(--dur-1) var(--ease-control),
+        background-color var(--dur-1) var(--ease-control);
+}
+
+.jm-search:focus-within {
+    border-color: rgba(216, 255, 62, 0.6);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.jm-search input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text-1);
+    font-size: 13px;
+}
+
+/* 焦点环只由外层胶囊表达：内部裸 input 不再画第二层矩形框
+   （.creation-shell 的通用 :focus-visible 描边会落在这里，需要按复合控件豁免）。 */
+.jm-search input:focus,
+.jm-search input:focus-visible,
+.jm-search input:focus-within {
+    outline: none;
+    box-shadow: none;
+}
+
+/* 5.6.1 筛选行：左侧 40px 标签列 + 右侧胶囊组，分类行与标签行左右对齐 */
+.prompt-filter-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.prompt-filter-label {
+    flex: none;
+    width: 40px;
+    padding-top: 6px;
+    color: var(--text-4);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* 标签行的文字与内嵌面板首行胶囊垂直居中：面板 padding 10 + (28 - 16) / 2 */
+.prompt-filter-label.is-tags {
+    padding-top: 16px;
+}
+
+.prompt-filter-options {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 6px;
+    /* 与标签面板内首行胶囊左对齐：面板 1px 描边 + 12px 内边距 */
+    padding-left: 13px;
+}
+
+/* 5.6.2 标签云：高度固定为整 4 行，超出后容器内滚动，右侧一条细滚动条。
+   176 = 4 行胶囊（4×34 + 3×6 = 154）+ 上下内边距 20 + 1px 描边 ×2。
+   用固定 height 而非 max-height：切换分类后标签集合变化时筛选区高度不跳动，
+   下方卡片不会跟着上下位移。
+   显式把 scrollbar-width 改回 auto，否则 Chrome 会忽略下面的 ::-webkit-scrollbar 而走
+   overlay 滚动条（静止时不可见）。 */
+.prompt-tag-scroll {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 6px;
+    height: 176px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--r-card);
+    background: rgba(255, 255, 255, 0.025);
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+    transition:
+        border-color 140ms var(--ease-control),
+        background-color 140ms var(--ease-control);
+}
+
+.prompt-tag-scroll:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.prompt-tag-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.prompt-tag-scroll::-webkit-scrollbar-track {
+    margin: 6px 0;
+    background: transparent;
+}
+
+/* 2px 透明描边 + content-box 裁切：10px 轨道里呈现 6px 圆头滑块 */
+.prompt-tag-scroll::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.22);
+    background-clip: content-box;
+}
+
+.prompt-tag-scroll:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.38);
+    background-clip: content-box;
+}
+
+/* 胶囊落在内嵌面板里，焦点环向内收，避免被滚动容器裁掉 */
+.prompt-tag-scroll .prompt-filter-tag.ant-tag-checkable:focus-visible {
+    outline: 2px solid var(--jm-accent-line);
+    outline-offset: -2px;
+}
+
+.jm-search input::placeholder {
+    color: var(--text-5);
+}
+
+/* 5.7 空态：40px 图标 + 14/500 标题 + 12px 说明，padding 48 */
+.jm-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 48px 24px;
+    text-align: center;
+}
+
+.jm-empty-icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin-bottom: 4px;
+    color: var(--text-6);
+}
+
+.jm-empty-title {
+    margin: 0;
+    font-size: 14px;
+    line-height: 22px;
+    font-weight: 500;
+    color: var(--text-3);
+}
+
+.jm-empty-desc {
+    margin: 0;
+    max-width: 560px;
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--text-5);
+}
+
+/* 5.8 徽章 */
+.jm-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 4px;
+    border-radius: var(--r-badge);
+    background: rgba(216, 255, 62, 0.12);
+    color: var(--jm-accent);
+    font-size: 9px;
+    line-height: 16px;
+    font-weight: 400;
+}
+
+/* 5.9 分隔线 */
+.jm-divider {
+    height: 1px;
+    width: 100%;
+    background: var(--line);
+}
+
+/* 5.10 画布卡片
+   首页「最近画布」与 /canvas 画布库共用这套外观，对齐即梦画布库：
+   4 列等宽横卡（基准 294×170）、16 圆角、卡面浅点阵、中心一枚图形、
+   标题压在左下角。新建卡是唯一强调块——白底「+」方块 + 居中标题。
+   变体只用 .is-new / .is-empty。 */
+.jm-canvas-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.jm-canvas-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    padding: 14px 16px;
+    overflow: hidden;
+    isolation: isolate;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 16px;
+    background: #1e1e1e;
+    color: var(--text-2);
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background-color var(--dur-1) var(--ease-control),
+        border-color var(--dur-1) var(--ease-control);
+}
+
+/* 基准 294×170：宽屏下单列 294.5，卡片封顶 294 居中；列宽不足时随列收窄，
+   高度恒定，保证 4 列永远等高 */
+.jm-canvas-card:not(.is-empty) {
+    width: 100%;
+    max-width: 294px;
+    height: 170px;
+    justify-self: center;
+}
+
+/* 卡面高度只有 170，图标块和小标题要跟着收紧，否则标题会贴到图形上 */
+.jm-canvas-card .jm-canvas-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* 卡面点阵：中心清楚、四周淡出，不和页面背景的点阵糊成一片 */
+.jm-canvas-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.075) 1px, transparent 0);
+    background-size: 14px 14px;
+    background-position: 7px 7px;
+    pointer-events: none;
+    -webkit-mask-image: radial-gradient(112% 88% at 50% 44%, #000 30%, transparent 78%);
+    mask-image: radial-gradient(112% 88% at 50% 44%, #000 30%, transparent 78%);
+}
+
+/* 卡片可能是 <button>，把浏览器默认样式清掉 */
+button.jm-canvas-card {
+    font: inherit;
+}
+
+.jm-canvas-card:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    background: #262626;
+    box-shadow: none;
+    transform: none;
+}
+
+.jm-canvas-card:focus-visible {
+    outline: none;
+    border-color: var(--jm-accent-line);
+    box-shadow: 0 0 0 3px rgba(216, 255, 62, 0.14);
+}
+
+/* 中心图形：项目卡是裸图形，只有新建卡给它白底 */
+.jm-canvas-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border-radius: 12px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    transition:
+        color var(--dur-1) var(--ease-control),
+        background-color var(--dur-1) var(--ease-control);
+}
+
+.jm-canvas-icon svg {
+    width: 22px;
+    height: 22px;
+}
+
+.jm-canvas-card:hover .jm-canvas-icon {
+    color: rgba(255, 255, 255, 0.72);
+}
+
+/* 标题块贴左下角，宽度撑满卡面内边距 */
+.jm-canvas-body {
+    position: absolute;
+    right: 16px;
+    bottom: 14px;
+    left: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.jm-canvas-title {
+    display: block;
+    overflow: hidden;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.jm-canvas-meta {
+    display: block;
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.34);
+    font-size: 11.5px;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 新建：白底方块，是整排里唯一的实心强调 */
+.jm-canvas-card.is-new {
+    border-color: rgba(255, 255, 255, 0.09);
+}
+
+.jm-canvas-card.is-new .jm-canvas-icon {
+    background: var(--jm-accent);
+    color: var(--jm-accent-ink);
+}
+
+.jm-canvas-card.is-new .jm-canvas-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 2.4;
+}
+
+.jm-canvas-card.is-new .jm-canvas-body {
+    position: static;
+    align-items: center;
+    gap: 0;
+    margin-top: 14px;
+    text-align: center;
+}
+
+.jm-canvas-card.is-new .jm-canvas-title {
+    color: rgba(255, 255, 255, 0.86);
+}
+
+/* 「打开画布」在竖卡里会挤成两行，交给「+」图标表达 */
+.jm-canvas-card.is-new .jm-canvas-meta {
+    display: none;
+}
+
+.jm-canvas-card.is-new:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: #242424;
+}
+
+/* 空位占位：虚线空壳、不可点，多列合并时靠 grid 拉伸 */
+.jm-canvas-card.is-empty {
+    border-style: dashed;
+    border-color: var(--line);
+    background: transparent;
+    cursor: default;
+}
+
+.jm-canvas-card.is-empty::before {
+    display: none;
+}
+
+.jm-canvas-card.is-empty .jm-canvas-icon {
+    color: rgba(255, 255, 255, 0.2);
+}
+
+.jm-canvas-card.is-empty .jm-canvas-body {
+    position: static;
+    align-items: center;
+    gap: 5px;
+    margin-top: 12px;
+    text-align: center;
+}
+
+.jm-canvas-card.is-empty .jm-canvas-title {
+    color: rgba(255, 255, 255, 0.3);
+    font-weight: 500;
+}
+
+.jm-canvas-card.is-empty .jm-canvas-meta {
+    color: rgba(255, 255, 255, 0.26);
+    white-space: normal;
+    text-overflow: clip;
+}
+
+/* 1100 以下先降到 3 列：2 列时卡宽近 450px，卡片会被等比撑得过高 */
+@media (max-width: 1100px) {
+    .jm-canvas-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    /* 列数变少后列宽大于 294，让卡片填满列，避免两侧各留一条缝 */
+    .jm-canvas-card:not(.is-empty) {
+        max-width: none;
+    }
+}
+
+@media (max-width: 820px) {
+    .jm-canvas-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 560px) {
+    .jm-canvas-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .jm-canvas-card:not(.is-empty) {
+        max-width: none;
+        height: 150px;
+    }
+}
+
+@media (max-width: 767px) {
+    .jm-canvas-card {
+        padding: 14px;
+        border-radius: 14px;
+    }
+
+    .jm-canvas-body {
+        right: 14px;
+        bottom: 12px;
+        left: 14px;
+    }
+
+    .jm-canvas-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 11px;
+    }
+}
+
+/* ------------------------------------------------------------ 6. 动效 */
+@keyframes jm-fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.jm-enter {
+    animation: jm-fade-up 200ms var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jm-enter {
+        animation: none;
+    }
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* 6.1 生成参数抽屉：底部抽屉内容收窄居中，标题居左、关闭居右 */
+html.dark .creation-settings-drawer .ant-drawer-content {
+    background: var(--bg-rail);
+}
+
+html.dark .creation-settings-drawer .ant-drawer-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+}
+
+html.dark .creation-settings-drawer .ant-drawer-header-title {
+    flex-direction: row-reverse;
+    gap: 8px;
+}
+
+html.dark .creation-settings-drawer .ant-drawer-body {
+    width: 100%;
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+@media (max-width: 640px) {
+    html.dark .creation-settings-drawer .ant-drawer-body {
+        padding: 16px;
+    }
+}
+
+/* ------------------------------------------------------- 7. 响应式收敛 */
+@media (max-width: 1024px) {
+    .jm-page-inner {
+        padding: 24px 20px 48px;
+    }
+    .jm-page-title {
+        font-size: 26px;
+        line-height: 34px;
+    }
+}
+
+@media (max-width: 640px) {
+    .jm-page-inner {
+        padding: 20px 16px 40px;
+    }
+    .jm-page-head {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+    }
+    .jm-search {
+        width: 100%;
+    }
+}
+
+/* ------------------------------------------------ 5.9 点阵底纹页（liblib 风） */
+
+/* DotField 以 z-index:-1 挂在 UserLayout 的 main 里，靠 main 的 isolation 收在一个
+   独立的层叠上下文内：它会盖住 main 的背景，但仍在所有内容之下。
+   因此这些页面的根节点必须把底色让出来，露出 main 背后的点阵。
+   （.page-surface 标在创作页/画布库/素材库/提示词库这类自带 bg-* 工具类的根节点上） */
+main.jm-dot-host .jm-page,
+main.jm-dot-host .home-page,
+main.jm-dot-host .page-surface {
+    background: transparent;
+}
+
+
+========================================================================
+FILE: web/src/styles/pages-redesign.css
+LINES: 1-158
+========================================================================
+/* 页面层美化：首页、登录、页脚、模型广场、账户。沿用青柠品牌色与暖黑底，不改色调；画布页不受影响。 */
+
+/* ---------- 首页 landing ---------- */
+main.home-landing .landing-welcome {
+    padding: 64px 0 36px;
+    text-align: center;
+    background: none;
+}
+main.home-landing .landing-eyebrow {
+    margin-bottom: 18px;
+    padding: 5px 14px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    /* 文字 logo 是白色，标签文字同步为白，蓝色只留底色与描边 */
+    color: rgba(255, 255, 255, 0.88);
+    border-color: color-mix(in srgb, var(--brand) 35%, transparent);
+    background: color-mix(in srgb, var(--brand) 12%, transparent);
+}
+main.home-landing .landing-welcome h1 {
+    font-size: clamp(30px, 3.1vw, 44px);
+    font-weight: 600;
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    color: var(--text-1);
+}
+main.home-landing .landing-intro { margin-top: 12px; font-size: 14px; line-height: 22px; color: var(--text-3); }
+main.home-landing .landing-switch { margin-top: 28px; border-radius: 999px; }
+main.home-landing .landing-switch a { border-radius: 999px; font-size: 14px; }
+
+/* 宽度与下方「灵感大厅」区块对齐：吃满 .home-content 的内容宽度，不再单独收窄 */
+main.home-landing .home-composer {
+    max-width: none;
+    padding: 20px 20px 16px;
+    border-radius: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+}
+main.home-landing .home-composer::before { opacity: 0.55; }
+main.home-landing .home-composer:focus-within {
+    border-color: rgba(216, 255, 62, 0.6);
+    box-shadow: 0 0 0 3px rgba(216, 255, 62, 0.14), 0 8px 32px rgba(0, 0, 0, 0.28);
+}
+main.home-landing .home-editor .home-prompt { font-size: 16px; font-weight: 500; }
+/* 快捷键提示：左对齐到输入框左边缘 */
+main.home-landing .home-caption { max-width: none; margin-left: 0; margin-right: 0; text-align: left; font-size: 13px; }
+
+main.home-landing .landing-tools { margin: 40px 0 48px; gap: 12px; }
+main.home-landing .landing-tool {
+    padding: 12px;
+    border-radius: 16px;
+    transition: border-color 200ms ease, background-color 200ms ease, transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+main.home-landing .landing-tool:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+}
+main.home-landing .landing-tool-art { width: 64px; height: 64px; border-radius: 12px; overflow: hidden; }
+main.home-landing .landing-tool-art img { width: 100%; height: 100%; object-fit: cover; }
+main.home-landing .landing-tool h2 { font-size: 14px; font-weight: 600; }
+main.home-landing .landing-tool p { font-size: 12px; }
+
+/* 区块标题统一 */
+:root .home-section { margin-top: 64px; }
+/* 「发现灵感」页首个区块就是页头：去掉区块间 64px 上间距，容器上内边距收到 32px，
+   与素材库 / 提示词中心 / 账户中心 / 我的画布的 .jm-page-inner 完全同一基线 */
+:root .home-page.home-explore .home-content { padding-top: 32px; }
+:root .home-page.home-explore .home-content > .home-section:first-of-type { margin-top: 0; }
+/* 窄屏同步 .jm-page-inner 的移动端内边距，保持与其他二级页一致 */
+@media (max-width: 1024px) {
+    :root .home-page.home-explore .home-content { padding: 24px 20px 48px; }
+}
+@media (max-width: 640px) {
+    :root .home-page.home-explore .home-content { padding: 20px 16px 40px; }
+}
+/* 与 .jm-page-title / .jm-page-desc 完全对齐：30/38、600、-0.01em；副标题 14/22、上间距 8、text-3 */
+:root .home-section-title,
+:root .home-section + .home-section .home-section-title { font-size: 30px; line-height: 38px; font-weight: 600; letter-spacing: -0.01em; }
+:root .home-section-note { font-size: 14px; line-height: 22px; margin-top: 8px; color: var(--text-3); }
+/* 响应式与 .jm-page-title 同步收敛（此处用 :root 前缀，与上面的基础规则同特异性且更靠后，才能生效） */
+@media (max-width: 1024px) {
+    :root .home-section-title,
+    :root .home-section + .home-section .home-section-title { font-size: 26px; line-height: 34px; }
+}
+:root .home-prompt-card { border-radius: 12px; transition: background 200ms ease, transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+:root .home-prompt-card:hover { transform: translateY(-1px); }
+:root .home-prompt-media { border-radius: 16px; }
+:root .home-prompt-tab.is-active { background: rgba(255, 255, 255, 0.08); color: var(--text-1); }
+:root .home-prompt-tab.is-active::after { display: none; }
+:root .home-prompt-tab { border-radius: 999px; height: 32px; padding: 0 14px; font-size: 13px; }
+
+/* ---------- 登录 / 注册：样式集中在 pages/auth/auth.css ---------- */
+
+/* ---------- 页脚 ---------- */
+:root .site-footer-main { padding: 64px 40px 52px; }
+:root .site-footer-tagline { font-size: 13px; line-height: 1.85; max-width: 280px; }
+:root .site-footer-col h3 { font-size: 13px; font-weight: 500; color: var(--text-4); margin-bottom: 16px; }
+:root .site-footer-col li,
+:root .site-footer-col li a,
+:root .site-footer-col li .promo-contact-link { font-size: 13px; color: var(--text-3); }
+:root .site-footer-bottom { font-size: 12.5px; }
+
+/* ---------- 模型广场 ---------- */
+:root .models-content { padding: 56px 40px 80px; }
+:root .models-title { font-weight: 600; letter-spacing: -0.01em; }
+:root .models-subtitle,
+:root .models-stat-label { color: var(--muted-foreground); }
+:root .models-search-icon,
+:root .models-search-input::placeholder { color: var(--muted-foreground); }
+:root .models-stats { border-radius: 20px; background: var(--card); border-color: var(--border); }
+:root .models-stat-label { font-size: 13px; }
+:root .models-search-input,
+:root .models-filter-toggle { height: 46px; border-radius: 999px; border-color: var(--border); background: var(--card); }
+:root .models-filters-panel { border-radius: 20px; background: var(--card); border-color: var(--border); }
+
+/* ---------- 账户 ---------- */
+:root .account-page .account-tabs .ant-tabs-tab { font-size: 14px; }
+:root .account-page .account-tabs .ant-tabs-ink-bar { height: 0; }
+:root .account-page section.rounded-2xl { border-radius: 16px; }
+
+/* ---------- 提示词库 ---------- */
+/* 标题不再单独放大：走全局 .jm-page-title（30/38、600、-0.01em），与其余二级页一致 */
+:root .prompts-main .ant-input-affix-wrapper { border-radius: 999px; padding-inline: 18px; }
+:root .prompt-filter-tag.ant-tag-checkable { border-radius: 999px; font-size: 13px; padding: 6px 12px; }
+
+@media (max-width: 640px) {
+    main.home-landing .landing-welcome { padding-top: 32px; }
+    main.home-landing .home-composer { border-radius: 22px; }
+    :root .site-footer-main { padding: 44px 24px 36px; }
+    :root .models-content { padding: 32px 20px 64px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    main.home-landing .landing-tool,
+    :root .home-prompt-card { transition: none; transform: none; }
+}
+
+/* ---------- 素材库 ---------- */
+:root .asset-card { border-radius: 16px; transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 200ms ease; }
+:root .asset-card:hover { transform: translateY(-1px); border-color: rgba(255, 255, 255, 0.12); }
+:root .asset-card h2 { font-size: 16px; }
+:root .asset-card p { font-size: 13px; line-height: 1.65; }
+:root .asset-card .rounded-md,
+:root .asset-card .mt-2\.5 > span { font-size: 12px; }
+:root .asset-card .asset-card-fallback p { font-size: 13px; }
+:root .asset-card > button:first-child > span { font-size: 12px; padding: 3px 10px; }
+:root .asset-card .truncate { font-size: 12px; }
+:root .asset-card .border-t span.truncate { font-size: 12px; }
+:root .asset-empty-icon { border-radius: 20px; width: 64px; height: 64px; }
+:root .asset-empty-icon + h2 { font-size: 18px; font-weight: 600; }
+:root .asset-empty-icon ~ p { font-size: 14px; line-height: 1.7; }
+:root .ant-input-search .ant-input-affix-wrapper { border-radius: 999px; padding-inline: 18px; }
+:root .ant-input-search .ant-input-search-button { border-radius: 0 999px 999px 0; }
+
+@media (prefers-reduced-motion: reduce) {
+    :root .asset-card { transition: none; }
+    :root .asset-card:hover { transform: none; }
+}
+
+
+========================================================================
+FILE: web/src/styles/shell-redesign.css
+LINES: 1-41
+========================================================================
+/* 外壳美化：侧栏、顶栏。即梦规范：#171717 侧栏、白色透明度层级、无发光。画布页不受影响。 */
+
+.creation-sidebar {
+    background-color: var(--bg-rail);
+}
+
+.creation-sidebar .creation-sidebar-link {
+    position: relative;
+    min-height: 36px;
+    border-radius: 8px;
+    transition: background-color 160ms cubic-bezier(0.4, 0, 0.2, 1), color 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.creation-sidebar .creation-sidebar-link.is-active {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.creation-sidebar .creation-sidebar-link.is-active::before {
+    content: none;
+}
+
+.creation-sidebar .creation-sidebar-link:hover:not(.is-active) {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.creation-sidebar nav > div:first-child {
+    padding-bottom: 8px;
+    letter-spacing: 0.04em;
+}
+
+.creation-topbar {
+    position: relative;
+    background: color-mix(in srgb, var(--bg-rail) 85%, transparent);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .creation-sidebar .creation-sidebar-link { transition: none; }
+}
+
+
+========================================================================
+FILE: web/src/types/canvas-export.ts
+LINES: 1-20
+========================================================================
+import type { CanvasProject } from "@/stores/canvas/use-canvas-store";
+
+export type CanvasExportFile = {
+    app: "sundas";
+    version: 3 | 4;
+    exportedAt: string;
+    projects: CanvasProjectExportItem[];
+};
+
+export type CanvasProjectExportItem = {
+    project: CanvasProject;
+    files: CanvasExportAsset[];
+};
+
+export type CanvasExportAsset = {
+    storageKey: string;
+    path: string;
+    mimeType: string;
+    bytes: number;
+};
+
+
+========================================================================
+FILE: web/src/types/canvas-plugin.ts
+LINES: 1-147
+========================================================================
+import type { ComponentType, ReactNode } from "react";
+
+import type { CanvasAgentOp } from "@/lib/canvas/canvas-agent-ops";
+import type { CanvasTheme } from "@/lib/canvas-theme";
+import type { CanvasConnection, CanvasNodeData, CanvasNodeMetadata } from "@/types/canvas";
+import type { CanvasResourceKind } from "@/lib/canvas/canvas-resource-references";
+
+// Resource emitted when a plugin node is consumed as an upstream input.
+export type CanvasNodeResource = { kind: CanvasResourceKind; text?: string; url?: string };
+
+// AI generation capabilities injected by the host, reusing its model and credential configuration.
+export type GenerateOptions = { signal?: AbortSignal; references?: string[]; model?: string };
+export type GenerateImageOptions = GenerateOptions & { count?: number; size?: string };
+export type GenerateImageResult = { images: string[] };
+export type GenerateVideoOptions = GenerateOptions & { size?: string; seconds?: string };
+export type GenerateVideoResult = { url: string; mimeType: string; width?: number; height?: number; durationMs?: number };
+export type GenerateTextOptions = { signal?: AbortSignal; model?: string; system?: string; onDelta?: (text: string) => void };
+export type GenerateTextResult = { text: string };
+export type PluginModelCapability = "image" | "video" | "text" | "audio";
+export type ModelOption = { value: string; label: string };
+
+export type CanvasPluginAi = {
+    generateImage: (prompt: string, options?: GenerateImageOptions) => Promise<GenerateImageResult>;
+    generateVideo: (prompt: string, options?: GenerateVideoOptions) => Promise<GenerateVideoResult>;
+    generateText: (prompt: string, options?: GenerateTextOptions) => Promise<GenerateTextResult>;
+    listModels: (capability?: PluginModelCapability) => ModelOption[];
+    defaultModel: (capability: PluginModelCapability) => string;
+};
+
+// Node-specific buttons appended to the hover toolbar.
+export type CanvasNodeToolbarItem = {
+    id: string;
+    title: string;
+    label: string;
+    icon: ReactNode;
+    onClick: () => void;
+    active?: boolean;
+    danger?: boolean;
+};
+
+// Context injected while rendering each node; the primary interface between plugins and the canvas.
+export type CanvasNodeContext = {
+    node: CanvasNodeData;
+    theme: CanvasTheme;
+    scale: number;
+    isSelected: boolean; // Whether this node is selected, used to enable iframe interaction on demand.
+    // Node data.
+    updateMetadata: (patch: CanvasNodeMetadata) => void;
+    updateNode: (patch: Partial<Pick<CanvasNodeData, "title" | "width" | "height">>) => void;
+    // Graph access.
+    getNode: (id: string) => CanvasNodeData | null;
+    getNodes: () => CanvasNodeData[];
+    getConnections: () => CanvasConnection[];
+    getUpstream: () => CanvasNodeData[];
+    getDownstream: () => CanvasNodeData[];
+    // Canvas operations using the Agent instruction set for nodes, connections, selection, viewport, and generation.
+    applyOps: (ops: CanvasAgentOp[]) => void;
+    // Inter-node and inter-plugin communication.
+    emit: (event: string, payload?: unknown) => void;
+    on: (event: string, handler: (payload: unknown) => void) => () => void;
+    // AI image, video, and text generation using the host model configuration.
+    ai: CanvasPluginAi;
+    // Opens or closes the custom panel below this node; the definition must provide a Panel.
+    openPanel: () => void;
+    closePanel: () => void;
+    // Plugin-private persistence isolated by namespace.
+    storage: PluginStorage;
+};
+
+export type PluginStorage = {
+    get: <T = unknown>(key: string) => Promise<T | null>;
+    set: (key: string, value: unknown) => Promise<void>;
+    remove: (key: string) => Promise<void>;
+};
+
+// Node-independent host capabilities constructed by the canvas page and injected into the render chain.
+export type CanvasPluginHost = {
+    getNode: (id: string) => CanvasNodeData | null;
+    getNodes: () => CanvasNodeData[];
+    getConnections: () => CanvasConnection[];
+    getUpstream: (nodeId: string) => CanvasNodeData[];
+    getDownstream: (nodeId: string) => CanvasNodeData[];
+    updateNode: (nodeId: string, patch: Partial<Pick<CanvasNodeData, "title" | "width" | "height">>) => void;
+    updateMetadata: (nodeId: string, patch: CanvasNodeMetadata) => void;
+    applyOps: (ops: CanvasAgentOp[]) => void;
+    // AI generation using the current canvas model and credential configuration.
+    ai: CanvasPluginAi;
+    // Opens or closes the custom panel below a specified node.
+    openPanel: (nodeId: string) => void;
+    closePanel: () => void;
+};
+
+// Configuration for reusing the host's built-in generation panel; see SDK CanvasBuiltinPanelConfig.
+export type CanvasBuiltinPanelConfig = {
+    mode: "image" | "video" | "text" | "audio";
+    promptPrefix?: string;
+    writeBackToSelf?: boolean;
+};
+
+// Shared node definition used by both built-in and plugin nodes.
+export type CanvasNodeDefinition = {
+    type: string; // Built-ins use values such as "image"; plugins should use "<pluginId>:<name>".
+    title: string;
+    icon: ReactNode;
+    description?: string;
+    defaultSize: { width: number; height: number };
+    defaultMetadata?: CanvasNodeMetadata;
+    minimapColor?: string;
+    showInCreateMenu?: boolean; // Defaults to true.
+    hasSourceHandle?: boolean; // Right-side output handle; defaults to true.
+    hidePanel?: boolean; // Prevents click/create from opening a lower panel; intended for display-only nodes.
+    transparentBackground?: boolean; // Makes the node card transparent so SVG or vector content blends into the canvas.
+    autoOpenPanel?: boolean; // Opens a custom Panel on click; automatic opening otherwise applies only to built-ins.
+    useBuiltinPanel?: CanvasBuiltinPanelConfig; // Reuses the built-in generation panel instead of a custom Panel.
+    // Lets the host provide an Interaction/Move toolbar toggle and control pointer events through metadata.interactive.
+    interactionToggle?: boolean;
+    // With interactionToggle, true forces interactive content, ignores metadata.interactive, and hides the toggle.
+    forceInteractive?: (node: CanvasNodeData) => boolean;
+    keepAspectRatio?: (node: CanvasNodeData) => boolean;
+    resource?: (node: CanvasNodeData) => CanvasNodeResource | null;
+    // Built-ins use canvas-node's internal renderer and may omit Content.
+    Content?: ComponentType<{ ctx: CanvasNodeContext }>;
+    Panel?: ComponentType<{ ctx: CanvasNodeContext; onClose: () => void }>;
+    toolbar?: (ctx: CanvasNodeContext) => CanvasNodeToolbarItem[];
+    onDoubleClick?: (ctx: CanvasNodeContext) => boolean; // Return true when handled.
+};
+
+// Application capabilities available while a plugin starts.
+export type CanvasPluginApp = {
+    version: string;
+    emit: (event: string, payload?: unknown) => void;
+    on: (event: string, handler: (payload: unknown) => void) => () => void;
+    // Injects plugin styles and returns a cleanup function; the same key replaces previous styles.
+    injectCSS: (css: string, key?: string) => () => void;
+};
+
+// Default plugin package export.
+export type CanvasPlugin = {
+    id: string;
+    name: string;
+    version: string;
+    description?: string;
+    minAppVersion?: string;
+    css?: string; // Injected when enabled and removed when uninstalled or disabled.
+    nodes: CanvasNodeDefinition[];
+    setup?: (app: CanvasPluginApp) => void | (() => void);
+};
+
+
+========================================================================
+FILE: web/src/types/canvas.ts
+LINES: 1-200
+========================================================================
+export type Position = {
+    x: number;
+    y: number;
+};
+
+export type ViewportTransform = {
+    x: number;
+    y: number;
+    k: number;
+};
+
+export enum CanvasNodeType {
+    Image = "image",
+    Text = "text",
+    Config = "config",
+    Video = "video",
+    Audio = "audio",
+    Group = "group",
+}
+
+// Node types are open strings: built-ins use CanvasNodeType and plugins use "<pluginId>:<name>".
+export type CanvasNodeTypeId = CanvasNodeType | (string & {});
+
+export type CanvasNodeStatus = "idle" | "success" | "loading" | "error";
+export type CanvasGenerationMode = "text" | "image" | "video" | "audio";
+export type CanvasImageGenerationType = "generation" | "edit";
+
+export type CanvasNodeImage = {
+    id: string;
+    status: CanvasNodeStatus;
+    errorDetails?: string;
+    content: string;
+    storageKey?: string;
+    naturalWidth: number;
+    naturalHeight: number;
+    bytes: number;
+    mimeType: string;
+};
+
+export type CanvasNodeText = {
+    id: string;
+    status: CanvasNodeStatus;
+    errorDetails?: string;
+    content: string;
+};
+
+export type CanvasNodeMetadata = {
+    content?: string;
+    composerContent?: string;
+    prompt?: string;
+    status?: CanvasNodeStatus;
+    errorDetails?: string;
+    fontSize?: number;
+    generationMode?: CanvasGenerationMode;
+    generationType?: CanvasImageGenerationType;
+    model?: string;
+    reasoningEffort?: "auto" | "low" | "medium" | "high" | "xhigh";
+    size?: string;
+    quality?: string;
+    background?: string;
+    count?: number;
+    textCount?: number;
+    texts?: CanvasNodeText[];
+    primaryTextId?: string;
+    seconds?: string;
+    vquality?: string;
+    generateAudio?: string;
+    watermark?: string;
+    videoMode?: string;
+    videoRouteId?: string;
+    audioVoice?: string;
+    audioRequestId?: string;
+    audioMediaId?: string;
+    audioTaskId?: string;
+    audioFormat?: string;
+    audioSpeed?: string;
+    audioInstructions?: string;
+    references?: string[];
+    naturalWidth?: number;
+    naturalHeight?: number;
+    freeResize?: boolean;
+    images?: CanvasNodeImage[];
+    primaryImageId?: string;
+    storageKey?: string;
+    mimeType?: string;
+    bytes?: number;
+    durationMs?: number;
+    videoTaskId?: string;
+    videoStatusMessage?: string;
+    videoTaskProvider?: "openai" | "gemini";
+    agentSourceNodeId?: string;
+    agentItemId?: string;
+    creativeRunId?: string;
+    creativeSourceKey?: string;
+    productionShotId?: string;
+    groupId?: string;
+    interactive?: boolean; // Plugin node interaction/move state; see CanvasNodeDefinition.interactionToggle.
+    hasAudio?: boolean;
+    assetTags?: string[];
+    /**
+     * 导演台（迁移自 BeefTV）：场景归属与封面。
+     * 节点本身仍是普通图片/视频节点，这些字段只负责「这个节点是哪个镜头产出的」。
+     */
+    workflowKind?: string;
+    directorSceneId?: string;
+    directorShotId?: string;
+    directorOutputTarget?: import("./director").DirectorOutputTarget;
+    directorRenderRequestId?: string;
+    directorProjectVersion?: number;
+    shotIndex?: number;
+    referenceAssetNodeIds?: string[];
+    directorCoverUrl?: string;
+    directorCoverStorageKey?: string;
+    directorPreviewNodeId?: string;
+    directorCoverSceneUpdatedAt?: string;
+    videoEditOperation?: unknown;
+};
+
+export type CanvasNodeData = {
+    id: string;
+    type: CanvasNodeTypeId;
+    title: string;
+    position: Position;
+    width: number;
+    height: number;
+    metadata?: CanvasNodeMetadata;
+};
+
+export type CanvasConnection = {
+    id: string;
+    fromNodeId: string;
+    toNodeId: string;
+};
+
+export type CanvasAssistantReference = {
+    id: string;
+    type: CanvasNodeTypeId;
+    title: string;
+    dataUrl?: string;
+    storageKey?: string;
+    text?: string;
+};
+
+export type CanvasAssistantImage = {
+    id: string;
+    dataUrl: string;
+    storageKey?: string;
+    prompt: string;
+};
+
+export type CanvasAssistantMessage = {
+    id: string;
+    role: "user" | "assistant" | "system" | "tool" | "error";
+    title?: string;
+    text: string;
+    meta?: string;
+    detail?: unknown;
+    references?: CanvasAssistantReference[];
+};
+
+export type CanvasAssistantSession = {
+    id: string;
+    title: string;
+    messages: CanvasAssistantMessage[];
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type ConnectionHandle = {
+    nodeId: string;
+    handleType: "source" | "target";
+};
+
+export type SelectionBox = {
+    startWorldX: number;
+    startWorldY: number;
+    currentWorldX: number;
+    currentWorldY: number;
+    additive: boolean;
+    initialSelectedNodeIds: string[];
+};
+
+export type ContextMenuState =
+    | {
+          type: "canvas";
+          x: number;
+          y: number;
+      }
+    | {
+          type: "node";
+          x: number;
+          y: number;
+          nodeId: string;
+      }
+    | {
+          type: "connection";
+          x: number;
+          y: number;
+          connectionId: string;
+      };
+
+
+========================================================================
+FILE: web/src/types/director.ts
+LINES: 1-229
+========================================================================
+export const DIRECTOR_ASPECT_RATIOS = ["adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"] as const;
+export type DirectorAspectRatio = typeof DIRECTOR_ASPECT_RATIOS[number];
+
+export type DirectorVec3 = [number, number, number];
+export type DirectorQuat = [number, number, number, number];
+
+export type DirectorTransform = {
+    position: DirectorVec3;
+    rotation: DirectorVec3;
+    scale: DirectorVec3;
+};
+
+export type DirectorPrimitiveKind = "box" | "sphere" | "cylinder" | "torus" | "cone" | "pyramid" | "empty" | "plane" | "character";
+export type DirectorObjectKind = "primitive" | "model" | "actor" | "billboard";
+export type DirectorActorPresetId = "standard_male" | "standard_female" | "athletic" | "slim" | "teen" | "child" | "broad" | "chibi" | "geometric";
+export type DirectorPose = "neutral" | "stand" | "t_pose" | "walk" | "run" | "sit" | "squat" | "kneel_single" | "kneel_double" | "hands_hips" | "lean" | "bow" | "think" | "fight" | "kick" | "throw" | "push" | "wave" | "reach" | "arms_crossed" | "phone";
+export type DirectorCameraMove = "static" | "push_in" | "pull_out" | "pan_left" | "pan_right" | "tilt_up" | "tilt_down" | "orbit_left" | "orbit_right" | "handheld";
+export type DirectorShotSize = "extreme_wide" | "wide" | "full" | "medium" | "close_up" | "extreme_close_up";
+export type DirectorRenderMode = "beauty" | "clay" | "depth" | "normal" | "pose";
+export type DirectorKeyframeEasing = "step" | "linear" | "smooth";
+
+export type DirectorKeyframe = {
+    id: string;
+    time: number;
+    transform: DirectorTransform;
+    easing?: DirectorKeyframeEasing;
+    /** 摄影机专用：false 表示该时刻未记录位置；旧帧缺省仍是位置帧。 */
+    positionKeyed?: boolean;
+    /** 摄影机专用：旋转轨与位置轨独立；旧帧缺省仍有旋转帧。 */
+    rotationKeyed?: boolean;
+    /** 对象专用：false 表示此帧不记录缩放；旧帧缺省为完整 Transform 帧。 */
+    scaleKeyed?: boolean;
+    /** 摄影机专用；旧场景没有这些字段时仍采用 camera.target / camera.fov。 */
+    target?: DirectorVec3;
+    fov?: number;
+};
+
+export type DirectorFingerBone =
+    | "leftThumb1" | "leftThumb2" | "leftThumb3" | "leftIndex1" | "leftIndex2" | "leftIndex3" | "leftMiddle1" | "leftMiddle2" | "leftMiddle3" | "leftRing1" | "leftRing2" | "leftRing3" | "leftPinky1" | "leftPinky2" | "leftPinky3"
+    | "rightThumb1" | "rightThumb2" | "rightThumb3" | "rightIndex1" | "rightIndex2" | "rightIndex3" | "rightMiddle1" | "rightMiddle2" | "rightMiddle3" | "rightRing1" | "rightRing2" | "rightRing3" | "rightPinky1" | "rightPinky2" | "rightPinky3";
+
+export type DirectorHumanoidBone = "root" | "hips" | "spine" | "chest" | "neck" | "head" | "leftShoulder" | "leftUpperArm" | "leftLowerArm" | "leftHand" | "rightShoulder" | "rightUpperArm" | "rightLowerArm" | "rightHand" | "leftUpperLeg" | "leftLowerLeg" | "leftFoot" | "rightUpperLeg" | "rightLowerLeg" | "rightFoot" | DirectorFingerBone;
+
+export type DirectorBoneKeyframe = {
+    id: string;
+    time: number;
+    rotation: DirectorQuat;
+    easing?: DirectorKeyframeEasing;
+};
+
+export type DirectorBoneTrack = {
+    bone: DirectorHumanoidBone;
+    keyframes: DirectorBoneKeyframe[];
+};
+
+/**
+ * 时间轴上一个可删除关键帧的定位信息。
+ * 三类覆盖当前时间轴真正可见的关键帧轨道：对象 transform、对象骨骼、摄影机。
+ */
+export type DirectorKeyframeDeleteTarget =
+    | { track: "object-transform"; objectId: string; keyframeId: string; channel?: "position" | "rotation" | "scale" }
+    | { track: "object-bone"; objectId: string; bone: DirectorHumanoidBone; keyframeId: string }
+    | { track: "camera"; cameraId: string; keyframeId: string; channel?: "position" | "rotation" | "focus" | "fov" };
+
+export type DirectorRig = {
+    status: "unmapped" | "ready";
+    boneMap: Partial<Record<DirectorHumanoidBone, string>>;
+    animationNames: string[];
+};
+
+export type DirectorMotionClip = {
+    id: string;
+    name: string;
+    sourceAnimation: string;
+    start: number;
+    duration: number;
+    playbackRate: number;
+    loop: boolean;
+};
+
+export type DirectorObject = {
+    id: string;
+    /** Optional logical scene-list group membership. */
+    groupId?: string;
+    name: string;
+    kind: DirectorObjectKind;
+    primitive?: DirectorPrimitiveKind;
+    transform: DirectorTransform;
+    color: string;
+    /** 独立的统一缩放倍率；旧场景缺省为 1，不抹平各轴比例。 */
+    uniformScale?: number;
+    /** 场景列表锁定：保留选择与属性编辑，但禁止视口操控及误删。 */
+    locked?: boolean;
+    visible: boolean;
+    castShadow: boolean;
+    receiveShadow: boolean;
+    pose?: DirectorPose;
+    /** Local, lightweight procedural actor silhouette preset. */
+    actorPreset?: DirectorActorPresetId;
+    rig?: DirectorRig;
+    motionClips?: DirectorMotionClip[];
+    activeMotionClipId?: string;
+    /** 显式建立的时间轴轨道；旧场景仍由已有关键帧/轨迹推断轨道。 */
+    animationTrackEnabled?: boolean;
+    /** 角色轨迹只接管生成的变换帧；移除时可还原创建前的手动动画。 */
+    motionPath?: { kind: "line" | "ring" | "rectangle" | "pencil" | "pen"; duration: number; startTime?: number; facePath: boolean; transform: DirectorTransform; originalKeyframes: DirectorKeyframe[]; controlKeyframeIds?: string[] };
+    boneOverrides?: Partial<Record<DirectorHumanoidBone, DirectorQuat>>;
+    boneTracks?: DirectorBoneTrack[];
+    sourceNodeId?: string;
+    assetId?: string;
+    storageKey?: string;
+    url?: string;
+    mimeType?: string;
+    keyframes: DirectorKeyframe[];
+};
+
+export type DirectorCamera = {
+    id: string;
+    name: string;
+    /** 编辑器机位辅助图形；旧场景缺省显示，不影响该机位取景。 */
+    visible?: boolean;
+    /** 场景列表锁定；保留机位选择和属性查看。 */
+    locked?: boolean;
+    transform: DirectorTransform;
+    target: DirectorVec3;
+    /** 角色跟随以绑定帧的位置为锚；相机原有关键帧仍可叠加角色位移。 */
+    followObjectId?: string;
+    followAnchor?: DirectorVec3;
+    /** 旧场景缺省为坐标注视。 */
+    lookAtMode?: "coordinates" | "rotation" | "object";
+    lookAtObjectId?: string;
+    focalLength: number;
+    fov: number;
+    aperture: number;
+    focusDistance: number;
+    near: number;
+    far: number;
+    keyframes: DirectorKeyframe[];
+    /** 绘制或预设轨迹；插值采样仍参与播放和导出，但不占满编辑时间轴。 */
+    drawnPath?: { kind: "pencil" | "pen" | "line" | "ring" | "rectangle"; sampleKeyframeIds: string[]; originalKeyframes?: DirectorKeyframe[] };
+};
+
+export type DirectorLight = {
+    id: string;
+    name: string;
+    type: "directional" | "point" | "spot" | "ambient";
+    transform: DirectorTransform;
+    color: string;
+    intensity: number;
+    angle?: number;
+    penumbra?: number;
+    castShadow: boolean;
+};
+
+export type DirectorGroup = {
+    id: string;
+    name: string;
+    collapsed?: boolean;
+};
+
+export type DirectorShot = {
+    id: string;
+    name: string;
+    cameraId: string;
+    duration: number;
+    fps: 24 | 25 | 30;
+    shotSize: DirectorShotSize;
+    cameraMove: DirectorCameraMove;
+    prompt: string;
+    previewNodeId?: string;
+    depthNodeId?: string;
+    normalNodeId?: string;
+    screenshots?: DirectorScreenshot[];
+};
+
+export type DirectorScreenshot = {
+    id: string;
+    name: string;
+    storageKey: string;
+    url: string;
+    width: number;
+    height: number;
+    createdAt: string;
+};
+
+export type DirectorScene = {
+    cameraSequence?: import("../../../shared/director-sequence").DirectorSequence;
+    id: string;
+    version: 1;
+    title: string;
+    background: string;
+    environmentIntensity: number;
+    gridVisible: boolean;
+    /** Snap new placement and XZ moves to the half-unit ground grid; absent means off. */
+    gridSnap?: boolean;
+    /** Optional for scenes saved before ground controls existed. */
+    ground?: { visible: boolean; opacity: number; height: number };
+    /** Whole stage transform; absent in older scenes means identity. Rotation is in degrees. */
+    stageTransform?: { scale: number; position: DirectorVec3; rotation: DirectorVec3 };
+    /** Editor overlays only; older scenes keep labels visible. */
+    labelsVisible?: boolean;
+    /** Missing in older saved scenes; treated as adaptive. */
+    aspectRatio?: DirectorAspectRatio;
+    /** Optional equirectangular backdrop; older scenes keep their solid color. */
+    panorama?: { url: string; storageKey?: string; name?: string; rotation: number };
+    /** Sphere controls remain available even before a panorama image is connected. */
+    panoramaRotation?: number;
+    panoramaRadius?: number;
+    objects: DirectorObject[];
+    /** Optional to keep previously saved scenes fully backward compatible. */
+    groups?: DirectorGroup[];
+    cameras: DirectorCamera[];
+    lights: DirectorLight[];
+    shots: DirectorShot[];
+    activeShotId: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type DirectorOutputTarget = { kind: "shot"; shotId: string } | { kind: "sequence"; sceneId: string; sequenceId: string; startFrame: number; endFrame: number; fps: number; fixedCameraId?: string };
+export type DirectorSceneOutput = {
+    scene: DirectorScene;
+    prompt: string;
+    beauty: Blob;
+    depth?: Blob;
+    normal?: Blob;
+    clayVideo?: Blob;
+    clayVideoMimeType?: string;
+} & ({ shot: DirectorShot; target?: { kind: "shot"; shotId: string } } | { shot?: never; target: Extract<DirectorOutputTarget, { kind: "sequence" }> });
+
+
+========================================================================
+FILE: web/src/types/heic2any.d.ts
+LINES: 1-11
+========================================================================
+declare module "heic2any" {
+    type ConvertOptions = {
+        blob: Blob;
+        toType?: string;
+        quality?: number;
+        multiple?: boolean;
+        gifInterval?: number;
+    };
+    const heic2any: (options: ConvertOptions) => Promise<Blob | Blob[]>;
+    export default heic2any;
+}
+
+
+========================================================================
+FILE: web/src/types/image.ts
+LINES: 1-15
+========================================================================
+export type ReferenceImage = {
+    id: string;
+    name: string;
+    type: string;
+    dataUrl: string;
+    url?: string;
+    storageKey?: string;
+    width?: number;
+    height?: number;
+    bytes?: number;
+    uploading?: boolean;
+    queued?: boolean;
+    progress?: number;
+    error?: string;
+};
+
+
+========================================================================
+FILE: web/src/types/media.ts
+LINES: 1-20
+========================================================================
+export type ReferenceVideo = {
+    id: string;
+    name: string;
+    type: string;
+    url: string;
+    storageKey?: string;
+    bytes?: number;
+    width?: number;
+    height?: number;
+    durationMs?: number;
+};
+
+export type ReferenceAudio = {
+    id: string;
+    name: string;
+    type: string;
+    url: string;
+    storageKey?: string;
+    durationMs?: number;
+};
+
+
+========================================================================
+FILE: web/src/vite-env.d.ts
+LINES: 1-14
+========================================================================
+/// <reference types="vite/client" />
+
+declare const __APP_VERSION__: string;
+declare const __APP_RELEASES__: import("@/lib/release").ReleaseInfo[];
+
+interface ImportMetaEnv {
+    // Comma-separated local development plugin URLs, refetched on every startup without caching or persistence.
+    readonly VITE_DEV_PLUGINS?: string;
+    // Optional build-time analytics configuration, with one independent variable per provider.
+    // GA4 measurement ID (G-XXXX)
+    readonly VITE_ANALYTICS_GA4_ID?: string;
+    // Baidu Analytics site ID
+    readonly VITE_ANALYTICS_BAIDU_ID?: string;
+}
+
+
+========================================================================
+FILE: web/tsconfig.json
+LINES: 1-44
+========================================================================
+{
+
+    "compilerOptions": {
+
+        "target": "ES2018",
+
+        "lib": ["dom", "dom.iterable", "esnext"],
+
+        "allowJs": true,
+
+        "skipLibCheck": true,
+
+        "strict": true,
+
+        "noEmit": true,
+
+        "esModuleInterop": true,
+
+        "module": "esnext",
+
+        "moduleResolution": "bundler",
+
+        "resolveJsonModule": true,
+
+        "isolatedModules": true,
+
+        "jsx": "react-jsx",
+
+        "incremental": true,
+
+        "paths": {
+
+            "@/*": ["./src/*"]
+
+        }
+
+    },
+
+    "include": ["vite.config.ts", "src/**/*.ts", "src/**/*.tsx"],
+
+    "exclude": ["node_modules"]
+
+}
+
+
+
+========================================================================
+FILE: web/vite.config.ts
+LINES: 1-9
+========================================================================
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { resolve } from 'node:path';
+export default defineConfig({
+ plugins:[react()],resolve:{alias:{'@':resolve(import.meta.dirname,'src')}},
+ server:{host:'127.0.0.1',port:3021,fs:{allow:[resolve(import.meta.dirname,'..')]}},
+ preview:{host:'127.0.0.1',port:3021},build:{assetsDir:'static',chunkSizeWarningLimit:1500},
+ define:{__APP_VERSION__:JSON.stringify('design-audit'),__APP_RELEASES__:'[]'}
+});
+

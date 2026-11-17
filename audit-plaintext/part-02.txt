@@ -1,0 +1,3241 @@
+SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
+This is uncompressed source text, not a directory index or archive.
+Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
+Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-config-composer.tsx
+LINES: 1-380
+========================================================================
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, KeyboardEvent, MouseEvent, PointerEvent } from "react";
+import { Button, Image } from "antd";
+import { FileText, Group, Image as ImageIcon, Music2, Video, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import i18n from "@/i18n";
+import { canvasThemes } from "@/lib/canvas-theme";
+import { useThemeStore } from "@/stores/use-theme-store";
+import type { NodeGenerationInput } from "./canvas-node-generation";
+import { CanvasNodeReferenceBar } from "./canvas-node-reference-bar";
+import type { CanvasNodeData } from "@/types/canvas";
+
+type CanvasConfigComposerProps = {
+    nodeId: string;
+    nodes: CanvasNodeData[];
+    value: string;
+    inputs: NodeGenerationInput[];
+    connectedNodes?: CanvasNodeData[];
+    onChange: (value: string) => void;
+    onClose: () => void;
+    onDisconnectReference?: (fromNodeId: string, toNodeId: string) => void;
+    onStartReferenceSelection?: (nodeId: string) => void;
+};
+
+type Token =
+    | { type: "text"; value: string }
+    | { type: "reference"; nodeId: string };
+
+type MentionState = {
+    query: string;
+};
+
+export const CONFIG_REFERENCE_PATTERN = /@\[node:([^\]]+)\]/g;
+
+export function CanvasConfigComposer({ nodeId, nodes, value, inputs, connectedNodes = [], onChange, onClose, onDisconnectReference, onStartReferenceSelection }: CanvasConfigComposerProps) {
+    const { t } = useTranslation();
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const editorRef = useRef<HTMLDivElement>(null);
+    const composingRef = useRef(false);
+    const [mention, setMention] = useState<MentionState | null>(null);
+    const [activeIndex, setActiveIndex] = useState(0);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const tokens = useMemo(() => parseComposerTokens(value), [value]);
+    const referenceById = useMemo(() => new Map(inputs.map((input) => [input.nodeId, input])), [inputs]);
+    const candidates = useMemo(() => {
+        if (!mention) return [];
+        const query = (mention.query || "").trim().toLowerCase();
+        if (!query) return inputs;
+        return inputs.filter((input) => `${resourceLabel(input, inputs)} ${input.title} ${input.type === "group" ? "" : input.text || ""}`.toLowerCase().includes(query));
+    }, [inputs, mention]);
+
+    useEffect(() => {
+        if (document.activeElement === editorRef.current) return;
+        const editor = editorRef.current;
+        if (!editor) return;
+        editor.textContent = "";
+        tokens.forEach((token) => {
+            if (token.type === "text") {
+                editor.append(document.createTextNode(token.value));
+                return;
+            }
+            const input = referenceById.get(token.nodeId);
+            if (input) editor.append(createReferenceChip(input, inputs, theme, setImagePreview));
+        });
+    }, [inputs, referenceById, theme, tokens]);
+
+    const syncFromEditor = () => {
+        const editor = editorRef.current;
+        if (!editor) return;
+        const next = serializeEditor(editor);
+        onChange(next);
+        syncMention();
+    };
+
+    const syncMention = () => {
+        const text = textBeforeCaret();
+        const match = /@([^\s@]*)$/.exec(text);
+        if (!match || !inputs.length) {
+            closeMention();
+            return;
+        }
+        setMention({ query: match[1] || "" });
+        setActiveIndex(0);
+    };
+
+    const closeMention = () => {
+        setMention(null);
+        setActiveIndex(0);
+    };
+
+    const insertReference = (input: NodeGenerationInput) => {
+        const editor = editorRef.current;
+        if (!editor) return;
+        removeActiveMention();
+        const chip = createReferenceChip(input, inputs, theme, setImagePreview);
+        const space = document.createTextNode(" ");
+        const selection = window.getSelection();
+        const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+        if (range) {
+            range.insertNode(space);
+            range.insertNode(chip);
+            range.setStartAfter(space);
+            range.collapse(true);
+            selection?.removeAllRanges();
+            selection?.addRange(range);
+        } else {
+            editor.append(chip, space);
+            placeCaretAtEnd(editor);
+        }
+        closeMention();
+        onChange(serializeEditor(editor));
+    };
+
+    const stopCanvasInteraction = (event: PointerEvent | MouseEvent) => event.stopPropagation();
+
+    return (
+        <div
+            data-canvas-no-zoom
+            className="rounded-[20px] border p-3 backdrop-blur-2xl"
+            style={{ background: theme.composer.surface, borderColor: theme.composer.border, boxShadow: theme.composer.shadow, color: theme.node.text }}
+            onMouseDown={stopCanvasInteraction}
+            onPointerDown={stopCanvasInteraction}
+            onWheel={(event) => event.stopPropagation()}
+        >
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-baseline gap-2">
+                    <div className="shrink-0 pl-1 text-xs font-semibold">{t("canvas.composer.title")}</div>
+                    <div className="truncate text-[11px]" style={{ color: theme.composer.muted }}>{t("canvas.composer.description")}</div>
+                </div>
+                <Button size="small" type="text" className="!h-8 !w-8 !min-w-8 !rounded-full !p-0" style={{ color: theme.composer.muted }} aria-label={t("common.close", { defaultValue: "关闭" })} icon={<X className="size-3.5" />} onClick={onClose} />
+            </div>
+            <div className="px-1"><CanvasNodeReferenceBar compact nodeId={nodeId} nodes={nodes} connectedNodes={connectedNodes} onDisconnect={onDisconnectReference} onStartSelection={onStartReferenceSelection} /></div>
+            <div className="relative mt-2 rounded-xl" style={{ background: theme.composer.chip }}>
+                {!value.trim() ? <div className="pointer-events-none absolute left-3 top-2 text-sm leading-7" style={{ color: theme.node.placeholder }}>{t("canvas.composer.placeholder")}</div> : null}
+                <div
+                    ref={editorRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    className="thin-scrollbar min-h-28 max-h-72 w-full overflow-y-auto overscroll-contain whitespace-pre-wrap break-words px-3 py-2 text-sm leading-7 outline-none"
+                    style={{ color: theme.node.text }}
+                    onInput={() => {
+                        if (!composingRef.current) syncFromEditor();
+                    }}
+                    onCompositionStart={() => {
+                        composingRef.current = true;
+                    }}
+                    onCompositionEnd={() => {
+                        composingRef.current = false;
+                        syncFromEditor();
+                    }}
+                    onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+                        event.stopPropagation();
+                        if (mention && candidates.length) {
+                            if (event.key === "ArrowDown") {
+                                event.preventDefault();
+                                setActiveIndex((index) => (index + 1) % candidates.length);
+                                return;
+                            }
+                            if (event.key === "ArrowUp") {
+                                event.preventDefault();
+                                setActiveIndex((index) => (index - 1 + candidates.length) % candidates.length);
+                                return;
+                            }
+                            if (event.key === "Enter") {
+                                event.preventDefault();
+                                insertReference(candidates[Math.min(activeIndex, candidates.length - 1)]);
+                                return;
+                            }
+                            if (event.key === "Escape") {
+                                event.preventDefault();
+                                closeMention();
+                                return;
+                            }
+                        }
+                        if ((event.key === "Backspace" || event.key === "Delete") && deleteAdjacentReference(event.key)) {
+                            event.preventDefault();
+                            requestAnimationFrame(syncFromEditor);
+                            return;
+                        }
+                        requestAnimationFrame(syncMention);
+                    }}
+                    onBlur={() => window.setTimeout(closeMention, 120)}
+                />
+                {mention && candidates.length ? <MentionMenu inputs={candidates} allInputs={inputs} activeIndex={Math.min(activeIndex, candidates.length - 1)} theme={theme} onSelect={insertReference} /> : null}
+            </div>
+            {imagePreview ? <Image src={imagePreview} alt={t("canvas.composer.imagePreview")} style={{ display: "none" }} preview={{ visible: true, src: imagePreview, onVisibleChange: (visible) => !visible && setImagePreview(null) }} /> : null}
+        </div>
+    );
+
+}
+
+function MentionMenu({ inputs, allInputs, activeIndex, theme, onSelect }: { inputs: NodeGenerationInput[]; allInputs: NodeGenerationInput[]; activeIndex: number; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onSelect: (input: NodeGenerationInput) => void }) {
+    const selectedRef = useRef(false);
+    const activeItemRef = useRef<HTMLButtonElement | null>(null);
+
+    useEffect(() => {
+        activeItemRef.current?.scrollIntoView({ block: "nearest" });
+    }, [activeIndex, inputs]);
+
+    const selectInput = (input: NodeGenerationInput) => {
+        if (selectedRef.current) return;
+        selectedRef.current = true;
+        onSelect(input);
+    };
+
+    return (
+        <div className="absolute left-2 top-[calc(100%+6px)] z-[90] max-h-56 w-64 overflow-y-auto rounded-xl border p-1" style={{ background: theme.menu.panel, borderColor: theme.menu.border, boxShadow: theme.menu.shadow }}>
+            {inputs.map((input, index) => (
+                <button
+                    key={input.nodeId}
+                    ref={index === activeIndex ? activeItemRef : undefined}
+                    type="button"
+                    className="flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition"
+                    style={{ background: index === activeIndex ? theme.toolbar.activeBg : "transparent", color: index === activeIndex ? theme.toolbar.activeText : theme.node.text }}
+                    onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        selectInput(input);
+                    }}
+                >
+                    <ResourcePreview input={input} />
+                    <span className="min-w-0 flex-1">
+                        <span className="block font-medium">{resourceLabel(input, allInputs)}</span>
+                        <span className="block truncate opacity-65">{input.type === "group" ? i18n.t("canvas.node.nodeCount", { count: input.children.length }) : input.text || input.title}</span>
+                    </span>
+                </button>
+            ))}
+        </div>
+    );
+}
+
+function ResourcePreview({ input }: { input: NodeGenerationInput }) {
+    if (input.type === "group") return <span className="grid size-9 shrink-0 place-items-center"><Group className="size-4" /></span>;
+    if (input.type === "image" && input.image) return <img src={input.image.dataUrl} alt="" className="size-9 rounded-md object-cover" />;
+    if (input.type === "video" && input.video) return <video src={input.video.url} className="size-9 rounded-md bg-black object-cover" muted preload="metadata" />;
+    const Icon = input.type === "audio" ? Music2 : input.type === "video" ? Video : input.type === "image" ? ImageIcon : FileText;
+    return (
+        <span className="grid size-9 shrink-0 place-items-center rounded-md bg-black/10">
+            <Icon className="size-4" />
+        </span>
+    );
+}
+
+function createReferenceChip(input: NodeGenerationInput, inputs: NodeGenerationInput[], theme: (typeof canvasThemes)[keyof typeof canvasThemes], onImagePreview: (url: string) => void) {
+    const wrapper = document.createElement("span");
+    wrapper.contentEditable = "false";
+    wrapper.dataset.referenceNodeId = input.nodeId;
+    wrapper.className = "mx-px inline-flex h-7 max-w-40 items-center justify-center overflow-hidden rounded-md border px-1 text-xs leading-none align-middle";
+    Object.assign(wrapper.style, chipStyle(theme));
+    if (input.type === "image" && input.image) {
+        const image = document.createElement("img");
+        image.src = input.image.dataUrl;
+        image.alt = input.title;
+        image.className = "size-6 rounded object-cover";
+        wrapper.className = "mx-px inline-flex size-6 items-center justify-center overflow-hidden rounded align-middle";
+        wrapper.appendChild(image);
+        wrapper.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onImagePreview(input.image?.dataUrl || "");
+        });
+    } else {
+        wrapper.title = input.type === "group" ? input.title : input.text || input.title;
+        const text = document.createElement("span");
+        text.className = "block truncate";
+        text.textContent = input.type === "text" ? input.text || input.title : input.title;
+        wrapper.appendChild(text);
+    }
+    return wrapper;
+}
+
+function serializeEditor(editor: HTMLElement) {
+    return serializeNodes(editor.childNodes).replace(/\uFEFF/g, "");
+}
+
+function serializeNodes(nodes: NodeListOf<ChildNode>) {
+    let result = "";
+    nodes.forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE) result += node.textContent || "";
+        if (!(node instanceof HTMLElement)) return;
+        const nodeId = node.dataset.referenceNodeId;
+        if (nodeId) result += `@[node:${nodeId}]`;
+        else if (node.tagName === "BR") result += "\n";
+        else result += serializeNodes(node.childNodes);
+    });
+    return result;
+}
+
+function removeActiveMention() {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    const text = textBeforeCaret();
+    const match = /@([^\s@]*)$/.exec(text);
+    if (!match) return;
+    range.setStart(range.startContainer, Math.max(0, range.startOffset - (match[1] || "").length - 1));
+    range.deleteContents();
+}
+
+function deleteAdjacentReference(key: string) {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !selection.isCollapsed) return false;
+    const range = selection.getRangeAt(0);
+    const target = adjacentReferenceNode(range, key);
+    if (!target) return false;
+    const nextCaretNode = document.createTextNode("");
+    target.replaceWith(nextCaretNode);
+    range.setStart(nextCaretNode, 0);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+}
+
+function adjacentReferenceNode(range: Range, key: string) {
+    const container = range.startContainer;
+    const offset = range.startOffset;
+    const previous = key === "Backspace";
+    if (container.nodeType === Node.TEXT_NODE) {
+        const text = container.textContent || "";
+        if ((previous && offset > 0) || (!previous && offset < text.length)) return null;
+        return findReferenceSibling(container, previous);
+    }
+    const children = Array.from(container.childNodes);
+    return findReferenceSibling(children[previous ? offset - 1 : offset] || container, previous, true);
+}
+
+function findReferenceSibling(node: Node, previous: boolean, includeSelf = false): HTMLElement | null {
+    let current: Node | null = includeSelf ? node : previous ? node.previousSibling : node.nextSibling;
+    while (current && current.nodeType === Node.TEXT_NODE && !(current.textContent || "").trim()) current = previous ? current.previousSibling : current.nextSibling;
+    return current instanceof HTMLElement && current.dataset.referenceNodeId ? current : null;
+}
+
+function textBeforeCaret() {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return "";
+    const range = selection.getRangeAt(0).cloneRange();
+    const editor = closestEditor(range.startContainer);
+    if (!editor) return "";
+    range.setStart(editor, 0);
+    return range.toString();
+}
+
+function closestEditor(node: Node) {
+    const element = node instanceof Element ? node : node.parentElement;
+    return element?.closest("[contenteditable='true']") || null;
+}
+
+function placeCaretAtEnd(element: HTMLElement) {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+}
+
+function parseComposerTokens(value: string): Token[] {
+    const tokens: Token[] = [];
+    let lastIndex = 0;
+    for (const match of value.matchAll(CONFIG_REFERENCE_PATTERN)) {
+        if (match.index === undefined) continue;
+        if (match.index > lastIndex) tokens.push({ type: "text", value: value.slice(lastIndex, match.index) });
+        tokens.push({ type: "reference", nodeId: match[1] });
+        lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < value.length) tokens.push({ type: "text", value: value.slice(lastIndex) });
+    return tokens;
+}
+
+function resourceLabel(input: NodeGenerationInput, inputs: NodeGenerationInput[]) {
+    const sameTypeInputs = inputs.filter((item) => item.type === input.type);
+    const index = Math.max(0, sameTypeInputs.findIndex((item) => item.nodeId === input.nodeId));
+    return i18n.t(`canvas.composer.resources.${input.type}`, { index: index + 1 });
+}
+
+function chipStyle(theme: (typeof canvasThemes)[keyof typeof canvasThemes]): CSSProperties {
+    return { background: theme.composer.surface, borderColor: theme.composer.border, color: theme.node.text };
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-config-node-panel.tsx
+LINES: 1-173
+========================================================================
+import type { CSSProperties } from "react";
+import { Image as ImageIcon, LoaderCircle, MessageSquare, Music2, Play, Settings2, Square, Video } from "lucide-react";
+import { Button, Segmented } from "antd";
+import { useTranslation } from "react-i18next";
+
+import { ModelPicker } from "@/components/model-picker";
+import { useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { buildGenerationConfig } from "@/lib/canvas/canvas-generation-helpers";
+import { canvasThemes } from "@/lib/canvas-theme";
+import { useThemeStore } from "@/stores/use-theme-store";
+import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
+import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
+import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
+import { CanvasTextSettingsPopover } from "./canvas-text-settings-popover";
+import type { CanvasConnection, CanvasGenerationMode, CanvasNodeData, CanvasNodeMetadata } from "@/types/canvas";
+import { CanvasGenerationEstimate } from "./canvas-generation-estimate";
+
+type CanvasConfigNodePanelProps = {
+    node: CanvasNodeData;
+    nodes: CanvasNodeData[];
+    connections: CanvasConnection[];
+    isRunning: boolean;
+    inputSummary: { textCount: number; imageCount: number; videoCount: number; audioCount: number };
+    onConfigChange: (nodeId: string, patch: Partial<CanvasNodeMetadata>) => void;
+    onGenerate: (nodeId: string) => void;
+    onStop: (nodeId: string) => void;
+    onComposerToggle: () => void;
+};
+
+export function CanvasConfigNodePanel({ node, nodes, connections, isRunning, inputSummary, onConfigChange, onGenerate, onStop, onComposerToggle }: CanvasConfigNodePanelProps) {
+    const { t } = useTranslation();
+    const globalConfig = useEffectiveConfig();
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const mode = node.metadata?.generationMode || "image";
+    const config = buildNodeConfig(globalConfig, node, mode);
+    const chipStyle = { background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.text };
+    const hasAnyInput = Boolean(inputSummary.textCount || inputSummary.imageCount || inputSummary.videoCount || inputSummary.audioCount);
+    const hasComposerContent = Boolean((node.metadata?.composerContent ?? node.metadata?.prompt ?? "").trim());
+    const canGenerate = hasComposerContent || (mode === "audio" ? inputSummary.textCount > 0 : hasAnyInput);
+
+    return (
+        <div className="flex h-full w-full cursor-move flex-col px-3 pb-3 pt-7 text-sm" style={{ color: theme.node.text }} onWheel={(event) => event.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="shrink-0 text-sm font-semibold">{t("canvas.configNode.title")}</div>
+                <div className="cursor-default" onMouseDown={(event) => event.stopPropagation()}>
+                    <Segmented
+                        size="small"
+                        className="canvas-config-mode !rounded-md !p-0.5"
+                        value={mode}
+                        onChange={(value) => onConfigChange(node.id, { generationMode: value as CanvasGenerationMode })}
+                        options={[
+                            {
+                                value: "image",
+                                label: (
+                                    <span className="inline-flex items-center gap-1">
+                                        <ImageIcon className="size-3.5" />
+                                        {t("canvas.configNode.image")}
+                                    </span>
+                                ),
+                            },
+                            {
+                                value: "text",
+                                label: (
+                                    <span className="inline-flex items-center gap-1">
+                                        <MessageSquare className="size-3.5" />
+                                        {t("canvas.configNode.text")}
+                                    </span>
+                                ),
+                            },
+                            {
+                                value: "video",
+                                label: (
+                                    <span className="inline-flex items-center gap-1">
+                                        <Video className="size-3.5" />
+                                        {t("canvas.configNode.video")}
+                                    </span>
+                                ),
+                            },
+                            {
+                                value: "audio",
+                                label: (
+                                    <span className="inline-flex items-center gap-1">
+                                        <Music2 className="size-3.5" />
+                                        {t("canvas.configNode.audio")}
+                                    </span>
+                                ),
+                            },
+                        ]}
+                    />
+                </div>
+            </div>
+
+            <div className="mb-2 flex flex-wrap gap-1.5">
+                <InputChip label={t("canvas.configNode.prompt")} value={t("canvas.configNode.items", { count: inputSummary.textCount })} style={chipStyle} />
+                <InputChip label={t("canvas.configNode.references")} value={t("canvas.configNode.images", { count: inputSummary.imageCount })} style={chipStyle} />
+                <InputChip label={t("canvas.configNode.videoReferences")} value={t("canvas.configNode.items", { count: inputSummary.videoCount })} style={chipStyle} />
+                <InputChip label={t("canvas.configNode.audioReferences")} value={t("canvas.configNode.items", { count: inputSummary.audioCount })} style={chipStyle} />
+                <button type="button" className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-[11px]" style={chipStyle} onMouseDown={(event) => event.stopPropagation()} onClick={onComposerToggle}>
+                    <Settings2 className="size-3.5" />
+                    {t("canvas.configNode.compose")}
+                </button>
+            </div>
+
+            <div className="mb-2 grid min-w-0 cursor-default grid-cols-[minmax(0,1fr)_148px] items-center gap-2" onMouseDown={(event) => event.stopPropagation()}>
+                <ModelPicker className="canvas-compact-control h-10" config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} onRouteSelect={mode === 'video' ? (model, videoRouteId) => onConfigChange(node.id, { model, videoRouteId }) : undefined} capability={mode} placeholder={mode === 'video' ? '选择视频模型' : undefined} fullWidth />
+                {mode === "video" ? (
+                    <CanvasVideoSettingsPopover config={config} model={config.model} placement="topRight" buttonClassName="canvas-compact-control !h-10 !w-full !justify-start !rounded-lg !px-2" onConfigChange={(key, value) => onConfigChange(node.id, videoConfigPatch(key, value))} />
+                ) : mode === "image" ? (
+                    <CanvasImageSettingsPopover config={config} placement="topRight" autoAdjustOverflow={false} buttonClassName="canvas-compact-control !h-10 !w-full !justify-start !rounded-lg !px-2" onConfigChange={(key, value) => onConfigChange(node.id, key === "count" ? { count: Number(value) || 1 } : { [key]: value })} />
+                ) : mode === "audio" ? (
+                    <CanvasAudioSettingsPopover config={config} placement="topRight" buttonClassName="canvas-compact-control !h-10 !w-full !justify-start !rounded-lg !px-2" onConfigChange={(key, value) => onConfigChange(node.id, audioConfigPatch(key, value))} />
+                ) : (
+                    <CanvasTextSettingsPopover config={config} count={node.metadata?.textCount || 1} placement="topRight" buttonClassName="canvas-compact-control !h-10 !w-full !justify-start !rounded-lg !px-2" onConfigChange={(_, value) => onConfigChange(node.id, { reasoningEffort: value })} onCountChange={(textCount) => onConfigChange(node.id, { textCount })} />
+                )}
+            </div>
+
+            <div className="mt-auto flex cursor-default flex-wrap items-center justify-between gap-2" onMouseDown={(event) => event.stopPropagation()}>
+            <CanvasGenerationEstimate node={node} nodes={nodes} connections={connections} mode={mode} prompt={node.metadata?.composerContent ?? node.metadata?.prompt ?? ""} />
+            <Button
+                type="primary"
+                className="ml-auto !h-9 shrink-0 !cursor-pointer !rounded-lg"
+                danger={isRunning}
+                disabled={!isRunning && !canGenerate}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={() => (isRunning ? onStop(node.id) : onGenerate(node.id))}
+            >
+                <span className="inline-flex items-center gap-1.5">
+                    {isRunning ? (
+                        <>
+                            <LoaderCircle className="size-4 animate-spin" />
+                            <Square className="size-3.5 fill-current" />
+                            <span>{t("canvas.configNode.stop")}</span>
+                        </>
+                    ) : (
+                        <>
+                            <Play className="size-4" />
+                            <span>{t("canvas.configNode.generate")}</span>
+                        </>
+                    )}
+                </span>
+            </Button>
+            </div>
+        </div>
+    );
+}
+
+function InputChip({ label, value, style }: { label: string; value: string; style: CSSProperties }) {
+    return (
+        <div className="inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px]" style={style}>
+            <span>{label}</span>
+            <span className="font-medium">{value}</span>
+        </div>
+    );
+}
+
+function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: CanvasGenerationMode): AiConfig {
+    return buildGenerationConfig(globalConfig, node, mode);
+}
+
+function videoConfigPatch(key: keyof AiConfig, value: string) {
+    if (key === "videoSeconds") return { seconds: value };
+    if (key === "videoGenerateAudio") return { generateAudio: value };
+    if (key === "videoWatermark") return { watermark: value };
+    if (key === "videoMode") return { videoMode: value };
+    return { [key]: value };
+}
+
+function audioConfigPatch(key: CanvasAudioSettingKey, value: string) {
+    if (key === "audioVoice") return { audioVoice: value };
+    if (key === "audioFormat") return { audioFormat: value };
+    if (key === "audioSpeed") return { audioSpeed: value };
+    return { audioInstructions: value };
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-connections.tsx
+LINES: 1-97
+========================================================================
+import { useState, type MouseEvent as ReactMouseEvent } from "react";
+
+import { canvasThemes } from "@/lib/canvas-theme";
+import { useThemeStore } from "@/stores/use-theme-store";
+import type { CanvasConnection, CanvasNodeData, ConnectionHandle, Position } from "@/types/canvas";
+
+export function ConnectionPath({
+    connection,
+    from,
+    to,
+    active,
+    onSelect,
+    onContextMenu,
+}: {
+    connection: CanvasConnection;
+    from: CanvasNodeData;
+    to: CanvasNodeData;
+    active: boolean;
+    onSelect: () => void;
+    onContextMenu?: (event: ReactMouseEvent<SVGPathElement>) => void;
+}) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const [hovered, setHovered] = useState(false);
+    const startX = from.position.x + from.width;
+    const startY = from.position.y + from.height / 2;
+    const endX = to.position.x;
+    const endY = to.position.y + to.height / 2;
+    const dx = Math.abs(endX - startX);
+    const curvature = Math.max(dx * 0.5, 50);
+    const pathD = `M ${startX} ${startY} C ${startX + curvature} ${startY}, ${endX - curvature} ${endY}, ${endX} ${endY}`;
+    const accent = theme.accent.primary;
+    const emphasized = active || hovered;
+
+    return (
+        <g data-connection-group={connection.id} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+            <path
+                data-connection-id={connection.id}
+                d={pathD}
+                stroke="transparent"
+                strokeWidth="18"
+                fill="none"
+                style={{ cursor: "pointer", pointerEvents: "stroke" }}
+                onClick={(event) => {
+                    event.stopPropagation();
+                    onSelect();
+                }}
+                onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onContextMenu?.(event);
+                }}
+            />
+            {/* 选中态：低透明度柔光垫在主线下方，模拟 BeefTV 的连接高亮。 */}
+            {active ? <path d={pathD} stroke={accent} strokeWidth="8" strokeOpacity="0.16" fill="none" style={{ pointerEvents: "none" }} /> : null}
+            <path
+                d={pathD}
+                stroke={emphasized ? accent : theme.node.muted}
+                strokeWidth={emphasized ? 2.4 : 1.6}
+                strokeOpacity={emphasized ? 0.95 : 0.5}
+                fill="none"
+                strokeLinecap="round"
+                style={{
+                    pointerEvents: "none",
+                    transition: "stroke 140ms ease, stroke-width 140ms ease, stroke-opacity 140ms ease",
+                    filter: active ? `drop-shadow(0 0 6px ${accent}55)` : undefined,
+                }}
+            />
+            {active ? <path d={pathD} stroke={accent} strokeWidth="2.4" strokeOpacity="0.9" fill="none" strokeLinecap="round" strokeDasharray="2 14" style={{ pointerEvents: "none", animation: "canvas-connection-flow 1.1s linear infinite" }} /> : null}
+            <circle cx={startX} cy={startY} r={emphasized ? 3 : 2.4} fill={emphasized ? accent : theme.node.muted} style={{ pointerEvents: "none", transition: "fill 140ms ease" }} />
+            <circle cx={endX} cy={endY} r={emphasized ? 3 : 2.4} fill={emphasized ? accent : theme.node.muted} style={{ pointerEvents: "none", transition: "fill 140ms ease" }} />
+        </g>
+    );
+}
+
+export function ActiveConnectionPath({ node, handle, mouseWorld, target }: { node?: CanvasNodeData; handle: ConnectionHandle; mouseWorld: Position; target?: CanvasNodeData }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    if (!node) return null;
+
+    const startX = handle.handleType === "source" ? node.position.x + node.width : mouseWorld.x;
+    const startY = handle.handleType === "source" ? node.position.y + node.height / 2 : mouseWorld.y;
+    const endX = handle.handleType === "source" ? mouseWorld.x : node.position.x;
+    const endY = handle.handleType === "source" ? mouseWorld.y : node.position.y + node.height / 2;
+    const snappedStartX = handle.handleType === "target" && target ? target.position.x + target.width : startX;
+    const snappedStartY = handle.handleType === "target" && target ? target.position.y + target.height / 2 : startY;
+    const snappedEndX = handle.handleType === "source" && target ? target.position.x : endX;
+    const snappedEndY = handle.handleType === "source" && target ? target.position.y + target.height / 2 : endY;
+    const distance = Math.abs(snappedEndX - snappedStartX);
+    const pathD = `M ${snappedStartX} ${snappedStartY} C ${snappedStartX + distance * 0.5} ${snappedStartY}, ${snappedEndX - distance * 0.5} ${snappedEndY}, ${snappedEndX} ${snappedEndY}`;
+
+    return (
+        <g style={{ pointerEvents: "none" }}>
+            <path d={pathD} stroke={theme.accent.primary} strokeWidth="6" strokeOpacity="0.14" fill="none" />
+            <path d={pathD} stroke={theme.accent.primary} strokeWidth="2" fill="none" strokeDasharray="5,5" style={{ animation: "canvas-connection-flow 0.9s linear infinite" }} />
+            <circle cx={snappedEndX} cy={snappedEndY} r={target ? 5 : 3.5} fill={theme.accent.primary} fillOpacity={target ? 0.9 : 0.55} />
+        </g>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-context-menu.tsx
+LINES: 1-61
+========================================================================
+import { useEffect } from "react";
+import type { ReactNode } from "react";
+import { BetweenHorizontalStart, GalleryHorizontalEnd, GalleryHorizontal, Group, Plus, Trash2, Ungroup, Clapperboard } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { canvasThemes } from "@/lib/canvas-theme";
+import { useThemeStore } from "@/stores/use-theme-store";
+import type { ContextMenuState } from "@/types/canvas";
+import type { VideoFramePosition } from "@/lib/canvas/canvas-video-frame";
+
+export function CanvasNodeContextMenu({ menu, canCaptureVideoFrame, canGroup, canUngroup, onClose, onCaptureVideoFrame, onDuplicate, onGroup, onUngroup, onDelete, onOpenProduction }: { menu: ContextMenuState; canCaptureVideoFrame: boolean; canGroup?: boolean; canUngroup?: boolean; onClose: () => void; onCaptureVideoFrame: (position: VideoFramePosition) => void; onDuplicate: () => void; onGroup?: () => void; onUngroup?: () => void; onDelete: () => void; onOpenProduction?: () => void }) {
+    const { t } = useTranslation();
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+
+    useEffect(() => {
+        const close = (event: PointerEvent) => {
+            const target = event.target;
+            if (target instanceof Element && target.closest(".ant-popover")) return;
+            onClose();
+        };
+        window.addEventListener("pointerdown", close);
+        return () => window.removeEventListener("pointerdown", close);
+    }, [onClose]);
+
+    // 触屏/窄屏下避免菜单被屏幕右缘或下缘裁掉。
+    const maxLeft = Math.max(0, window.innerWidth - 190);
+    const maxTop = Math.max(0, window.innerHeight - 240);
+
+    return (
+        <div
+            className="fixed z-[80] min-w-44 overflow-hidden rounded-xl border py-1 shadow-2xl"
+            style={{ left: Math.min(menu.x, maxLeft), top: Math.min(menu.y, maxTop), background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
+            onPointerDown={(event) => event.stopPropagation()}
+        >
+            {canCaptureVideoFrame ? (
+                <>
+                    <MenuButton icon={<BetweenHorizontalStart className="size-4" />} label={t("canvas.videoFrames.first")} onClick={() => onCaptureVideoFrame("first")} />
+                    <MenuButton icon={<GalleryHorizontalEnd className="size-4" />} label={t("canvas.videoFrames.last")} onClick={() => onCaptureVideoFrame("last")} />
+                    <MenuButton icon={<GalleryHorizontal className="size-4" />} label={t("canvas.videoFrames.current")} onClick={() => onCaptureVideoFrame("current")} />
+                    <div className="my-1 border-t" style={{ borderColor: theme.toolbar.border }} />
+                </>
+            ) : null}
+            {menu.type === "node" && canGroup ? <MenuButton icon={<Group className="size-4" />} label={t("canvas.nodeToolbar.group")} onClick={onGroup} /> : null}
+            {menu.type === "node" && canUngroup ? <MenuButton icon={<Ungroup className="size-4" />} label={t("canvas.nodeToolbar.ungroup")} onClick={onUngroup} /> : null}
+            {menu.type === "node" && onOpenProduction ? <MenuButton icon={<Clapperboard className="size-4" />} label="在制作分镜中查看" onClick={onOpenProduction} /> : null}
+            {menu.type === "node" ? <MenuButton icon={<Plus className="size-4" />} label={t("canvas.controls.duplicate")} onClick={onDuplicate} /> : null}
+            <MenuButton icon={<Trash2 className="size-4" />} label={t("canvas.controls.delete")} onClick={onDelete} danger />
+        </div>
+    );
+}
+
+function MenuButton({ icon, label, onClick, danger = false }: { icon: ReactNode; label: string; onClick?: () => void; danger?: boolean }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+
+    return (
+        <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:opacity-80" style={{ color: danger ? "#f87171" : theme.node.text }} onClick={onClick}>
+            {icon}
+            <span>{label}</span>
+        </button>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-create-menus.tsx
+LINES: 1-165
+========================================================================
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ImageIcon, List, Music2, Settings2, Video, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { canvasThemes } from "@/lib/canvas-theme";
+import { useThemeStore } from "@/stores/use-theme-store";
+import { listNodeDefinitions, useNodeRegistryVersion } from "@/lib/canvas/node-registry";
+import { getNodeSpec } from "@/constant/canvas";
+import { CanvasNodeType, type ConnectionHandle, type Position } from "@/types/canvas";
+
+export type PendingConnectionCreate = {
+    connection: ConnectionHandle;
+    position: Position;
+    /** 屏幕坐标（clientX/clientY），用于把菜单锚定在鼠标落点。 */
+    anchor: Position;
+};
+
+const MENU_VIEWPORT_MARGIN = 10;
+
+/**
+ * 画布上的浮动菜单必须挂在 body 上：
+ * 画布内容层带 transform，会形成独立堆叠上下文，菜单的 z-index 只在层内生效，
+ * 于是空画布提示（z-10 的兄弟节点）会压在菜单之上，看起来像"弹窗半透明、和画布文字重合"。
+ * 改成 fixed 浮层后，菜单永远在最上层，也不会被画布的 overflow 裁掉。
+ */
+function useMenuAnchor(anchor: Position) {
+    const surfaceRef = useRef<HTMLDivElement>(null);
+    const [placed, setPlaced] = useState(anchor);
+
+    useLayoutEffect(() => {
+        const element = surfaceRef.current;
+        if (!element) return;
+        const rect = element.getBoundingClientRect();
+        const maxLeft = Math.max(MENU_VIEWPORT_MARGIN, window.innerWidth - rect.width - MENU_VIEWPORT_MARGIN);
+        const maxTop = Math.max(MENU_VIEWPORT_MARGIN, window.innerHeight - rect.height - MENU_VIEWPORT_MARGIN);
+        const next = { x: Math.min(Math.max(MENU_VIEWPORT_MARGIN, anchor.x), maxLeft), y: Math.min(Math.max(MENU_VIEWPORT_MARGIN, anchor.y), maxTop) };
+        setPlaced((current) => (current.x === next.x && current.y === next.y ? current : next));
+    }, [anchor.x, anchor.y]);
+
+    return { surfaceRef, placed };
+}
+
+function CanvasMenuSurface({
+    anchor,
+    title,
+    onClose,
+    closeOnOutsidePointerDown,
+    scrollable,
+    children,
+}: {
+    anchor: Position;
+    title: string;
+    onClose: () => void;
+    closeOnOutsidePointerDown?: boolean;
+    scrollable?: boolean;
+    children: React.ReactNode;
+}) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const { t } = useTranslation();
+    const menu = theme.menu;
+    const { surfaceRef, placed } = useMenuAnchor(anchor);
+
+    // 点击菜单外部时关闭（仅双击创建的菜单需要，连线落点菜单由画布交互负责关闭）。
+    useEffect(() => {
+        if (!closeOnOutsidePointerDown) return;
+        const handlePointerDown = (event: PointerEvent) => {
+            if (surfaceRef.current && !surfaceRef.current.contains(event.target as Node)) onClose();
+        };
+        document.addEventListener("pointerdown", handlePointerDown, true);
+        return () => document.removeEventListener("pointerdown", handlePointerDown, true);
+    }, [closeOnOutsidePointerDown, onClose, surfaceRef]);
+
+    return createPortal(
+        <div
+            ref={surfaceRef}
+            data-canvas-no-zoom
+            data-connection-create-menu
+            className="fixed z-[1250] w-[248px] overflow-hidden rounded-[16px] border"
+            style={{ left: placed.x, top: placed.y, background: menu.panel, borderColor: menu.border, boxShadow: menu.shadow, color: menu.title }}
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+        >
+            <div className="flex items-center justify-between gap-2 pl-3 pr-2 pb-2 pt-2.5">
+                <span className="text-[12.5px] font-medium tracking-wide" style={{ color: menu.header }}>
+                    {title}
+                </span>
+                <button
+                    type="button"
+                    className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-md transition-colors"
+                    style={{ color: menu.iconColor }}
+                    onMouseEnter={(event) => (event.currentTarget.style.background = menu.itemHover)}
+                    onMouseLeave={(event) => (event.currentTarget.style.background = "transparent")}
+                    onClick={onClose}
+                    aria-label={t("canvas.createMenu.close")}
+                >
+                    <X className="size-3.5" />
+                </button>
+            </div>
+            <div
+                className={`grid gap-0.5 p-1.5 ${scrollable ? "thin-scrollbar max-h-[min(60vh,420px)] overflow-y-auto" : ""}`}
+                style={{ borderTop: `1px solid ${menu.divider}` }}
+            >
+                {children}
+            </div>
+        </div>,
+        document.body,
+    );
+}
+
+export function ConnectionCreateMenu({ pending, onCreate, onClose }: { pending: PendingConnectionCreate; onCreate: (type: CanvasNodeType.Image | CanvasNodeType.Text | CanvasNodeType.Config | CanvasNodeType.Video | CanvasNodeType.Audio) => void; onClose: () => void }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const { t } = useTranslation();
+    return (
+        <CanvasMenuSurface anchor={pending.anchor} title={t("canvas.createMenu.fromNode")} onClose={onClose}>
+            <ConnectionCreateOption theme={theme} icon={<List className="size-4" />} title={t("canvas.createMenu.text")} description={t("canvas.createMenu.textDescription")} onClick={() => onCreate(CanvasNodeType.Text)} />
+            <ConnectionCreateOption theme={theme} icon={<ImageIcon className="size-4" />} title={t("canvas.createMenu.image")} onClick={() => onCreate(CanvasNodeType.Image)} />
+            <ConnectionCreateOption theme={theme} icon={<Video className="size-4" />} title={t("canvas.createMenu.video")} onClick={() => onCreate(CanvasNodeType.Video)} />
+            <ConnectionCreateOption theme={theme} icon={<Music2 className="size-4" />} title={t("canvas.createMenu.audio")} onClick={() => onCreate(CanvasNodeType.Audio)} />
+            <ConnectionCreateOption theme={theme} icon={<Settings2 className="size-4" />} title={t("canvas.createMenu.config")} description={t("canvas.createMenu.configDescription")} onClick={() => onCreate(CanvasNodeType.Config)} />
+        </CanvasMenuSurface>
+    );
+}
+
+export function ConnectionCreateOption({ theme, icon, title, description, onClick }: { theme: (typeof canvasThemes)[keyof typeof canvasThemes]; icon: React.ReactNode; title: string; description?: string; onClick?: () => void }) {
+    const menu = theme.menu;
+    return (
+        <button
+            type="button"
+            className="flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2 py-2 text-left transition-colors"
+            style={{ color: menu.title }}
+            onClick={onClick}
+            onMouseEnter={(event) => (event.currentTarget.style.background = menu.itemHover)}
+            onMouseLeave={(event) => (event.currentTarget.style.background = "transparent")}
+        >
+            <span className="grid size-8 shrink-0 place-items-center rounded-lg" style={{ background: menu.iconBg, color: menu.iconColor }}>
+                {icon}
+            </span>
+            <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2 text-[13px] font-medium leading-5">{title}</span>
+                {description ? (
+                    <span className="mt-0.5 block truncate text-[11px] leading-4" style={{ color: menu.subtitle }}>
+                        {description}
+                    </span>
+                ) : null}
+            </span>
+        </button>
+    );
+}
+
+export function NodeCreateMenu({ anchor, onCreate, onClose }: { anchor: Position; onCreate: (type: string) => void; onClose: () => void }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const { t } = useTranslation();
+    useNodeRegistryVersion();
+    const definitions = listNodeDefinitions().filter((def) => def.showInCreateMenu !== false);
+    return (
+        <CanvasMenuSurface anchor={anchor} title={t("canvas.createMenu.select")} onClose={onClose} closeOnOutsidePointerDown scrollable>
+            {definitions.map((def) => (
+                <ConnectionCreateOption key={def.type} theme={theme} icon={def.icon} title={getNodeSpec(def.type).title} description={def.description} onClick={() => onCreate(def.type)} />
+            ))}
+        </CanvasMenuSurface>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-create-panel.tsx
+LINES: 1-137
+========================================================================
+import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { Group, Image as ImageIcon, Music2, Puzzle, Search, Settings2, Type, Upload, Video, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { canvasThemes } from "@/lib/canvas-theme";
+import { getNodePluginId, listNodeDefinitions, useNodeRegistryVersion } from "@/lib/canvas/node-registry";
+import { useThemeStore } from "@/stores/use-theme-store";
+import { CanvasNodeType, type CanvasNodeTypeId } from "@/types/canvas";
+
+type CreateItem = {
+    type: CanvasNodeTypeId;
+    label: string;
+    icon: ReactNode;
+    hint?: string;
+};
+
+/**
+ * 「添加节点」面板。迁移自 BeefTV 的 CanvasCreateMenu：
+ * 搜索优先 + 分类网格 + 导入资源入口，替代原来一排平铺图标。
+ */
+export function CanvasCreatePanel({ onCreate, onUpload, onOpenAssets, onClose }: { onCreate: (type: CanvasNodeTypeId) => void; onUpload: () => void; onOpenAssets?: () => void; onClose: () => void }) {
+    const colorTheme = useThemeStore((state) => state.theme);
+    const theme = canvasThemes[colorTheme];
+    const { t } = useTranslation();
+    const [query, setQuery] = useState("");
+    useNodeRegistryVersion();
+
+    const items = useMemo<CreateItem[]>(() => {
+        const builtin: CreateItem[] = [
+            { type: CanvasNodeType.Text, label: t("canvas.nodeTypes.text"), icon: <Type className="size-4" />, hint: t("canvas.createPanel.textHint") },
+            { type: CanvasNodeType.Image, label: t("canvas.nodeTypes.image"), icon: <ImageIcon className="size-4" />, hint: t("canvas.createPanel.imageHint") },
+            { type: CanvasNodeType.Video, label: t("canvas.nodeTypes.video"), icon: <Video className="size-4" />, hint: t("canvas.createPanel.videoHint") },
+            { type: CanvasNodeType.Audio, label: t("canvas.nodeTypes.audio"), icon: <Music2 className="size-4" />, hint: t("canvas.createPanel.audioHint") },
+            { type: CanvasNodeType.Config, label: t("canvas.nodeTypes.config"), icon: <Settings2 className="size-4" />, hint: t("canvas.createPanel.configHint") },
+            { type: CanvasNodeType.Group, label: t("canvas.nodeTypes.group"), icon: <Group className="size-4" />, hint: t("canvas.createPanel.groupHint") },
+        ];
+        const extensions = listNodeDefinitions()
+            .filter((def) => def.showInCreateMenu !== false && getNodePluginId(def.type) !== "builtin")
+            .map<CreateItem>((def) => ({ type: def.type, label: def.title, icon: def.icon || <Puzzle className="size-4" /> }));
+        return [...builtin, ...extensions];
+    }, [t]);
+
+    const normalized = query.trim().toLocaleLowerCase();
+    const visible = normalized ? items.filter((item) => `${item.label} ${item.hint || ""}`.toLocaleLowerCase().includes(normalized)) : items;
+
+    return (
+        <div
+            className="pointer-events-auto absolute bottom-[calc(100%+10px)] left-1/2 z-40 w-[320px] -translate-x-1/2 overflow-hidden rounded-2xl border shadow-2xl backdrop-blur-2xl"
+            style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
+            data-canvas-create-panel
+            onPointerDown={(event) => event.stopPropagation()}
+            onWheel={(event) => event.stopPropagation()}
+        >
+            <header className="flex h-10 items-center gap-2 border-b px-3" style={{ borderColor: theme.toolbar.border }}>
+                <span className="text-[12px] font-semibold">{t("canvas.createPanel.title")}</span>
+                <span className="ml-auto flex items-center gap-0.5">
+                    <PanelAction label={t("canvas.createPanel.assets")} onClick={onOpenAssets} icon={<Puzzle className="size-3.5" />} hidden={!onOpenAssets} />
+                    <PanelAction label={t("canvas.toolbar.upload")} onClick={onUpload} icon={<Upload className="size-3.5" />} />
+                    <button type="button" className="grid size-6 place-items-center rounded-md opacity-55 transition hover:bg-white/10 hover:opacity-100" onClick={onClose} aria-label={t("canvas.createPanel.close")}>
+                        <X className="size-3.5" />
+                    </button>
+                </span>
+            </header>
+
+            <div className="px-2 pt-2">
+                <label className="flex h-8 items-center gap-1.5 rounded-lg border px-2" style={{ borderColor: theme.toolbar.border, background: "rgba(255,255,255,.04)" }}>
+                    <Search className="size-3.5 shrink-0 opacity-45" />
+                    <input
+                        autoFocus
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter" && visible[0]) onCreate(visible[0].type);
+                            if (event.key === "Escape") {
+                                if (query) setQuery("");
+                                else onClose();
+                            }
+                        }}
+                        placeholder={t("canvas.createPanel.search")}
+                        aria-label={t("canvas.createPanel.search")}
+                        className="min-w-0 flex-1 bg-transparent text-[11.5px] outline-none placeholder:opacity-45"
+                        style={{ color: theme.node.text }}
+                    />
+                </label>
+            </div>
+
+            <div className="thin-scrollbar max-h-[288px] overflow-y-auto p-2">
+                {visible.length ? (
+                    <div className="grid grid-cols-3 gap-1">
+                        {visible.map((item) => (
+                            <button
+                                key={item.type}
+                                type="button"
+                                className="group flex h-[62px] flex-col items-center justify-center gap-1.5 rounded-xl border border-transparent text-[11px] font-medium transition hover:border-white/10 hover:bg-white/[0.06]"
+                                style={{ color: theme.node.text }}
+                                title={item.hint || item.label}
+                                onClick={() => onCreate(item.type)}
+                            >
+                                <span className="grid size-7 place-items-center rounded-lg transition group-hover:bg-white/[0.06]" style={{ color: theme.node.muted }}>
+                                    {item.icon}
+                                </span>
+                                <span className="max-w-full truncate px-1 opacity-90">{item.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="grid h-20 place-items-center text-[11px] opacity-45">{t("canvas.createPanel.empty")}</div>
+                )}
+            </div>
+
+            <footer className="flex items-center gap-1.5 border-t px-3 py-2 text-[10.5px] opacity-45" style={{ borderColor: theme.toolbar.border }}>
+                <kbd className="rounded border px-1 py-0.5 text-[10px]" style={{ borderColor: theme.toolbar.border }}>
+                    Enter
+                </kbd>
+                {t("canvas.createPanel.hint")}
+            </footer>
+        </div>
+    );
+}
+
+function PanelAction({ label, icon, onClick, hidden }: { label: string; icon: ReactNode; onClick?: () => void; hidden?: boolean }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    if (hidden) return null;
+    return (
+        <button
+            type="button"
+            className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] font-medium opacity-65 transition hover:bg-white/10 hover:opacity-100"
+            style={{ color: theme.node.text }}
+            onClick={onClick}
+            title={label}
+        >
+            {icon}
+            <span className="hidden min-[360px]:inline">{label}</span>
+        </button>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-delete-projects-dialog.tsx
+LINES: 1-46
+========================================================================
+import { Button, Modal } from "antd";
+import { useTranslation } from "react-i18next";
+
+import { useAssetStore } from "@/stores/use-asset-store";
+import { isCanvasAccountActive, useCanvasStore } from "@/stores/canvas/use-canvas-store";
+import { useCanvasUiStore } from "@/stores/canvas/use-canvas-ui-store";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { matchesCanvasSession } from "@/lib/canvas/canvas-session";
+
+export function CanvasDeleteProjectsDialog() {
+    const { t } = useTranslation();
+    const userId = useAuthStore((state) => state.user?.id ?? null);
+    const sessionEpoch = useAuthStore((state) => state.sessionEpoch);
+    const ids = useCanvasUiStore((state) => state.deleteProjectIds);
+    const setDeleteIds = useCanvasUiStore((state) => state.setDeleteProjectIds);
+    const removeSelectedIds = useCanvasUiStore((state) => state.removeSelectedProjectIds);
+    const deleteProjects = useCanvasStore((state) => state.deleteProjects);
+    const cleanupImages = useAssetStore((state) => state.cleanupImages);
+    const isCurrent = () => matchesCanvasSession(userId, sessionEpoch, useAuthStore.getState()) && isCanvasAccountActive(userId);
+    const confirm = () => {
+        if (!isCurrent()) return;
+        deleteProjects(ids);
+        cleanupImages();
+        removeSelectedIds(ids);
+        setDeleteIds([]);
+    };
+
+    return (
+        <Modal
+            title={t("canvas.project.deleteTitle")}
+            open={ids.length > 0}
+            centered
+            onCancel={() => { if (isCurrent()) setDeleteIds([]); }}
+            footer={
+                <>
+                    <Button onClick={() => { if (isCurrent()) setDeleteIds([]); }}>{t("common.cancel")}</Button>
+                    <Button danger type="primary" onClick={confirm}>
+                        {t("common.delete")}
+                    </Button>
+                </>
+            }
+        >
+            <p className="text-sm text-muted-foreground">{t("canvas.project.deleteDescription", { count: ids.length })}</p>
+        </Modal>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-generation-estimate.tsx
+LINES: 1-40
+========================================================================
+import { useTranslation } from 'react-i18next';
+import { TriangleAlert, Zap } from 'lucide-react';
+import { useCreditEstimate } from '@/hooks/use-credit-estimate';
+import { useAuthStore } from '@/stores/use-auth-store';
+import { modelOptionName, useConfigStore, useEffectiveConfig } from '@/stores/use-config-store';
+import { inferMediaScale, parseVideoResolution } from '@/lib/media-size';
+import { buildGenerationConfig, getGenerationCount } from '@/lib/canvas/canvas-generation-helpers';
+import { getNodeDefinition } from '@/lib/canvas/node-registry';
+import type { CanvasConnection, CanvasGenerationMode, CanvasNodeData } from '@/types/canvas';
+import { buildNodeGenerationContext } from './canvas-node-generation';
+import { videoReferenceNotice } from '@/lib/canvas/video-reference-limits';
+
+export function CanvasGenerationEstimate({ node, nodes, connections, mode, prompt, compact = false, variant }: { compact?: boolean; variant?: 'chip'; node: CanvasNodeData; nodes: CanvasNodeData[]; connections: CanvasConnection[]; mode: CanvasGenerationMode; prompt: string }) {
+    const { t } = useTranslation();
+    const config = buildGenerationConfig(useEffectiveConfig(), node, mode);
+    const model = useConfigStore((state) => state.serverModels.find((item) => item.id === modelOptionName(config.model)));
+    const session = useAuthStore((state) => `${state.user?.id ?? 'guest'}:${state.sessionEpoch}:${state.wallet?.generationDiscount ?? 1}:${state.wallet?.memberUntil ?? ''}`);
+    const selfWrite = getNodeDefinition(node.type)?.useBuiltinPanel?.writeBackToSelf;
+    const count = mode === 'image' ? selfWrite ? 1 : getGenerationCount(config.count) : mode === 'text' ? getGenerationCount(String(node.metadata?.textCount || 1)) : 1;
+    const context = mode === 'audio' || mode === 'video' ? buildNodeGenerationContext(node.id, nodes, connections, prompt.trim()) : null;
+    const inputLength = mode === 'audio' ? context?.prompt.trim().length ?? 0 : 0;
+    const notice = mode === 'video' && context ? videoReferenceNotice(model, context) : null;
+    const estimate = useCreditEstimate(modelOptionName(config.model), mode, mode === 'video' ? Number(config.videoSeconds) : 0, mode === 'video' ? parseVideoResolution(config.vquality) : mode === 'image' ? inferMediaScale(config.size) : '', session, inputLength, mode === 'video' ? config.videoRouteId : '');
+    const min = (estimate.data?.minCredits ?? 0) * count;
+    const max = (estimate.data?.maxCredits ?? 0) * count;
+    const label = !estimate.hasModel ? t('home.estimateSelectModel') : estimate.loading ? t('home.estimateLoading') : estimate.error || !estimate.data ? t('home.estimateUnavailable') : `预计 ${min === max ? min : `${min}–${max}`} 积分${count > 1 ? ` / ${count}${mode === 'image' ? '张' : '条'}` : ''}`;
+    const detail = '已计入会员折扣及活动倍率；多张/多条按逐次生成合计，最终以实际成功任务和线路结算。';
+    if (variant === 'chip') {
+        const ready = estimate.hasModel && !estimate.loading && !estimate.error && Boolean(estimate.data);
+        const value = ready ? (min === max ? String(min) : `${min}–${max}`) : estimate.loading ? '…' : '--';
+        const exceeded = Boolean(notice?.exceeded);
+        return (
+            <span role="status" aria-live="polite" aria-label={`${label}${notice ? `，${notice.text}` : ''}`} title={`${label}${notice ? `\n${notice.text}` : ''}\n${detail}`} className="inline-flex h-8 min-w-0 shrink-0 items-center gap-1 px-1 text-xs font-medium tabular-nums" style={exceeded ? { color: 'var(--destructive)' } : { opacity: ready ? 0.82 : 0.55 }}>
+                {exceeded ? <TriangleAlert className="size-3.5" aria-hidden /> : <Zap className="size-3.5 fill-current" aria-hidden />}
+                <span>{value}</span>
+            </span>
+        );
+    }
+    return <span role="status" aria-live="polite" className={compact ? "min-w-0 text-[11px] leading-4 text-right opacity-75" : "min-w-0 text-xs leading-5 opacity-75"} title={detail}>{label}{notice && <span className="block text-[10px] leading-4" style={notice.exceeded ? { color: 'var(--destructive)' } : undefined}>{notice.text}</span>}</span>;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-image-settings-popover.tsx
+LINES: 1-128
+========================================================================
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { SlidersHorizontal } from "lucide-react";
+import { Button } from "antd";
+import { useTranslation } from "react-i18next";
+
+import { ImageSettingsPanel, imageQualityLabel, imageSizeLabel } from "@/components/image-settings-panel";
+import { canvasThemes } from "@/lib/canvas-theme";
+import { useThemeStore } from "@/stores/use-theme-store";
+import type { AiConfig } from "@/stores/use-config-store";
+
+type CanvasImageSettingsPopoverProps = {
+    config: AiConfig;
+    onConfigChange: (key: keyof AiConfig, value: string) => void;
+    onMissingConfig?: () => void;
+    onOpenChange?: (open: boolean) => void;
+    buttonClassName?: string;
+    buttonStyle?: CSSProperties;
+    getPopupContainer?: (triggerNode: HTMLElement) => HTMLElement;
+    placement?: "topLeft" | "top" | "topRight" | "bottomLeft" | "bottom" | "bottomRight";
+    autoAdjustOverflow?: boolean;
+};
+
+export function CanvasImageSettingsPopover({ config, onConfigChange, onOpenChange, buttonClassName, buttonStyle, placement = "topLeft" }: CanvasImageSettingsPopoverProps) {
+    const { t } = useTranslation();
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const buttonRef = useRef<HTMLSpanElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const [open, setOpen] = useState(false);
+    const [buttonRect, setButtonRect] = useState<DOMRect | null>(null);
+    const quality = config.quality || "auto";
+    const count = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
+    const activeSize = config.size || "auto";
+    const updateOpen = (nextOpen: boolean) => {
+        setOpen(nextOpen);
+        onOpenChange?.(nextOpen);
+    };
+
+    useEffect(() => {
+        if (!open) return;
+        const syncPosition = () => setButtonRect(buttonRef.current?.getBoundingClientRect() || null);
+        const closeOnOutsidePointer = (event: PointerEvent) => {
+            const target = event.target;
+            if (!(target instanceof Node)) return;
+            if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+            if (document.activeElement instanceof HTMLElement && panelRef.current?.contains(document.activeElement)) document.activeElement.blur();
+            setOpen(false);
+            onOpenChange?.(false);
+        };
+
+        syncPosition();
+        window.addEventListener("resize", syncPosition);
+        window.addEventListener("scroll", syncPosition, true);
+        window.addEventListener("pointerdown", closeOnOutsidePointer, true);
+        return () => {
+            window.removeEventListener("resize", syncPosition);
+            window.removeEventListener("scroll", syncPosition, true);
+            window.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+        };
+    }, [onOpenChange, open]);
+
+    const panel = open && buttonRect ? <ImageSettingsPortal buttonRect={buttonRect} panelRef={panelRef} placement={placement} theme={theme} config={config} onConfigChange={onConfigChange} /> : null;
+
+    return (
+        <>
+            <span ref={buttonRef} className="inline-flex min-w-0">
+                <Button size="small" type="text" className={buttonClassName || "!h-8 !max-w-[180px] !justify-start !rounded-full !px-2.5"} style={{ background: theme.node.fill, color: theme.node.text, ...buttonStyle }} icon={<SlidersHorizontal className="size-3.5" />} onClick={() => updateOpen(!open)}>
+                    <span className="truncate">
+                        {imageQualityLabel(quality)} · {imageSizeLabel(activeSize)} · {t("canvas.controls.images", { count })}
+                    </span>
+                </Button>
+            </span>
+            {panel}
+        </>
+    );
+}
+
+function ImageSettingsPortal({
+    buttonRect,
+    panelRef,
+    placement,
+    theme,
+    config,
+    onConfigChange,
+}: {
+    buttonRect: DOMRect;
+    panelRef: RefObject<HTMLDivElement | null>;
+    placement: CanvasImageSettingsPopoverProps["placement"];
+    theme: (typeof canvasThemes)[keyof typeof canvasThemes];
+    config: AiConfig;
+    onConfigChange: (key: keyof AiConfig, value: string) => void;
+}) {
+    const width = 356;
+    const gap = 8;
+    const margin = 12;
+    const alignRight = placement?.endsWith("Right");
+    const alignCenter = placement === "top" || placement === "bottom";
+    const left = alignCenter ? buttonRect.left + buttonRect.width / 2 - width / 2 : alignRight ? buttonRect.right - width : buttonRect.left;
+    const topPlacement = placement?.startsWith("top");
+    const style = {
+        position: "fixed",
+        zIndex: 1200,
+        width,
+        left: Math.max(margin, Math.min(window.innerWidth - width - margin, left)),
+        ...(topPlacement ? { bottom: window.innerHeight - buttonRect.top + gap, maxHeight: Math.max(260, buttonRect.top - margin * 2) } : { top: buttonRect.bottom + gap, maxHeight: Math.max(260, window.innerHeight - buttonRect.bottom - margin * 2) }),
+        background: theme.toolbar.panel,
+        borderRadius: 16,
+        border: `1px solid ${theme.menu.border}`,
+        boxShadow: theme.menu.shadow,
+        padding: 18,
+        overflowY: "auto",
+        color: theme.node.text,
+    } as const;
+
+    return createPortal(
+        <div
+            ref={panelRef}
+            className="canvas-image-settings-popover"
+            style={style}
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+        >
+            <ImageSettingsPanel config={config} onConfigChange={(key, value) => onConfigChange(key, value)} theme={theme} className="space-y-4" />
+        </div>,
+        document.body,
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-image-toolbar-settings-modal.tsx
+LINES: 1-233
+========================================================================
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Button, Card, Checkbox, Form, Modal, Space, Switch, Tag, Tooltip, Typography, theme as antdTheme } from "antd";
+import { Ellipsis, Image as ImageIcon, Settings2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import type { ImageQuickToolId } from "./canvas-image-toolbar-tools";
+
+export type ImageToolbarSettingsTool = {
+    id: ImageQuickToolId;
+    title: string;
+    label: string;
+    icon: ReactNode;
+    active?: boolean;
+    danger?: boolean;
+};
+
+type PreviewTool = ImageToolbarSettingsTool | {
+    id: "more";
+    title: string;
+    label: string;
+    icon: ReactNode;
+    active?: boolean;
+    danger?: boolean;
+};
+
+type PreviewScroll = {
+    left: number;
+    max: number;
+    viewport: number;
+    content: number;
+};
+
+export function ImageToolSettingsModal({
+    open,
+    tools,
+    selectedIds,
+    showLabels,
+    onToggle,
+    onShowLabelsChange,
+    onCancel,
+    onSave,
+}: {
+    open: boolean;
+    tools: ImageToolbarSettingsTool[];
+    selectedIds: ImageQuickToolId[];
+    showLabels: boolean;
+    onToggle: (id: ImageQuickToolId, visible: boolean) => void;
+    onShowLabelsChange: (value: boolean) => void;
+    onCancel: () => void;
+    onSave: () => void;
+}) {
+    const { t } = useTranslation();
+    const { token } = antdTheme.useToken();
+    const previewToolbarRef = useRef<HTMLDivElement>(null);
+    const scrollbarTrackRef = useRef<HTMLInputElement>(null);
+    const [previewScroll, setPreviewScroll] = useState<PreviewScroll>({ left: 0, max: 0, viewport: 1, content: 1 });
+    const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+    const selectedTools = tools.filter((tool) => selected.has(tool.id));
+    const previewTools: PreviewTool[] = [
+        ...selectedTools,
+        { id: "more", title: t("canvas.imageTools.configure"), label: t("canvas.imageTools.more"), icon: <Ellipsis className="size-4" />, active: true },
+    ];
+
+    const syncPreviewScroll = useCallback(() => {
+        const toolbar = previewToolbarRef.current;
+        if (!toolbar) return;
+        setPreviewScroll({
+            left: toolbar.scrollLeft,
+            max: Math.max(0, toolbar.scrollWidth - toolbar.clientWidth),
+            viewport: Math.max(1, toolbar.clientWidth),
+            content: Math.max(1, toolbar.scrollWidth),
+        });
+    }, []);
+
+    const setPreviewScrollLeft = useCallback(
+        (left: number) => {
+            const toolbar = previewToolbarRef.current;
+            if (!toolbar) return;
+            toolbar.scrollLeft = left;
+            syncPreviewScroll();
+        },
+        [syncPreviewScroll],
+    );
+
+    const updateSelectedTools = (values: ImageQuickToolId[]) => {
+        const next = new Set(values);
+        tools.forEach((tool) => {
+            const visible = next.has(tool.id);
+            if (selected.has(tool.id) !== visible) onToggle(tool.id, visible);
+        });
+    };
+
+    useEffect(() => {
+        if (!open) return;
+        const toolbar = previewToolbarRef.current;
+        const sync = () => syncPreviewScroll();
+        const frames: number[] = [];
+        const firstFrame = window.requestAnimationFrame(() => {
+            sync();
+            frames.push(window.requestAnimationFrame(sync));
+        });
+        frames.push(firstFrame);
+        const timer = window.setTimeout(sync, 120);
+        const resizeObserver = typeof ResizeObserver !== "undefined" && toolbar ? new ResizeObserver(sync) : null;
+        if (resizeObserver && toolbar) {
+            resizeObserver.observe(toolbar);
+            toolbar.childNodes.forEach((child) => {
+                if (child instanceof Element) resizeObserver.observe(child);
+            });
+        }
+        sync();
+        window.addEventListener("resize", syncPreviewScroll);
+        return () => {
+            frames.forEach((frame) => window.cancelAnimationFrame(frame));
+            window.clearTimeout(timer);
+            resizeObserver?.disconnect();
+            window.removeEventListener("resize", syncPreviewScroll);
+        };
+    }, [open, selectedIds, showLabels, previewTools.length, syncPreviewScroll]);
+
+    const scrollbarWidth = scrollbarTrackRef.current?.clientWidth || previewScroll.viewport;
+    const scrollbarThumbWidth = previewScroll.max > 0 ? Math.min(scrollbarWidth, Math.max(64, (previewScroll.viewport / previewScroll.content) * scrollbarWidth)) : scrollbarWidth;
+
+    return (
+        <Modal
+            title={t("canvas.imageTools.customize")}
+            open={open}
+            centered
+            width={760}
+            onCancel={onCancel}
+            destroyOnHidden
+            footer={
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                        <span>{t("canvas.imageTools.showLabels")}</span>
+                        <Switch checked={showLabels} onChange={onShowLabelsChange} />
+                    </div>
+                    <Space>
+                        <Button onClick={onCancel}>{t("common.cancel")}</Button>
+                        <Button type="primary" onClick={onSave}>
+                            {t("common.save")}
+                        </Button>
+                    </Space>
+                </div>
+            }
+        >
+            <Typography.Paragraph type="secondary" className="!mb-4">
+                {t("canvas.imageTools.description")}
+            </Typography.Paragraph>
+
+            <Card
+                size="small"
+                title={
+                    <Space size={6}>
+                        <Settings2 className="size-4" />
+                        {t("canvas.imageTools.preview")}
+                    </Space>
+                }
+                className="mb-4"
+            >
+                <div className="relative flex min-h-[300px] w-full justify-center pt-20 pb-9">
+                    <div
+                        ref={previewToolbarRef}
+                        className="hide-scrollbar absolute left-2 right-2 top-3 z-10 flex h-12 items-center overflow-x-auto rounded-[18px] border px-1 text-[13px]"
+                        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary, boxShadow: token.boxShadowSecondary, color: token.colorText }}
+                        onScroll={syncPreviewScroll}
+                    >
+                        {previewTools.map((tool) => (
+                            <PreviewToolbarItem key={tool.id} tool={tool} showLabels={showLabels} />
+                        ))}
+                    </div>
+                    <div
+                        className="flex h-48 w-full max-w-[360px] flex-col items-center justify-center rounded-xl border"
+                        style={{ background: token.colorFillAlter, borderColor: token.colorBorderSecondary, color: token.colorTextSecondary }}
+                    >
+                        <ImageIcon className="mb-2 size-8" />
+                        <Typography.Text type="secondary">{t("canvas.imageTools.imageNode")}</Typography.Text>
+                    </div>
+                    <input
+                        ref={scrollbarTrackRef}
+                        type="range"
+                        min={0}
+                        max={Math.max(previewScroll.max, 1)}
+                        value={Math.min(previewScroll.left, Math.max(previewScroll.max, 1))}
+                        disabled={previewScroll.max <= 0}
+                        className="absolute bottom-4 left-10 right-10 h-2.5 cursor-pointer appearance-none bg-transparent disabled:cursor-default [&::-moz-range-thumb]:h-2.5 [&::-moz-range-thumb]:w-[var(--preview-scrollbar-thumb-width)] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[#8d9498] [&::-moz-range-track]:h-2.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-[#bdc4c8] [&::-webkit-slider-runnable-track]:h-2.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-[#bdc4c8] [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:w-[var(--preview-scrollbar-thumb-width)] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#8d9498]"
+                        style={{ "--preview-scrollbar-thumb-width": `${scrollbarThumbWidth}px` } as CSSProperties}
+                        onInput={(event) => setPreviewScrollLeft(Number(event.currentTarget.value))}
+                        onChange={(event) => setPreviewScrollLeft(Number(event.target.value))}
+                    />
+                </div>
+            </Card>
+
+            <Form layout="vertical" className="!mb-0">
+                <Form.Item
+                    className="!mb-4"
+                    label={
+                        <Space size={8}>
+                            <span>{t("canvas.imageTools.quickTools")}</span>
+                            <Tag className="m-0">
+                                {selectedTools.length}/{tools.length}
+                            </Tag>
+                        </Space>
+                    }
+                >
+                    <Checkbox.Group value={selectedIds} className="grid w-full gap-3 md:grid-cols-3" onChange={(values) => updateSelectedTools(values as ImageQuickToolId[])}>
+                        {tools.map((tool) => (
+                            <Checkbox key={tool.id} value={tool.id} className="m-0">
+                                <span className="inline-flex items-center gap-2">
+                                    {tool.icon}
+                                    {tool.label}
+                                </span>
+                            </Checkbox>
+                        ))}
+                    </Checkbox.Group>
+                </Form.Item>
+            </Form>
+        </Modal>
+    );
+}
+
+function PreviewToolbarItem({ tool, showLabels }: { tool: PreviewTool; showLabels: boolean }) {
+    return (
+        <Tooltip title={tool.title}>
+            <span className="flex h-12 shrink-0 items-center px-1.5" style={{ color: tool.danger ? "#ef4444" : undefined }}>
+                <span className={`flex h-9 items-center rounded-lg px-2 ${showLabels ? "gap-2" : "justify-center"}`}>
+                    {tool.icon}
+                    {showLabels ? <span className="whitespace-nowrap">{tool.label}</span> : null}
+                </span>
+            </span>
+        </Tooltip>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-image-toolbar-tools.tsx
+LINES: 1-166
+========================================================================
+import type { ReactNode } from "react";
+import { Brush, Camera, Copy, FileText, Grid2x2, Lock, LockOpen, Maximize2, Scissors, Sparkles, Upload, ZoomIn } from "lucide-react";
+
+import type { CanvasNodeData } from "@/types/canvas";
+import i18n from "@/i18n";
+
+export type ImageNodeActionToolId = "copyPrompt" | "reversePrompt" | "replace" | "resize" | "maskEdit" | "crop" | "split" | "upscale" | "superResolve" | "angle" | "view";
+export type ImageQuickToolId = "info" | "delete" | "saveAsset" | "download" | ImageNodeActionToolId;
+
+export type ImageToolHandlers = {
+    onUpload: (node: CanvasNodeData) => void;
+    onToggleFreeResize: (node: CanvasNodeData) => void;
+    onMaskEdit: (node: CanvasNodeData) => void;
+    onCrop: (node: CanvasNodeData) => void;
+    onSplit: (node: CanvasNodeData) => void;
+    onUpscale: (node: CanvasNodeData) => void;
+    onSuperResolve: (node: CanvasNodeData) => void;
+    onAngle: (node: CanvasNodeData) => void;
+    onViewImage: (node: CanvasNodeData) => void;
+    onCopyPrompt: (node: CanvasNodeData) => void;
+    onReversePrompt: (node: CanvasNodeData) => void;
+};
+
+export type ImageToolDefinition = {
+    id: ImageNodeActionToolId;
+    defaultVisible: boolean;
+    label: string | ((node: CanvasNodeData) => string);
+    title: string | ((node: CanvasNodeData) => string);
+    icon: (node: CanvasNodeData) => ReactNode;
+    active?: (node: CanvasNodeData) => boolean;
+    run: (node: CanvasNodeData, handlers: ImageToolHandlers) => void;
+};
+
+export type ImageQuickToolsConfig = {
+    ids: ImageQuickToolId[];
+    showLabels: boolean;
+};
+
+export const IMAGE_QUICK_TOOLS_STORAGE_KEY = "canvas-image-quick-tools-v7";
+
+const defaultBaseToolIds: ImageQuickToolId[] = ["info", "delete", "saveAsset", "download"];
+
+export const imageToolDefinitions: ImageToolDefinition[] = [
+    {
+        id: "copyPrompt",
+        defaultVisible: true,
+        label: () => i18n.t("canvas.imageTools.copyPrompt"),
+        title: () => i18n.t("canvas.imageTools.copyPromptTitle"),
+        icon: () => <Copy className="size-4" />,
+        run: (node, handlers) => handlers.onCopyPrompt(node),
+    },
+    {
+        id: "reversePrompt",
+        defaultVisible: true,
+        label: () => i18n.t("canvas.imageTools.reversePrompt"),
+        title: () => i18n.t("canvas.imageTools.reversePromptTitle"),
+        icon: () => <FileText className="size-4" />,
+        run: (node, handlers) => handlers.onReversePrompt(node),
+    },
+    {
+        id: "replace",
+        defaultVisible: true,
+        label: () => i18n.t("canvas.imageTools.replace"),
+        title: () => i18n.t("canvas.imageTools.replace"),
+        icon: () => <Upload className="size-4" />,
+        run: (node, handlers) => handlers.onUpload(node),
+    },
+    {
+        id: "resize",
+        defaultVisible: false,
+        label: (node) => i18n.t(node.metadata?.freeResize ? "canvas.imageTools.free" : "canvas.imageTools.locked"),
+        title: (node) => i18n.t(node.metadata?.freeResize ? "canvas.imageTools.lockTitle" : "canvas.imageTools.freeTitle"),
+        icon: (node) => (node.metadata?.freeResize ? <LockOpen className="size-4" /> : <Lock className="size-4" />),
+        active: (node) => Boolean(node.metadata?.freeResize),
+        run: (node, handlers) => handlers.onToggleFreeResize(node),
+    },
+    {
+        id: "maskEdit",
+        defaultVisible: true,
+        label: () => i18n.t("canvas.imageTools.mask"),
+        title: () => i18n.t("canvas.imageTools.maskTitle"),
+        icon: () => <Brush className="size-4" />,
+        run: (node, handlers) => handlers.onMaskEdit(node),
+    },
+    {
+        id: "crop",
+        defaultVisible: true,
+        label: () => i18n.t("canvas.imageTools.crop"),
+        title: () => i18n.t("canvas.imageTools.cropTitle"),
+        icon: () => <Scissors className="size-4" />,
+        run: (node, handlers) => handlers.onCrop(node),
+    },
+    {
+        id: "split",
+        defaultVisible: true,
+        label: () => i18n.t("canvas.imageTools.split"),
+        title: () => i18n.t("canvas.imageTools.splitTitle"),
+        icon: () => <Grid2x2 className="size-4" />,
+        run: (node, handlers) => handlers.onSplit(node),
+    },
+    {
+        id: "upscale",
+        defaultVisible: true,
+        label: () => i18n.t("canvas.imageTools.upscale"),
+        title: () => i18n.t("canvas.imageTools.upscaleTitle"),
+        icon: () => <ZoomIn className="size-4" />,
+        run: (node, handlers) => handlers.onUpscale(node),
+    },
+    {
+        id: "superResolve",
+        defaultVisible: false,
+        label: () => i18n.t("canvas.imageTools.superResolve"),
+        title: () => i18n.t("canvas.imageTools.superResolveTitle"),
+        icon: () => <Sparkles className="size-4" />,
+        run: (node, handlers) => handlers.onSuperResolve(node),
+    },
+    {
+        id: "angle",
+        defaultVisible: false,
+        label: () => i18n.t("canvas.imageTools.angle"),
+        title: () => i18n.t("canvas.imageTools.angleTitle"),
+        icon: () => <Camera className="size-4" />,
+        run: (node, handlers) => handlers.onAngle(node),
+    },
+    {
+        id: "view",
+        defaultVisible: true,
+        label: () => i18n.t("canvas.imageTools.view"),
+        title: () => i18n.t("canvas.imageTools.viewTitle"),
+        icon: () => <Maximize2 className="size-4" />,
+        run: (node, handlers) => handlers.onViewImage(node),
+    },
+];
+
+export const defaultImageQuickToolIds: ImageQuickToolId[] = [...defaultBaseToolIds, ...imageToolDefinitions.filter((tool) => tool.defaultVisible).map((tool) => tool.id)];
+
+export function buildImageToolbarTools(node: CanvasNodeData, handlers: ImageToolHandlers) {
+    return imageToolDefinitions.map((tool) => ({
+        id: tool.id,
+        label: resolveToolText(tool.label, node),
+        title: resolveToolText(tool.title, node),
+        icon: tool.icon(node),
+        active: tool.active?.(node),
+        onClick: () => tool.run(node, handlers),
+    }));
+}
+
+export function normalizeImageQuickToolIds(value: unknown[]) {
+    const allIds: ImageQuickToolId[] = [...defaultBaseToolIds, ...imageToolDefinitions.map((tool) => tool.id)];
+    const ids = new Set(allIds);
+    return allIds.filter((id) => value.includes(id) && ids.has(id));
+}
+
+export function readImageQuickToolsConfig(value: unknown): ImageQuickToolsConfig {
+    if (Array.isArray(value)) return { ids: normalizeImageQuickToolIds(value), showLabels: false };
+    if (!value || typeof value !== "object") return { ids: defaultImageQuickToolIds, showLabels: false };
+    const data = value as Partial<ImageQuickToolsConfig>;
+    return {
+        ids: Array.isArray(data.ids) ? normalizeImageQuickToolIds(data.ids) : defaultImageQuickToolIds,
+        showLabels: data.showLabels === true,
+    };
+}
+
+function resolveToolText(value: string | ((node: CanvasNodeData) => string), node: CanvasNodeData) {
+    return typeof value === "function" ? value(node) : value;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-mini-map.tsx
+LINES: 1-137
+========================================================================
+import { useCallback, useMemo, useRef, useState } from "react";
+
+import { canvasThemes } from "@/lib/canvas-theme";
+import { getNodeDefinition } from "@/lib/canvas/node-registry";
+import { useThemeStore } from "@/stores/use-theme-store";
+import { type CanvasNodeData, type ViewportTransform } from "@/types/canvas";
+
+export function Minimap({ nodes, viewport, viewportSize, onViewportChange }: { nodes: CanvasNodeData[]; viewport: ViewportTransform; viewportSize: { width: number; height: number }; onViewportChange: (viewport: ViewportTransform) => void }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const width = 240;
+    const height = 160;
+
+    const { worldBounds, scale, offset } = useMemo(() => {
+        if (!nodes.length) {
+            return { worldBounds: { x: -500, y: -500, w: 1000, h: 1000 }, scale: 0.16, offset: { x: 40, y: 0 } };
+        }
+
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+
+        nodes.forEach((node) => {
+            minX = Math.min(minX, node.position.x);
+            minY = Math.min(minY, node.position.y);
+            maxX = Math.max(maxX, node.position.x + node.width);
+            maxY = Math.max(maxY, node.position.y + node.height);
+        });
+
+        minX -= 500;
+        minY -= 500;
+        maxX += 500;
+        maxY += 500;
+
+        const boundsWidth = maxX - minX;
+        const boundsHeight = maxY - minY;
+        const nextScale = Math.min(width / boundsWidth, height / boundsHeight);
+        const mapContentW = boundsWidth * nextScale;
+        const mapContentH = boundsHeight * nextScale;
+
+        return {
+            worldBounds: { x: minX, y: minY, w: boundsWidth, h: boundsHeight },
+            scale: nextScale,
+            offset: { x: (width - mapContentW) / 2, y: (height - mapContentH) / 2 },
+        };
+    }, [nodes]);
+
+    const toMinimap = useCallback(
+        (worldX: number, worldY: number) => {
+            return {
+                x: (worldX - worldBounds.x) * scale + offset.x,
+                y: (worldY - worldBounds.y) * scale + offset.y,
+            };
+        },
+        [offset.x, offset.y, scale, worldBounds.x, worldBounds.y],
+    );
+
+    const toWorld = useCallback(
+        (minimapX: number, minimapY: number) => {
+            return {
+                x: (minimapX - offset.x) / scale + worldBounds.x,
+                y: (minimapY - offset.y) / scale + worldBounds.y,
+            };
+        },
+        [offset.x, offset.y, scale, worldBounds.x, worldBounds.y],
+    );
+
+    const viewportRect = useMemo(() => {
+        const vx = -viewport.x / viewport.k;
+        const vy = -viewport.y / viewport.k;
+        const vw = viewportSize.width / viewport.k;
+        const vh = viewportSize.height / viewport.k;
+        const p1 = toMinimap(vx, vy);
+        const p2 = toMinimap(vx + vw, vy + vh);
+
+        return {
+            x: p1.x,
+            y: p1.y,
+            w: Math.max(p2.x - p1.x, 4),
+            h: Math.max(p2.y - p1.y, 4),
+        };
+    }, [toMinimap, viewport.k, viewport.x, viewport.y, viewportSize.height, viewportSize.width]);
+
+    const updateViewportFromEvent = (event: React.PointerEvent) => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const world = toWorld(event.clientX - rect.left, event.clientY - rect.top);
+        onViewportChange({
+            x: viewportSize.width / 2 - world.x * viewport.k,
+            y: viewportSize.height / 2 - world.y * viewport.k,
+            k: viewport.k,
+        });
+    };
+
+    return (
+        <div className="absolute bottom-[152px] left-4 z-50 overflow-hidden rounded-xl border backdrop-blur-2xl lg:bottom-16 lg:left-5" style={{ width, height, background: theme.toolbar.panel, borderColor: theme.toolbar.border }}>
+            <div
+                ref={containerRef}
+                className="relative h-full w-full cursor-crosshair"
+                onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    setIsDragging(true);
+                    updateViewportFromEvent(event);
+                }}
+                onPointerMove={(event) => {
+                    if (isDragging) updateViewportFromEvent(event);
+                }}
+                onPointerUp={() => setIsDragging(false)}
+                onPointerLeave={() => setIsDragging(false)}
+            >
+                {nodes.map((node) => {
+                    const pos = toMinimap(node.position.x, node.position.y);
+                    const color = getNodeDefinition(node.type)?.minimapColor || theme.node.muted;
+                    return (
+                        <div
+                            key={node.id}
+                            className="absolute rounded-[1px]"
+                            style={{
+                                left: pos.x,
+                                top: pos.y,
+                                width: Math.max(node.width * scale, 2),
+                                height: Math.max(node.height * scale, 2),
+                                backgroundColor: color,
+                                opacity: 0.8,
+                            }}
+                        />
+                    );
+                })}
+                <div className="pointer-events-none absolute border" style={{ left: viewportRect.x, top: viewportRect.y, width: viewportRect.w, height: viewportRect.h, borderColor: theme.node.activeStroke, background: `${theme.node.activeStroke}18` }} />
+            </div>
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-node-angle-dialog.tsx
+LINES: 1-93
+========================================================================
+import { useEffect, useState } from "react";
+import { Button, Modal, Segmented, Slider } from "antd";
+import { RotateCcw, WandSparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+export type CanvasImageAngleParams = {
+    horizontalAngle: number;
+    pitchAngle: number;
+    cameraDistance: number;
+    wideAngle: boolean;
+};
+
+const defaultParams: CanvasImageAngleParams = {
+    horizontalAngle: 0,
+    pitchAngle: 9,
+    cameraDistance: 4.8,
+    wideAngle: false,
+};
+
+export function CanvasNodeAngleDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (params: CanvasImageAngleParams) => void }) {
+    const { t } = useTranslation();
+    const [params, setParams] = useState(defaultParams);
+
+    useEffect(() => {
+        if (open) setParams(defaultParams);
+    }, [dataUrl, open]);
+
+    const update = <Key extends keyof CanvasImageAngleParams>(key: Key, value: CanvasImageAngleParams[Key]) => setParams((current) => ({ ...current, [key]: value }));
+
+    return (
+        <Modal title={null} open={open && Boolean(dataUrl)} onCancel={onClose} footer={null} width={860} centered destroyOnHidden>
+            <div className="space-y-5">
+                <div>
+                    <h2 className="text-xl font-semibold">{t("canvas.editors.angleTitle")}</h2>
+                    <p className="mt-1 text-sm opacity-60">{t("canvas.editors.angleDescription")}</p>
+                </div>
+                <div className="grid gap-6 md:grid-cols-[minmax(260px,1fr)_360px]">
+                    <div className="flex min-h-[300px] flex-col justify-between rounded-xl border p-4">
+                        <div className="grid flex-1 place-items-center">
+                            <div className="relative">
+                                <img src={dataUrl} alt="" className="size-48 rounded-2xl object-cover shadow-2xl" draggable={false} style={{ transform: previewTransform(params) }} />
+                                <div className="absolute -bottom-6 left-1/2 h-10 w-24 -translate-x-1/2 rounded-full border bg-black/20 backdrop-blur" />
+                            </div>
+                        </div>
+                        <Button className="w-fit" icon={<RotateCcw className="size-4" />} onClick={() => setParams(defaultParams)}>
+                            {t("canvas.editors.reset")}
+                        </Button>
+                    </div>
+                    <div className="space-y-6 py-2">
+                        <AngleSlider label={t("canvas.editors.horizontal")} value={params.horizontalAngle} min={-60} max={60} step={1} suffix="deg" onChange={(value) => update("horizontalAngle", value)} />
+                        <AngleSlider label={t("canvas.editors.pitch")} value={params.pitchAngle} min={-45} max={45} step={1} suffix="deg" onChange={(value) => update("pitchAngle", value)} />
+                        <AngleSlider label={t("canvas.editors.distance")} value={params.cameraDistance} min={1} max={10} step={0.1} onChange={(value) => update("cameraDistance", value)} />
+                        <div className="grid grid-cols-[88px_1fr_72px] items-center gap-4">
+                            <span className="font-medium opacity-75">{t("canvas.editors.lens")}</span>
+                            <Segmented
+                                className="w-fit"
+                                value={params.wideAngle ? "wide" : "standard"}
+                                options={[
+                                    { label: t("canvas.editors.standard"), value: "standard" },
+                                    { label: t("canvas.editors.wide"), value: "wide" },
+                                ]}
+                                onChange={(value) => update("wideAngle", value === "wide")}
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div className="flex justify-end">
+                    <Button type="primary" size="large" icon={<WandSparkles className="size-4" />} onClick={() => onConfirm(params)}>
+                        {t("canvas.editors.aiGenerate")}
+                    </Button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+function AngleSlider({ label, value, min, max, step, suffix = "", onChange }: { label: string; value: number; min: number; max: number; step: number; suffix?: string; onChange: (value: number) => void }) {
+    return (
+        <div className="grid grid-cols-[88px_1fr_72px] items-center gap-4">
+            <span className="font-medium opacity-75">{label}</span>
+            <Slider min={min} max={max} step={step} value={value} onChange={onChange} />
+            <span className="whitespace-nowrap text-right font-semibold">
+                {Number.isInteger(value) ? value : value.toFixed(1)}
+                {suffix}
+            </span>
+        </div>
+    );
+}
+
+function previewTransform(params: CanvasImageAngleParams) {
+    const scale = 1.08 - params.cameraDistance * 0.035 + (params.wideAngle ? -0.08 : 0);
+    return `perspective(520px) rotateY(${params.horizontalAngle * -0.45}deg) rotateX(${params.pitchAngle * 0.35}deg) scale(${Math.max(0.72, Math.min(1.08, scale))})`;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-node-crop-dialog.tsx
+LINES: 1-274
+========================================================================
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Button, Modal, Segmented, Tooltip } from "antd";
+import { Check, X, ZoomIn, ZoomOut } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { useImageEditorViewport } from "@/components/canvas/use-image-editor-viewport";
+import { readImageMeta } from "@/lib/image-utils";
+
+export type CanvasImageCropRect = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
+type DragMode = "move" | "resize";
+type ResizeHandle = "n" | "e" | "s" | "w" | "ne" | "nw" | "se" | "sw";
+
+const handles: ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+const minSize = 0.06;
+const defaultCrop = { x: 0.12, y: 0.12, width: 0.76, height: 0.76 };
+export function CanvasNodeCropDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (crop: CanvasImageCropRect) => void }) {
+    const { t } = useTranslation();
+    const [crop, setCrop] = useState<CanvasImageCropRect>(defaultCrop);
+    const [ratioPreset, setRatioPreset] = useState("free");
+    const [fixedRatio, setFixedRatio] = useState<number | null>(null);
+    const [image, setImage] = useState<{ width: number; height: number } | null>(null);
+    const dragAbortRef = useRef<AbortController | null>(null);
+    const viewport = useImageEditorViewport(image, open);
+    const boxRef = viewport.stageRef;
+    const cropSize = image ? { width: Math.max(1, Math.round(crop.width * image.width)), height: Math.max(1, Math.round(crop.height * image.height)) } : null;
+
+    useEffect(() => {
+        if (open) {
+            setCrop(defaultCrop);
+            setRatioPreset("free");
+            setFixedRatio(null);
+        }
+    }, [dataUrl, open]);
+
+    useEffect(() => {
+        if (!open) return;
+        void readImageMeta(dataUrl).then(setImage);
+    }, [dataUrl, open]);
+
+    useEffect(() => {
+        if (!open) dragAbortRef.current?.abort();
+        return () => dragAbortRef.current?.abort();
+    }, [open]);
+
+    const startDrag = (mode: DragMode, event: ReactPointerEvent, handle?: ResizeHandle) => {
+        const box = boxRef.current?.getBoundingClientRect();
+        if (!box) return;
+        event.preventDefault();
+        event.stopPropagation();
+        dragAbortRef.current?.abort();
+        const controller = new AbortController();
+        dragAbortRef.current = controller;
+        const start = { x: event.clientX, y: event.clientY, crop };
+        const move = (event: PointerEvent) => {
+            const dx = (event.clientX - start.x) / box.width;
+            const dy = (event.clientY - start.y) / box.height;
+            setCrop(mode === "move" ? moveCrop(start.crop, dx, dy) : resizeCrop(start.crop, dx, dy, handle || "se", resolveRatio(ratioPreset, image, fixedRatio), box));
+        };
+        const stop = () => controller.abort();
+        document.addEventListener("pointermove", move, { signal: controller.signal });
+        document.addEventListener("pointerup", stop, { signal: controller.signal });
+        document.addEventListener("pointercancel", stop, { signal: controller.signal });
+    };
+
+    return (
+        <Modal title={t("canvas.editors.cropTitle")} open={open && Boolean(dataUrl)} onCancel={onClose} footer={null} width={780} centered destroyOnHidden transitionName="" maskTransitionName="">
+            <div className="space-y-4">
+                <div
+                    ref={viewport.viewportRef}
+                    {...viewport.panHandlers}
+                    className={`relative h-[min(62vh,620px)] min-h-[340px] rounded-lg bg-black/5 ${viewport.scrollClassName} ${viewport.isPanning ? "cursor-grabbing" : viewport.spacePressed ? "cursor-grab" : ""}`}
+                >
+                    <div className="relative" style={viewport.contentStyle}>
+                        <div ref={boxRef} className="absolute isolate overflow-hidden rounded-lg bg-black select-none [backface-visibility:hidden] [contain:layout_paint] [transform:translateZ(0)]" style={viewport.stageStyle}>
+                            <div className="absolute left-0 top-0 [backface-visibility:hidden]" style={viewport.mediaStyle}>
+                                <img src={dataUrl} alt="" className="block h-full w-full object-contain opacity-90" draggable={false} />
+                            </div>
+                            <CropMask crop={crop} />
+                            <div className="absolute cursor-move border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,.3),0_0_28px_rgba(0,0,0,.28)]" style={cropStyle(crop)} onPointerDown={(event) => startDrag("move", event)}>
+                                <div className="pointer-events-none absolute inset-x-0 top-1/3 border-t border-white/50" />
+                                <div className="pointer-events-none absolute inset-x-0 top-2/3 border-t border-white/50" />
+                                <div className="pointer-events-none absolute inset-y-0 left-1/3 border-l border-white/50" />
+                                <div className="pointer-events-none absolute inset-y-0 left-2/3 border-l border-white/50" />
+                                {handles.map((handle) => (
+                                    <button
+                                        key={handle}
+                                        type="button"
+                                        className="absolute size-3 rounded-full border border-black bg-white"
+                                        style={handleStyle(handle)}
+                                        onPointerDown={(event) => startDrag("resize", event, handle)}
+                                        aria-label={t("canvas.editors.adjustCrop")}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-center gap-1">
+                    <Tooltip title={t("canvas.editors.zoomOut")}>
+                        <Button type="text" icon={<ZoomOut className="size-4" />} disabled={!viewport.canZoomOut} aria-label={t("canvas.editors.zoomOut")} onClick={viewport.zoomOut} />
+                    </Tooltip>
+                    <button type="button" className="min-w-14 text-center text-xs font-semibold tabular-nums opacity-70" onClick={viewport.resetZoom}>
+                        {Math.round(viewport.zoom * 100)}%
+                    </button>
+                    <Tooltip title={t("canvas.editors.zoomIn")}>
+                        <Button type="text" icon={<ZoomIn className="size-4" />} disabled={!viewport.canZoomIn} aria-label={t("canvas.editors.zoomIn")} onClick={viewport.zoomIn} />
+                    </Tooltip>
+                    <span className="ml-2 text-xs opacity-55">{t("canvas.editors.cropHint")}</span>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-3 text-sm opacity-80">
+                        <span>{t("canvas.editors.cropSize", { size: cropSize ? `${cropSize.width} x ${cropSize.height}` : t("canvas.editors.unknown") })}</span>
+                        <span>{t("canvas.editors.ratio", { ratio: cropSize ? formatRatio(cropSize.width, cropSize.height) : t("canvas.editors.unknown") })}</span>
+                        {image ? (
+                            <span>{t("canvas.editors.original", { width: image.width, height: image.height })}</span>
+                        ) : null}
+                    </div>
+                    <div className="thin-scrollbar max-w-full overflow-x-auto">
+                        <Segmented
+                            className="min-w-max"
+                            size="small"
+                            options={[
+                                { label: t("canvas.editors.free"), value: "free" },
+                                { label: t("canvas.editors.fixed"), value: "fixed" },
+                                { label: t("canvas.editors.originalMode"), value: "original" },
+                                ...["1:1", "4:3", "16:9", "9:16"],
+                            ]}
+                            value={ratioPreset}
+                            onChange={(value) => {
+                                const preset = String(value);
+                                setRatioPreset(preset);
+                                const currentRatio = image ? (crop.width * image.width) / Math.max(1, crop.height * image.height) : null;
+                                const nextFixedRatio = preset === "fixed" ? currentRatio : null;
+                                setFixedRatio(nextFixedRatio);
+                                const ratio = resolveRatio(preset, image, nextFixedRatio);
+                                if (ratio && image) setCrop((current) => fitCropToRatio(current, ratio, image));
+                            }}
+                        />
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2">
+                    <Button onClick={() => setCrop(defaultCrop)}>{t("canvas.editors.reset")}</Button>
+                    <Button icon={<X className="size-4" />} onClick={onClose}>
+                        {t("canvas.editors.cancel")}
+                    </Button>
+                    <Button type="primary" icon={<Check className="size-4" />} onClick={() => onConfirm(crop)}>
+                        {t("canvas.editors.confirmCrop")}
+                    </Button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+function CropMask({ crop }: { crop: CanvasImageCropRect }) {
+    return (
+        <>
+            <div className="absolute inset-x-0 top-0 bg-black/55" style={{ height: `${crop.y * 100}%` }} />
+            <div className="absolute inset-x-0 bottom-0 bg-black/55" style={{ height: `${(1 - crop.y - crop.height) * 100}%` }} />
+            <div className="absolute bg-black/55" style={{ left: 0, top: `${crop.y * 100}%`, width: `${crop.x * 100}%`, height: `${crop.height * 100}%` }} />
+            <div className="absolute bg-black/55" style={{ right: 0, top: `${crop.y * 100}%`, width: `${(1 - crop.x - crop.width) * 100}%`, height: `${crop.height * 100}%` }} />
+        </>
+    );
+}
+
+function moveCrop(crop: CanvasImageCropRect, dx: number, dy: number): CanvasImageCropRect {
+    return { ...crop, x: clamp(crop.x + dx, 0, 1 - crop.width), y: clamp(crop.y + dy, 0, 1 - crop.height) };
+}
+
+function resizeCrop(crop: CanvasImageCropRect, dx: number, dy: number, handle: ResizeHandle, aspectRatio: number | null, box: DOMRect): CanvasImageCropRect {
+    let next = { ...crop };
+    if (handle.includes("e")) next.width = crop.width + dx;
+    if (handle.includes("s")) next.height = crop.height + dy;
+    if (handle.includes("w")) {
+        next.x = crop.x + dx;
+        next.width = crop.width - dx;
+    }
+    if (handle.includes("n")) {
+        next.y = crop.y + dy;
+        next.height = crop.height - dy;
+    }
+    if (aspectRatio) {
+        const normalizedRatio = aspectRatio * (box.height / box.width);
+        const horizontalOnly = (handle.includes("e") || handle.includes("w")) && !handle.includes("n") && !handle.includes("s");
+        const useWidth = horizontalOnly || (handle.length > 1 && Math.abs(dx * box.width) >= Math.abs(dy * box.height));
+        if (useWidth) next.height = next.width / normalizedRatio;
+        else next.width = next.height * normalizedRatio;
+        if (handle.includes("w")) next.x = crop.x + crop.width - next.width;
+        if (handle.includes("n")) next.y = crop.y + crop.height - next.height;
+    }
+    if (aspectRatio) {
+        const normalizedRatio = aspectRatio * (box.height / box.width);
+        const scaleDown = Math.min(1, 1 / Math.max(next.width, 0.001), 1 / Math.max(next.height, 0.001));
+        next.width *= scaleDown;
+        next.height *= scaleDown;
+        if (next.width < minSize || next.height < minSize) {
+            const minimumScale = Math.max(minSize / Math.max(next.width, 0.001), minSize / Math.max(next.height, 0.001));
+            next.width *= minimumScale;
+            next.height *= minimumScale;
+        }
+        next.width = Math.min(next.width, next.height * normalizedRatio);
+        next.height = next.width / normalizedRatio;
+    } else {
+        next.width = clamp(next.width, minSize, 1);
+        next.height = clamp(next.height, minSize, 1);
+    }
+    next.x = clamp(next.x, 0, 1 - next.width);
+    next.y = clamp(next.y, 0, 1 - next.height);
+    return next;
+}
+
+function resolveRatio(preset: string, image: { width: number; height: number } | null, fixedRatio: number | null) {
+    if (preset === "free" || !image) return null;
+    if (preset === "fixed") return fixedRatio;
+    if (preset === "original") return image.width / image.height;
+    const [width, height] = preset.split(":").map(Number);
+    return width > 0 && height > 0 ? width / height : null;
+}
+
+function fitCropToRatio(crop: CanvasImageCropRect, ratio: number, image: { width: number; height: number }): CanvasImageCropRect {
+    const normalizedRatio = ratio * (image.height / image.width);
+    let width = crop.width;
+    let height = width / normalizedRatio;
+    if (height > crop.height) {
+        height = crop.height;
+        width = height * normalizedRatio;
+    }
+    if (width > 1) {
+        width = 1;
+        height = width / normalizedRatio;
+    }
+    if (height > 1) {
+        height = 1;
+        width = height * normalizedRatio;
+    }
+    return {
+        x: clamp(crop.x + (crop.width - width) / 2, 0, 1 - width),
+        y: clamp(crop.y + (crop.height - height) / 2, 0, 1 - height),
+        width,
+        height,
+    };
+}
+
+function cropStyle(crop: CanvasImageCropRect) {
+    return { left: `${crop.x * 100}%`, top: `${crop.y * 100}%`, width: `${crop.width * 100}%`, height: `${crop.height * 100}%` };
+}
+
+function handleStyle(handle: ResizeHandle) {
+    const top = handle.includes("n") ? "-6px" : handle.includes("s") ? "calc(100% - 6px)" : "calc(50% - 6px)";
+    const left = handle.includes("w") ? "-6px" : handle.includes("e") ? "calc(100% - 6px)" : "calc(50% - 6px)";
+    return { top, left, cursor: `${handle}-resize` };
+}
+
+function clamp(value: number, min: number, max: number) {
+    return Math.min(max, Math.max(min, value));
+}
+
+function formatRatio(width: number, height: number) {
+    const divisor = gcd(width, height);
+    return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`;
+}
+
+function gcd(a: number, b: number): number {
+    return b ? gcd(b, a % b) : Math.max(1, a);
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-node-generation.ts
+LINES: 1-231
+========================================================================
+import type { AiTextMessage } from "@/services/api/image";
+import i18n from "@/i18n";
+import { imageReferenceLabel } from "@/lib/image-reference-prompt";
+import type { ReferenceImage } from "@/types/image";
+import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
+import { CanvasNodeType, type CanvasConnection, type CanvasNodeData } from "@/types/canvas";
+import { getGenerationResourceNodes, getGroupResourceNodes } from "@/lib/canvas/canvas-resource-references";
+import { getNodeDefinition } from "@/lib/canvas/node-registry";
+
+export type NodeGenerationContext = {
+    prompt: string;
+    referenceImages: ReferenceImage[];
+    referenceVideos: ReferenceVideo[];
+    referenceAudios: ReferenceAudio[];
+    textCount: number;
+    imageCount: number;
+    videoCount: number;
+    audioCount: number;
+};
+
+type NodeGenerationResourceInput = {
+    nodeId: string;
+    type: "text" | "image" | "video" | "audio";
+    title: string;
+    text?: string;
+    image?: ReferenceImage;
+    video?: ReferenceVideo;
+    audio?: ReferenceAudio;
+};
+
+type NodeGenerationGroupInput = {
+    nodeId: string;
+    type: "group";
+    title: string;
+    children: NodeGenerationResourceInput[];
+};
+
+export type NodeGenerationInput = NodeGenerationResourceInput | NodeGenerationGroupInput;
+
+export function buildNodeGenerationContext(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[], prompt: string): NodeGenerationContext {
+    const inputs = buildNodeGenerationInputs(nodeId, nodes, connections);
+    const sourceNode = nodes.find((node) => node.id === nodeId);
+    if (sourceNode?.type === CanvasNodeType.Config && Boolean(sourceNode.metadata?.composerContent?.trim()) && /@\[node:[^\]]+\]/.test(prompt)) {
+        return buildComposerGenerationContext(inputs, prompt);
+    }
+
+    const resourceInputs = flattenGenerationInputs(inputs);
+    let textIndex = 0;
+    const upstreamText = resourceInputs.flatMap((input) => (input.text ? [textBlock(generationLabel("text", textIndex++), input.text)] : [])).join("\n\n");
+    const referenceImages = resourceInputs.map((input) => input.image).filter((image): image is ReferenceImage => Boolean(image));
+    const referenceVideos = resourceInputs.map((input) => input.video).filter((video): video is ReferenceVideo => Boolean(video));
+    const referenceAudios = resourceInputs.map((input) => input.audio).filter((audio): audio is ReferenceAudio => Boolean(audio));
+
+    return {
+        prompt: upstreamText ? `${prompt}\n\n${upstreamText}` : prompt,
+        referenceImages,
+        referenceVideos,
+        referenceAudios,
+        textCount: resourceInputs.filter((input) => input.type === "text").length,
+        imageCount: referenceImages.length,
+        videoCount: referenceVideos.length,
+        audioCount: referenceAudios.length,
+    };
+}
+
+function buildComposerGenerationContext(inputs: NodeGenerationInput[], prompt: string): NodeGenerationContext {
+    const inputByNodeId = new Map(inputs.map((input) => [input.nodeId, input]));
+    const selectedInputs: NodeGenerationResourceInput[] = [];
+    const labelByNodeId = new Map<string, string>();
+    const textBlocks: string[] = [];
+    const counts = { image: 0, video: 0, audio: 0, text: 0 };
+    let hasToken = false;
+    let lastIndex = 0;
+    let nextPrompt = "";
+
+    for (const match of prompt.matchAll(/@\[node:([^\]]+)\]/g)) {
+        if (match.index === undefined) continue;
+        hasToken = true;
+        nextPrompt += prompt.slice(lastIndex, match.index);
+        const input = inputByNodeId.get(match[1]);
+        if (input) {
+            const labels = flattenGenerationInputs([input]).map((resource) => {
+                let label = labelByNodeId.get(resource.nodeId);
+                if (!label) {
+                    label = generationLabel(resource.type, counts[resource.type]++);
+                    labelByNodeId.set(resource.nodeId, label);
+                    if (resource.type === "text") textBlocks.push(textBlock(label, resource.text || ""));
+                    else selectedInputs.push(resource);
+                }
+                return resource.type === "text" ? `【${label}】` : label;
+            });
+            nextPrompt += labels.join("、");
+        }
+        lastIndex = match.index + match[0].length;
+    }
+
+    nextPrompt += prompt.slice(lastIndex);
+    if (textBlocks.length) nextPrompt = `${nextPrompt.trim()}\n\n${textBlocks.join("\n\n")}`;
+    const referenceImages = selectedInputs.map((input) => input.image).filter((image): image is ReferenceImage => Boolean(image));
+    const referenceVideos = selectedInputs.map((input) => input.video).filter((video): video is ReferenceVideo => Boolean(video));
+    const referenceAudios = selectedInputs.map((input) => input.audio).filter((audio): audio is ReferenceAudio => Boolean(audio));
+
+    if (!hasToken) {
+        return {
+            prompt,
+            referenceImages: [],
+            referenceVideos: [],
+            referenceAudios: [],
+            textCount: 0,
+            imageCount: 0,
+            videoCount: 0,
+            audioCount: 0,
+        };
+    }
+
+    return {
+        prompt: nextPrompt,
+        referenceImages,
+        referenceVideos,
+        referenceAudios,
+        textCount: counts.text,
+        imageCount: referenceImages.length,
+        videoCount: referenceVideos.length,
+        audioCount: referenceAudios.length,
+    };
+}
+
+export function buildNodeGenerationInputs(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]): NodeGenerationInput[] {
+    return getGenerationResourceNodes(nodeId, nodes, connections).flatMap((node): NodeGenerationInput[] => {
+        if (node.type === CanvasNodeType.Group) {
+            const children = getGroupResourceNodes(node.id, nodes).flatMap(readNodeGenerationResource);
+            return children.length ? [{ nodeId: node.id, type: "group", title: node.title, children }] : [];
+        }
+        return readNodeGenerationResource(node);
+    });
+}
+
+function flattenGenerationInputs(inputs: NodeGenerationInput[]) {
+    const resources = inputs.flatMap((input) => (input.type === "group" ? input.children : [input]));
+    return [...new Map(resources.map((input) => [input.nodeId, input])).values()];
+}
+
+function readNodeGenerationResource(node: CanvasNodeData): NodeGenerationResourceInput[] {
+    const image = readReferenceImage(node);
+    if (image) return [{ nodeId: node.id, type: "image", title: node.title, image }];
+    const video = readReferenceVideo(node);
+    if (video) return [{ nodeId: node.id, type: "video", title: node.title, video }];
+    const audio = readReferenceAudio(node);
+    if (audio) return [{ nodeId: node.id, type: "audio", title: node.title, audio }];
+    const resource = getNodeDefinition(node.type)?.resource?.(node);
+    if (resource?.kind === "image" && resource.url) return [{ nodeId: node.id, type: "image", title: node.title, image: { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata?.mimeType || "image/png", dataUrl: resource.url, storageKey: node.metadata?.storageKey } }];
+    if (resource?.kind === "video" && resource.url) return [{ nodeId: node.id, type: "video", title: node.title, video: { id: node.id, name: `${node.title || node.id}.mp4`, type: node.metadata?.mimeType || "video/mp4", url: resource.url, storageKey: node.metadata?.storageKey } }];
+    if (resource?.kind === "audio" && resource.url) return [{ nodeId: node.id, type: "audio", title: node.title, audio: { id: node.id, name: `${node.title || node.id}.mp3`, type: node.metadata?.mimeType || "audio/mpeg", url: resource.url, storageKey: node.metadata?.storageKey } }];
+    if (resource?.kind === "text" && resource.text) return [{ nodeId: node.id, type: "text", title: node.title, text: resource.text }];
+    const text = readNodeTextInput(node);
+    return text ? [{ nodeId: node.id, type: "text", title: node.title, text }] : [];
+}
+
+export function buildNodeResponseMessages(context: NodeGenerationContext): AiTextMessage[] {
+    if (!context.referenceImages.length) {
+        return [{ role: "user", content: context.prompt }];
+    }
+
+    return [
+        {
+            role: "user",
+            content: [{ type: "text" as const, text: context.prompt }, ...context.referenceImages.map((image) => ({ type: "image_url" as const, image_url: { url: image.dataUrl } }))],
+        },
+    ];
+}
+
+export async function hydrateNodeGenerationContext(context: NodeGenerationContext) {
+    const { imageToDataUrl } = await import("@/services/image-storage");
+    return { ...context, referenceImages: await Promise.all(context.referenceImages.map(async (image) => ({ ...image, dataUrl: await imageToDataUrl(image) }))) };
+}
+
+function readNodeTextInput(node: CanvasNodeData) {
+    if (node.type === CanvasNodeType.Text) return node.metadata?.content || node.metadata?.prompt || "";
+    return node.metadata?.prompt || "";
+}
+
+function textBlock(label: string, text: string) {
+    return `【${label}】\n${text}`;
+}
+
+function generationLabel(type: NodeGenerationResourceInput["type"], index: number) {
+    if (type === "image") return imageReferenceLabel(index);
+    if (type === "video") return i18n.t("canvas.configNode.videoReferences") + ` ${index + 1}`;
+    if (type === "audio") return i18n.t("canvas.configNode.audioReferences") + ` ${index + 1}`;
+    return i18n.t("canvas.composer.resources.text", { index: index + 1 });
+}
+
+function readReferenceImage(node: CanvasNodeData): ReferenceImage | null {
+    if (node.type !== CanvasNodeType.Image || !node.metadata?.content) return null;
+    const content = node.metadata.content;
+    return {
+        id: node.id,
+        name: `${node.title || node.id}.png`,
+        type: node.metadata.mimeType || "image/png",
+        dataUrl: content,
+        url: /\/media\//.test(content) ? content : undefined,
+        storageKey: node.metadata.storageKey,
+    };
+}
+
+function readReferenceVideo(node: CanvasNodeData): ReferenceVideo | null {
+    if (node.type !== CanvasNodeType.Video || !node.metadata?.content) return null;
+    return {
+        id: node.id,
+        name: `${node.title || node.id}.mp4`,
+        type: node.metadata.mimeType || "video/mp4",
+        url: node.metadata.content,
+        storageKey: node.metadata.storageKey,
+        bytes: node.metadata.bytes,
+        width: node.metadata.naturalWidth,
+        height: node.metadata.naturalHeight,
+        durationMs: node.metadata.durationMs,
+    };
+}
+
+function readReferenceAudio(node: CanvasNodeData): ReferenceAudio | null {
+    if (node.type !== CanvasNodeType.Audio || !node.metadata?.content) return null;
+    return {
+        id: node.id,
+        name: `${node.title || node.id}.mp3`,
+        type: node.metadata.mimeType || "audio/mpeg",
+        url: node.metadata.content,
+        storageKey: node.metadata.storageKey,
+        durationMs: node.metadata.durationMs,
+    };
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-node-hover-toolbar.tsx
+LINES: 1-335
+========================================================================
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { App, Modal, Segmented, Tooltip } from "antd";
+import { Download, Ellipsis, FolderPlus, Image as ImageIcon, Info, MessageSquare, Minus, Music2, Plus, RefreshCw, Settings2, Trash2, Ungroup, Upload, Video } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { canvasThemes } from "@/lib/canvas-theme";
+import { getNodeDefinition } from "@/lib/canvas/node-registry";
+import { formatBytes, getDataUrlByteSize } from "@/lib/image-utils";
+import { useCopyText } from "@/hooks/use-copy-text";
+import { useMediaArchive } from "@/hooks/use-media-archive";
+import { useThemeStore } from "@/stores/use-theme-store";
+import { CanvasNodeType, type CanvasNodeData, type ViewportTransform } from "@/types/canvas";
+import type { CanvasNodeToolbarItem } from "@/types/canvas-plugin";
+import { ImageToolSettingsModal, type ImageToolbarSettingsTool } from "./canvas-image-toolbar-settings-modal";
+import { IMAGE_QUICK_TOOLS_STORAGE_KEY, buildImageToolbarTools, defaultImageQuickToolIds, readImageQuickToolsConfig, type ImageQuickToolId } from "./canvas-image-toolbar-tools";
+
+type CanvasNodeHoverToolbarProps = {
+    node: CanvasNodeData | null;
+    viewport: ViewportTransform;
+    onKeep: (nodeId: string) => void;
+    onLeave: () => void;
+    onInfo: (node: CanvasNodeData) => void;
+    onDecreaseFont: (node: CanvasNodeData) => void;
+    onIncreaseFont: (node: CanvasNodeData) => void;
+    onToggleDialog: (node: CanvasNodeData) => void;
+    onGenerateImage: (node: CanvasNodeData) => void;
+    onUpload: (node: CanvasNodeData) => void;
+    onDownload: (node: CanvasNodeData) => void;
+    onSaveAsset: (node: CanvasNodeData) => void;
+    onMaskEdit: (node: CanvasNodeData) => void;
+    onCrop: (node: CanvasNodeData) => void;
+    onSplit: (node: CanvasNodeData) => void;
+    onUpscale: (node: CanvasNodeData) => void;
+    onSuperResolve: (node: CanvasNodeData) => void;
+    onAngle: (node: CanvasNodeData) => void;
+    onViewImage: (node: CanvasNodeData) => void;
+    onReversePrompt: (node: CanvasNodeData) => void;
+    onRetry: (node: CanvasNodeData) => void;
+    onToggleFreeResize: (node: CanvasNodeData) => void;
+    onDelete: (node: CanvasNodeData) => void;
+    onUngroup?: (node: CanvasNodeData) => void;
+    extraTools?: CanvasNodeToolbarItem[];
+};
+
+type ToolbarTool = {
+    id: string;
+    title: string;
+    label: string;
+    icon: ReactNode;
+    onClick: () => void;
+    active?: boolean;
+    danger?: boolean;
+};
+
+export function CanvasNodeHoverToolbar({
+    node,
+    viewport,
+    onKeep,
+    onLeave,
+    onInfo,
+    onDecreaseFont,
+    onIncreaseFont,
+    onToggleDialog,
+    onGenerateImage,
+    onUpload,
+    onDownload,
+    onSaveAsset,
+    onMaskEdit,
+    onCrop,
+    onSplit,
+    onUpscale,
+    onSuperResolve,
+    onAngle,
+    onViewImage,
+    onReversePrompt,
+    onRetry,
+    onToggleFreeResize,
+    onDelete,
+    onUngroup,
+    extraTools = [],
+}: CanvasNodeHoverToolbarProps) {
+    const [quickImageToolIds, setQuickImageToolIds] = useState<ImageQuickToolId[]>(defaultImageQuickToolIds);
+    const [showImageToolLabels, setShowImageToolLabels] = useState(false);
+    const [draftImageToolIds, setDraftImageToolIds] = useState<ImageQuickToolId[]>(defaultImageQuickToolIds);
+    const [draftShowImageToolLabels, setDraftShowImageToolLabels] = useState(false);
+    const [imageToolSettingsOpen, setImageToolSettingsOpen] = useState(false);
+    const { message } = App.useApp();
+    const { t } = useTranslation();
+    const copyText = useCopyText();
+    const archive = useMediaArchive(node?.type === CanvasNodeType.Video ? node.metadata?.content : undefined);
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+
+    useEffect(() => {
+        try {
+            const stored = window.localStorage.getItem(IMAGE_QUICK_TOOLS_STORAGE_KEY);
+            if (!stored) return;
+            const parsed = JSON.parse(stored) as unknown;
+            const config = readImageQuickToolsConfig(parsed);
+            setQuickImageToolIds(config.ids);
+            setShowImageToolLabels(config.showLabels);
+        } catch {
+            window.localStorage.removeItem(IMAGE_QUICK_TOOLS_STORAGE_KEY);
+        }
+    }, []);
+
+    useEffect(() => {
+        setImageToolSettingsOpen(false);
+    }, [node?.id]);
+
+    if (!node) return null;
+
+    const activeNode = node;
+    const left = viewport.x + (node.position.x + node.width / 2) * viewport.k;
+    // 节点标题行挂在节点上方，工具栏再往上让出标题高度，避免两者叠在一起。
+    const top = viewport.y + node.position.y * viewport.k - 30;
+    const isImage = node.type === CanvasNodeType.Image;
+    const isVideo = node.type === CanvasNodeType.Video;
+    const isAudio = node.type === CanvasNodeType.Audio;
+    const hasImage = isImage && Boolean(node.metadata?.content);
+    const hasVideo = isVideo && Boolean(node.metadata?.content);
+    const hasAudio = isAudio && Boolean(node.metadata?.content);
+    const isText = node.type === CanvasNodeType.Text;
+    const isConfig = node.type === CanvasNodeType.Config;
+    const canRetry = node.metadata?.status === "error" && !(isVideo && Boolean(node.metadata?.videoTaskId) && !hasVideo);
+    const canQueryVideoTask = isVideo && Boolean(node.metadata?.videoTaskId) && !hasVideo && node.metadata?.status !== "loading";
+    const quickImageToolIdSet = new Set(quickImageToolIds);
+    const copyImagePrompt = (target: CanvasNodeData) => {
+        const prompt = target.metadata?.prompt?.trim();
+        if (!prompt) {
+            message.warning(t("canvas.nodeToolbar.noPrompt"));
+            return;
+        }
+        copyText(prompt, t("common.promptCopied"));
+    };
+    const imageTools = buildImageToolbarTools(node, { onUpload, onToggleFreeResize, onMaskEdit, onCrop, onSplit, onUpscale, onSuperResolve, onAngle, onViewImage, onCopyPrompt: copyImagePrompt, onReversePrompt });
+
+    function openImageToolSettings() {
+        onKeep(activeNode.id);
+        setDraftImageToolIds(quickImageToolIds);
+        setDraftShowImageToolLabels(showImageToolLabels);
+        setImageToolSettingsOpen(true);
+    }
+
+    const baseToolbarTools: ToolbarTool[] = [
+        { id: "info", title: t("canvas.nodeToolbar.infoTitle"), label: t("canvas.nodeToolbar.info"), icon: <Info className="size-4" />, onClick: () => onInfo(node) },
+        ...(node.type === CanvasNodeType.Group && onUngroup ? [{ id: "ungroup", title: t("canvas.nodeToolbar.ungroupTitle"), label: t("canvas.nodeToolbar.ungroup"), icon: <Ungroup className="size-4" />, onClick: () => onUngroup(node) }] : []),
+        { id: "delete", title: t("canvas.nodeToolbar.removeTitle"), label: t("common.delete"), icon: <Trash2 className="size-4" />, onClick: () => onDelete(node), danger: true },
+    ];
+    const nodeToolbarTools: ToolbarTool[] = [
+        ...(canQueryVideoTask ? [{ id: "queryVideoTask", title: t("canvas.nodeToolbar.queryVideoTaskTitle"), label: t("canvas.nodeToolbar.queryVideoTask"), icon: <RefreshCw className="size-4" />, onClick: () => onRetry(node) }] : []),
+        ...(canRetry ? [{ id: "retry", title: t("canvas.nodeToolbar.retryTitle"), label: t("canvas.node.retry"), icon: <RefreshCw className="size-4" />, onClick: () => onRetry(node) }] : []),
+        ...(hasImage || hasVideo || isText ? [{ id: "saveAsset", title: t("common.addToAssets"), label: t("canvas.nodeToolbar.saveAsset"), icon: <FolderPlus className="size-4" />, onClick: () => onSaveAsset(node) }] : []),
+        ...(archive && !archive.disabled ? [{ id: "archive", title: archive.label, label: archive.label, icon: <FolderPlus className="size-4" />, onClick: archive.run }] : []),
+        ...(hasImage || hasVideo || hasAudio ? [{ id: "download", title: t(hasAudio ? "canvas.nodeToolbar.downloadAudio" : hasVideo ? "canvas.nodeToolbar.downloadVideo" : "canvas.nodeToolbar.downloadImage"), label: t("common.download"), icon: <Download className="size-4" />, onClick: () => onDownload(node) }] : []),
+        ...(isVideo ? [{ id: "edit", title: t("common.edit"), label: t("common.edit"), icon: <MessageSquare className="size-4" />, onClick: () => onToggleDialog(node) }] : []),
+        ...(isText ? [{ id: "generateImage", title: t("canvas.node.generateImage"), label: t("canvas.node.generate"), icon: <ImageIcon className="size-4" />, onClick: () => onGenerateImage(node) }] : []),
+        ...(isConfig ? [{ id: "config", title: t("canvas.configNode.title"), label: t("canvas.configNode.title"), icon: <Settings2 className="size-4" />, onClick: () => onToggleDialog(node) }] : []),
+        ...(isText ? [{ id: "decreaseFont", title: t("canvas.nodeToolbar.decreaseFont"), label: t("canvas.nodeToolbar.zoomOut"), icon: <Minus className="size-4" />, onClick: () => onDecreaseFont(node) }] : []),
+        ...(isText ? [{ id: "increaseFont", title: t("canvas.nodeToolbar.increaseFont"), label: t("canvas.nodeToolbar.zoomIn"), icon: <Plus className="size-4" />, onClick: () => onIncreaseFont(node) }] : []),
+        ...(isImage && !hasImage ? [{ id: "uploadImage", title: t("canvas.nodeToolbar.uploadImage"), label: t("canvas.nodeToolbar.uploadImage"), icon: <Upload className="size-4" />, onClick: () => onUpload(node) }] : []),
+        ...(isVideo ? [{ id: "uploadVideo", title: t(hasVideo ? "canvas.nodeToolbar.replaceVideo" : "canvas.nodeToolbar.uploadVideo"), label: t(hasVideo ? "canvas.nodeToolbar.replaceVideo" : "canvas.nodeToolbar.uploadVideo"), icon: <Video className="size-4" />, onClick: () => onUpload(node) }] : []),
+        ...(isAudio ? [{ id: "uploadAudio", title: t(hasAudio ? "canvas.nodeToolbar.replaceAudio" : "canvas.nodeToolbar.uploadAudio"), label: t(hasAudio ? "canvas.nodeToolbar.replaceAudio" : "canvas.nodeToolbar.uploadAudio"), icon: <Music2 className="size-4" />, onClick: () => onUpload(node) }] : []),
+        ...(hasImage ? imageTools.map((tool) => ({ id: tool.id, title: tool.title, label: tool.label, icon: tool.icon, active: tool.active, onClick: tool.onClick })) : []),
+    ];
+    const toolbarTools = hasImage ? [...baseToolbarTools, ...nodeToolbarTools].filter((tool) => quickImageToolIdSet.has(tool.id as ImageQuickToolId)) : [...baseToolbarTools, ...nodeToolbarTools, ...extraTools];
+    const selectableImageToolbarTools = [...baseToolbarTools, ...nodeToolbarTools].filter((tool) => tool.id !== "retry") as ImageToolbarSettingsTool[];
+
+    const closeImageToolSettings = () => {
+        setImageToolSettingsOpen(false);
+        onLeave();
+    };
+
+    const setDraftImageToolVisible = (id: ImageQuickToolId, visible: boolean) => {
+        setDraftImageToolIds((current) => {
+            const selected = new Set(current);
+            if (visible) selected.add(id);
+            else selected.delete(id);
+            return selectableImageToolbarTools.filter((tool) => selected.has(tool.id)).map((tool) => tool.id);
+        });
+    };
+
+    const saveImageToolSettings = () => {
+        const config = { ids: draftImageToolIds, showLabels: draftShowImageToolLabels };
+        setQuickImageToolIds(config.ids);
+        setShowImageToolLabels(config.showLabels);
+        window.localStorage.setItem(IMAGE_QUICK_TOOLS_STORAGE_KEY, JSON.stringify(config));
+        closeImageToolSettings();
+    };
+
+    return (
+        <>
+            <div
+                className="thin-scrollbar absolute z-[70] flex h-10 max-w-[calc(100vw-16px)] -translate-x-1/2 -translate-y-full items-center gap-0.5 overflow-x-auto rounded-[14px] px-1.5 backdrop-blur-2xl [&>*]:shrink-0"
+                data-node-toolbar={node.id}
+                style={{
+                    left,
+                    top,
+                    background: theme.toolbar.panel,
+                    border: `1px solid ${theme.toolbar.border}`,
+                    color: theme.toolbar.item,
+                    boxShadow: "0 18px 40px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.04) inset",
+                }}
+                onMouseEnter={() => onKeep(node.id)}
+                onMouseLeave={() => {
+                    if (!imageToolSettingsOpen) onLeave();
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+            >
+                {toolbarTools.map((tool) => (
+                    <ToolbarAction key={tool.id} {...tool} showLabel={isImage ? showImageToolLabels : true} />
+                ))}
+                {hasImage ? <ToolbarAction id="more" title={t("canvas.imageTools.configure")} label={t("canvas.imageTools.more")} icon={<Ellipsis className="size-3.5" />} active={imageToolSettingsOpen} onClick={openImageToolSettings} showLabel={showImageToolLabels} /> : null}
+            </div>
+            {hasImage ? (
+                <ImageToolSettingsModal
+                    open={imageToolSettingsOpen}
+                    tools={selectableImageToolbarTools}
+                    selectedIds={draftImageToolIds}
+                    showLabels={draftShowImageToolLabels}
+                    onToggle={setDraftImageToolVisible}
+                    onShowLabelsChange={setDraftShowImageToolLabels}
+                    onCancel={closeImageToolSettings}
+                    onSave={saveImageToolSettings}
+                />
+            ) : null}
+        </>
+    );
+}
+
+export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeData | null; open: boolean; onClose: () => void }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const { t } = useTranslation();
+    const [view, setView] = useState<"info" | "json">("info");
+    const imageBytes = node?.type === CanvasNodeType.Image && node.metadata?.content ? getDataUrlByteSize(node.metadata.content) : 0;
+    const batchCount = node?.type === CanvasNodeType.Image ? node.metadata?.images?.length || 0 : 0;
+    const json = useMemo(() => {
+        if (!node) return "";
+        return JSON.stringify(
+            node,
+            (key, value) => {
+                if (key === "content" && typeof value === "string" && value.startsWith("data:image/")) {
+                    return "[base64 image]";
+                }
+                return value;
+            },
+            2,
+        );
+    }, [node]);
+
+    useEffect(() => {
+        if (open) setView("info");
+    }, [node?.id, open]);
+
+    const title = (
+        <div className="flex items-center justify-between gap-4 pr-12">
+            <span>{t("canvas.nodeToolbar.nodeInfo")}</span>
+            <Segmented
+                size="small"
+                value={view}
+                onChange={(value) => setView(value as "info" | "json")}
+                options={[
+                    { label: t("canvas.nodeToolbar.info"), value: "info" },
+                    { label: "JSON", value: "json" },
+                ]}
+            />
+        </div>
+    );
+
+    return (
+        <Modal className="canvas-node-info-modal" title={title} open={open && Boolean(node)} centered footer={null} onCancel={onClose}>
+            {node ? (
+                <div className="h-[56vh] min-h-[360px] select-text text-sm" data-canvas-shortcuts-ignore>
+                    {view === "info" ? (
+                        <div className="thin-scrollbar h-full space-y-3 overflow-auto pr-1">
+                            <InfoRow label="ID" value={node.id} />
+                            <InfoRow label={t("canvas.nodeToolbar.name")} value={node.title || t("canvas.node.untitled")} />
+                            <InfoRow label={t("canvas.nodeToolbar.type")} value={node.type === CanvasNodeType.Group ? t("canvas.node.group") : node.type === CanvasNodeType.Config ? t("canvas.configNode.title") : [CanvasNodeType.Image, CanvasNodeType.Video, CanvasNodeType.Audio, CanvasNodeType.Text].includes(node.type as CanvasNodeType) ? t(`assets.kinds.${node.type}`) : getNodeDefinition(node.type)?.title || node.type} />
+                            <InfoRow label={t("canvas.nodeToolbar.size")} value={`${Math.round(node.width)} x ${Math.round(node.height)}`} />
+                            <InfoRow label={t("canvas.nodeToolbar.position")} value={`${Math.round(node.position.x)}, ${Math.round(node.position.y)}`} />
+                            <InfoRow label={t("canvas.nodeToolbar.status")} value={node.metadata?.status || "idle"} />
+                            {batchCount > 1 ? <InfoRow label={t("canvas.nodeToolbar.imageGroup")} value={t("canvas.configNode.images", { count: batchCount })} /> : null}
+                            {node.metadata?.prompt ? <InfoRow label={t("canvas.configNode.prompt")} value={node.metadata.prompt} /> : null}
+                            {node.metadata?.videoTaskId ? <InfoRow label={t("canvas.nodeToolbar.videoTaskId")} value={node.metadata.videoTaskId} /> : null}
+                            {imageBytes ? <InfoRow label={t("canvas.nodeToolbar.imageSize")} value={formatBytes(imageBytes)} /> : null}
+                            {node.metadata?.errorDetails ? (
+                                <div className="rounded-lg border p-3 text-red-400" style={{ borderColor: theme.node.stroke }}>
+                                    {node.metadata.errorDetails}
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : (
+                        <pre className="thin-scrollbar h-full overflow-auto rounded-lg border p-3 text-xs leading-5" style={{ background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.text }}>
+                            {json}
+                        </pre>
+                    )}
+                </div>
+            ) : null}
+        </Modal>
+    );
+}
+
+function ToolbarAction({ title, label, icon, onClick, showLabel, active = false, danger = false }: ToolbarTool & { showLabel: boolean }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const [hovered, setHovered] = useState(false);
+    const hasText = showLabel && Boolean(label);
+    const color = danger ? theme.accent.danger : active ? theme.toolbar.activeText : theme.toolbar.item;
+    return (
+        <Tooltip title={title} placement="top" mouseEnterDelay={0.2} color="rgba(24,24,24,.98)" styles={{ root: { color: "#f2f2f2", boxShadow: "0 10px 26px rgba(0,0,0,.5)", fontSize: 12, fontWeight: 500, border: "1px solid rgba(255,255,255,.1)" } }}>
+            <button
+                type="button"
+                className="group relative flex h-8 items-center whitespace-nowrap rounded-lg px-2 transition-colors"
+                style={{ background: active ? theme.toolbar.activeBg : hovered ? theme.toolbar.itemHover : "transparent", color }}
+                onClick={onClick}
+                onMouseEnter={() => setHovered(true)}
+                onMouseLeave={() => setHovered(false)}
+                aria-label={title}
+            >
+                <span className={`flex items-center ${hasText ? "gap-1.5" : "justify-center"}`}>
+                    {icon}
+                    {hasText ? <span className="hidden text-[11px] font-medium min-[560px]:inline">{label}</span> : null}
+                </span>
+            </button>
+        </Tooltip>
+    );
+}
+
+function InfoRow({ label, value }: { label: string; value: ReactNode }) {
+    return (
+        <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-3">
+            <span className="opacity-50">{label}</span>
+            <span className="min-w-0 whitespace-pre-wrap break-words">{value}</span>
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-node-mask-edit-dialog.tsx
+LINES: 1-438
+========================================================================
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
+import { Button, Input, Modal, Slider, Tooltip } from "antd";
+import { Brush, Eraser, ImagePlus, Redo2, RotateCcw, Undo2, WandSparkles, ZoomIn, ZoomOut } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { readImageMeta } from "@/lib/image-utils";
+import { useImageEditorViewport } from "@/components/canvas/use-image-editor-viewport";
+
+export type CanvasImageMaskEditPayload = {
+    prompt: string;
+    maskDataUrl: string;
+    generate: boolean;
+};
+
+type DrawMode = "paint" | "erase";
+type Point = { x: number; y: number };
+type MaskStroke = { mode: DrawMode; size: number; points: Point[] };
+type BrushPreview = { x: number; y: number; size: number; adjusting: boolean };
+
+const defaultBrushSize = 100;
+const maskOverlayColor = "#2563eb";
+const maskOverlayAlpha = 0.4;
+
+export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (payload: CanvasImageMaskEditPayload) => void }) {
+    const { t } = useTranslation();
+    const maskCanvasRef = useRef<HTMLCanvasElement>(null);
+    const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+    const imageRef = useRef<HTMLImageElement>(null);
+    const drawingRef = useRef<{ active: boolean; stroke: MaskStroke | null }>({ active: false, stroke: null });
+    const brushAdjustRef = useRef<{ active: boolean; pointerId: number; startX: number; startSize: number; previewX: number; previewY: number } | null>(null);
+    const historyRef = useRef<MaskStroke[]>([]);
+    const redoRef = useRef<MaskStroke[]>([]);
+    const [image, setImage] = useState<{ width: number; height: number } | null>(null);
+    const [prompt, setPrompt] = useState("");
+    const [brushSize, setBrushSize] = useState(defaultBrushSize);
+    const [mode, setMode] = useState<DrawMode>("paint");
+    const [error, setError] = useState("");
+    const [historySize, setHistorySize] = useState(0);
+    const [redoSize, setRedoSize] = useState(0);
+    const [brushPreview, setBrushPreview] = useState<BrushPreview | null>(null);
+    const viewport = useImageEditorViewport(image, open);
+
+    useEffect(() => {
+        if (!open) return;
+        setPrompt("");
+        setBrushSize(defaultBrushSize);
+        setMode("paint");
+        setError("");
+        setHistorySize(0);
+        setRedoSize(0);
+        setBrushPreview(null);
+        historyRef.current = [];
+        redoRef.current = [];
+        brushAdjustRef.current = null;
+        drawingRef.current = { active: false, stroke: null };
+        void readImageMeta(dataUrl).then(setImage);
+    }, [dataUrl, open]);
+
+    useEffect(() => {
+        clearCanvas(maskCanvasRef.current);
+        clearCanvas(previewCanvasRef.current);
+    }, [image]);
+
+    const draw = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+        const point = readCanvasPoint(event.currentTarget, event.clientX, event.clientY);
+        const maskCanvas = maskCanvasRef.current;
+        const context = maskCanvas?.getContext("2d", { willReadFrequently: true });
+        const previewContext = previewCanvasRef.current?.getContext("2d");
+        const stroke = drawingRef.current.stroke;
+        if (!maskCanvas || !context || !previewContext || !stroke) return;
+        configureStrokeContext(context, stroke);
+        configurePreviewStrokeContext(previewContext, stroke);
+        const last = stroke.points.at(-1);
+        drawMaskStroke(context, last || point, point, stroke.size);
+        drawMaskStroke(previewContext, last || point, point, stroke.size);
+        stroke.points.push(point);
+        if (stroke.mode === "paint") {
+            setError("");
+        }
+    };
+
+    const updateBrushPreview = (event: ReactPointerEvent<HTMLCanvasElement>, size = brushSize, adjusting = false) => {
+        setBrushPreview({
+            x: event.clientX,
+            y: event.clientY,
+            size,
+            adjusting,
+        });
+    };
+
+    const startDraw = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+        if ((event.button === 0 || event.button === 2) && event.altKey) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            brushAdjustRef.current = {
+                active: true,
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startSize: brushSize,
+                previewX: event.clientX,
+                previewY: event.clientY,
+            };
+            updateBrushPreview(event, brushSize, true);
+            return;
+        }
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        updateBrushPreview(event);
+        drawingRef.current = { active: true, stroke: { mode, size: brushSize, points: [] } };
+        draw(event);
+    };
+
+    const moveDraw = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+        const brushAdjust = brushAdjustRef.current;
+        if (brushAdjust?.active && event.pointerId === brushAdjust.pointerId) {
+            event.preventDefault();
+            event.stopPropagation();
+            const nextSize = clampBrushSize(brushAdjust.startSize + event.clientX - brushAdjust.startX);
+            setBrushSize(nextSize);
+            setBrushPreview({
+                x: brushAdjust.previewX,
+                y: brushAdjust.previewY,
+                size: nextSize,
+                adjusting: true,
+            });
+            return;
+        }
+        updateBrushPreview(event);
+        if (!drawingRef.current.active) return;
+        event.preventDefault();
+        draw(event);
+    };
+
+    const stopDraw = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+        const brushAdjust = brushAdjustRef.current;
+        if (brushAdjust?.active && event.pointerId === brushAdjust.pointerId) {
+            brushAdjustRef.current = null;
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+            updateBrushPreview(event, brushSize);
+            return;
+        }
+        const stroke = drawingRef.current.stroke;
+        drawingRef.current = { active: false, stroke: null };
+        if (stroke?.points.length) {
+            historyRef.current.push(stroke);
+            setHistorySize(historyRef.current.length);
+            redoRef.current = [];
+            setRedoSize(0);
+        }
+    };
+
+    const undoMask = useCallback(() => {
+        if (drawingRef.current.active || !historyRef.current.length) return;
+        const stroke = historyRef.current.pop();
+        if (stroke) redoRef.current.push(stroke);
+        setHistorySize(historyRef.current.length);
+        setRedoSize(redoRef.current.length);
+        replayMask(historyRef.current, maskCanvasRef.current, previewCanvasRef.current);
+        setError("");
+    }, []);
+
+    const redoMask = useCallback(() => {
+        if (drawingRef.current.active || !redoRef.current.length) return;
+        const stroke = redoRef.current.pop();
+        if (stroke) historyRef.current.push(stroke);
+        setHistorySize(historyRef.current.length);
+        setRedoSize(redoRef.current.length);
+        replayMask(historyRef.current, maskCanvasRef.current, previewCanvasRef.current);
+        setError("");
+    }, []);
+
+    const resetMask = () => {
+        historyRef.current = [];
+        redoRef.current = [];
+        setHistorySize(0);
+        setRedoSize(0);
+        clearCanvas(maskCanvasRef.current);
+        clearCanvas(previewCanvasRef.current);
+        setError("");
+    };
+
+    useEffect(() => {
+        if (!open) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const target = event.target instanceof Element ? event.target : null;
+            if (target?.closest("input,textarea,[contenteditable='true']")) return;
+            const key = event.key.toLowerCase();
+            const modifier = (event.metaKey || event.ctrlKey) && !event.altKey;
+            const isUndo = modifier && !event.shiftKey && key === "z";
+            const isRedo = modifier && ((event.shiftKey && key === "z") || (!event.shiftKey && key === "y"));
+            if (!isUndo && !isRedo) return;
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            if (isRedo) redoMask();
+            else undoMask();
+        };
+        window.addEventListener("keydown", handleKeyDown, true);
+        return () => window.removeEventListener("keydown", handleKeyDown, true);
+    }, [open, redoMask, undoMask]);
+
+    const submit = (generate: boolean) => {
+        const nextPrompt = prompt.trim();
+        const canvas = maskCanvasRef.current;
+        const element = imageRef.current;
+        if (!nextPrompt) return setError(t("canvas.editors.maskPromptRequired"));
+        if (!canvas || !element) return;
+        if (!canvasHasPaint(canvas)) return setError(t("canvas.editors.maskRequired"));
+        onConfirm({ prompt: nextPrompt, maskDataUrl: buildMaskOverlay(element, canvas), generate });
+    };
+
+    return (
+        <Modal title={null} open={open && Boolean(dataUrl)} onCancel={onClose} footer={null} width={980} centered destroyOnHidden transitionName="" maskTransitionName="">
+            <div className="grid gap-5 lg:grid-cols-[minmax(360px,1fr)_320px]" data-canvas-no-zoom>
+                <div
+                    ref={viewport.viewportRef}
+                    {...viewport.panHandlers}
+                    className={`relative h-[min(68vh,720px)] min-h-[360px] rounded-xl border border-black/10 bg-transparent dark:border-white/10 ${viewport.scrollClassName} ${viewport.isPanning ? "cursor-grabbing" : viewport.spacePressed ? "cursor-grab" : ""}`}
+                >
+                    <div className="relative" style={viewport.contentStyle}>
+                        <div ref={viewport.stageRef} className="absolute isolate overflow-hidden rounded-lg bg-transparent select-none [backface-visibility:hidden] [contain:layout_paint] [transform:translateZ(0)]" style={viewport.stageStyle}>
+                            {image ? (
+                                <>
+                                    <canvas ref={maskCanvasRef} width={image.width} height={image.height} className="hidden" />
+                                    <div className="absolute left-0 top-0 [backface-visibility:hidden]" style={viewport.mediaStyle}>
+                                        <img ref={imageRef} src={dataUrl} alt="" className="absolute inset-0 block h-full w-full bg-transparent object-contain" draggable={false} />
+                                        <canvas
+                                            ref={previewCanvasRef}
+                                            width={image.width}
+                                            height={image.height}
+                                            className="absolute inset-0 h-full w-full cursor-none touch-none"
+                                            style={{ opacity: maskOverlayAlpha }}
+                                            onPointerDown={startDraw}
+                                            onPointerMove={moveDraw}
+                                            onPointerUp={stopDraw}
+                                            onPointerCancel={stopDraw}
+                                            onPointerEnter={(event) => updateBrushPreview(event)}
+                                            onPointerLeave={() => {
+                                                if (!drawingRef.current.active && !brushAdjustRef.current?.active) setBrushPreview(null);
+                                            }}
+                                            onContextMenu={(event) => event.preventDefault()}
+                                        />
+                                    </div>
+                                </>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+                {brushPreview
+                    ? createPortal(
+                          <div
+                              className={`pointer-events-none fixed z-[1100] rounded-full border-2 ${brushPreview.adjusting ? "border-[#fbbf24] bg-black/10" : "border-white/90 bg-black/5"} shadow-[0_0_0_1px_rgba(0,0,0,.8)]`}
+                              style={{ left: brushPreview.x, top: brushPreview.y, width: Math.max(4, brushPreview.size * viewport.imageScale), aspectRatio: 1, transform: "translate(-50%, -50%)" }}
+                          >
+                              {brushPreview.adjusting ? <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white">{brushSize}px</span> : null}
+                          </div>,
+                          document.body,
+                      )
+                    : null}
+
+                <div className="flex min-h-[360px] flex-col gap-5">
+                    <div>
+                        <h2 className="text-xl font-semibold">{t("canvas.editors.maskTitle")}</h2>
+                        <div className="mt-2 text-sm opacity-60">{image ? `${image.width} x ${image.height}px` : t("canvas.editors.loading")}</div>
+                        <div className="mt-2 text-xs leading-5 opacity-55">{t("canvas.editors.maskHint")}</div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                        <Button type={mode === "paint" ? "primary" : "default"} icon={<Brush className="size-4" />} onClick={() => setMode("paint")}>
+                            {t("canvas.editors.brush")}
+                        </Button>
+                        <Button type={mode === "erase" ? "primary" : "default"} icon={<Eraser className="size-4" />} onClick={() => setMode("erase")}>
+                            {t("canvas.editors.erase")}
+                        </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border border-black/10 px-2 py-1 dark:border-white/10">
+                        <Tooltip title={t("canvas.editors.undoMaskTitle")}>
+                            <Button type="text" icon={<Undo2 className="size-4" />} disabled={!historySize} aria-label={t("canvas.editors.undoMask")} onClick={undoMask} />
+                        </Tooltip>
+                        <Tooltip title={t("canvas.editors.redoMaskTitle")}>
+                            <Button type="text" icon={<Redo2 className="size-4" />} disabled={!redoSize} aria-label={t("canvas.editors.redoMask")} onClick={redoMask} />
+                        </Tooltip>
+                        <div className="flex items-center gap-1">
+                            <Tooltip title={t("canvas.editors.zoomOut")}>
+                                <Button type="text" icon={<ZoomOut className="size-4" />} disabled={!viewport.canZoomOut} aria-label={t("canvas.editors.zoomOut")} onClick={viewport.zoomOut} />
+                            </Tooltip>
+                            <button type="button" className="min-w-14 text-center text-xs font-semibold tabular-nums opacity-70" onClick={viewport.resetZoom}>
+                                {Math.round(viewport.zoom * 100)}%
+                            </button>
+                            <Tooltip title={t("canvas.editors.zoomIn")}>
+                                <Button type="text" icon={<ZoomIn className="size-4" />} disabled={!viewport.canZoomIn} aria-label={t("canvas.editors.zoomIn")} onClick={viewport.zoomIn} />
+                            </Tooltip>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium opacity-75">{t("canvas.editors.brushSize")}</span>
+                            <span className="font-semibold">{brushSize}px</span>
+                        </div>
+                        <Slider min={8} max={160} step={2} value={brushSize} onChange={setBrushSize} />
+                    </div>
+
+                    <div className="space-y-2">
+                        <div className="text-sm font-medium opacity-75">{t("canvas.editors.editInstructions")}</div>
+                        <Input.TextArea
+                            rows={6}
+                            value={prompt}
+                            status={error && !prompt.trim() ? "error" : undefined}
+                            placeholder={t("canvas.editors.maskPlaceholder")}
+                            onChange={(event) => {
+                                setPrompt(event.target.value);
+                                setError("");
+                            }}
+                        />
+                        {error ? <div className="text-xs font-medium text-[#ef4444]">{error}</div> : null}
+                    </div>
+
+                    <div className="mt-auto flex items-center justify-between gap-2">
+                        <Button icon={<RotateCcw className="size-4" />} onClick={resetMask}>
+                            {t("canvas.editors.reset")}
+                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button icon={<ImagePlus className="size-4" />} onClick={() => submit(false)}>
+                                {t("canvas.editors.maskExport")}
+                            </Button>
+                            <Button type="primary" icon={<WandSparkles className="size-4" />} onClick={() => submit(true)}>
+                                {t("canvas.editors.maskGenerate")}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+function readCanvasPoint(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: ((clientX - rect.left) / Math.max(1, rect.width)) * canvas.width,
+        y: ((clientY - rect.top) / Math.max(1, rect.height)) * canvas.height,
+    };
+}
+
+function clampBrushSize(value: number) {
+    return Math.min(160, Math.max(8, Math.round(value / 2) * 2));
+}
+
+function clearCanvas(canvas: HTMLCanvasElement | null) {
+    const context = canvas?.getContext("2d", { willReadFrequently: true });
+    if (!canvas || !context) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function drawMaskStroke(context: CanvasRenderingContext2D, from: { x: number; y: number }, to: { x: number; y: number }, size: number) {
+    if (from.x === to.x && from.y === to.y) {
+        context.beginPath();
+        context.arc(to.x, to.y, size / 2, 0, Math.PI * 2);
+        context.fill();
+        return;
+    }
+    context.beginPath();
+    context.moveTo(from.x, from.y);
+    context.lineTo(to.x, to.y);
+    context.stroke();
+}
+
+function configureStrokeContext(context: CanvasRenderingContext2D, stroke: MaskStroke) {
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.lineWidth = stroke.size;
+    context.globalCompositeOperation = stroke.mode === "paint" ? "source-over" : "destination-out";
+    context.strokeStyle = "#000";
+    context.fillStyle = "#000";
+}
+
+function configurePreviewStrokeContext(context: CanvasRenderingContext2D, stroke: MaskStroke) {
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.lineWidth = stroke.size;
+    context.globalCompositeOperation = stroke.mode === "paint" ? "source-over" : "destination-out";
+    context.strokeStyle = maskOverlayColor;
+    context.fillStyle = maskOverlayColor;
+}
+
+function replayMask(strokes: MaskStroke[], maskCanvas: HTMLCanvasElement | null, previewCanvas: HTMLCanvasElement | null) {
+    const context = maskCanvas?.getContext("2d", { willReadFrequently: true });
+    const previewContext = previewCanvas?.getContext("2d");
+    if (!maskCanvas || !context || !previewCanvas || !previewContext) return;
+    context.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+    previewContext.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    for (const stroke of strokes) {
+        configureStrokeContext(context, stroke);
+        configurePreviewStrokeContext(previewContext, stroke);
+        stroke.points.forEach((point, index) => {
+            const previous = stroke.points[index - 1] || point;
+            drawMaskStroke(context, previous, point, stroke.size);
+            drawMaskStroke(previewContext, previous, point, stroke.size);
+        });
+    }
+}
+
+function canvasHasPaint(canvas: HTMLCanvasElement) {
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return false;
+    const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let index = 3; index < data.length; index += 4) {
+        if (data[index] > 0) return true;
+    }
+    return false;
+}
+
+function buildMaskOverlay(image: HTMLImageElement, selectionCanvas: HTMLCanvasElement) {
+    const canvas = document.createElement("canvas");
+    canvas.width = selectionCanvas.width;
+    canvas.height = selectionCanvas.height;
+    const context = canvas.getContext("2d");
+    if (!context) return selectionCanvas.toDataURL("image/png");
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const overlay = document.createElement("canvas");
+    overlay.width = canvas.width;
+    overlay.height = canvas.height;
+    const overlayContext = overlay.getContext("2d");
+    if (!overlayContext) return canvas.toDataURL("image/png");
+    overlayContext.drawImage(selectionCanvas, 0, 0);
+    overlayContext.globalCompositeOperation = "source-in";
+    overlayContext.fillStyle = maskOverlayColor;
+    overlayContext.fillRect(0, 0, overlay.width, overlay.height);
+    context.globalAlpha = maskOverlayAlpha;
+    context.drawImage(overlay, 0, 0);
+    return canvas.toDataURL("image/png");
+}
+

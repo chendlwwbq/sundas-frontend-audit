@@ -1,0 +1,3136 @@
+SUNDAS FRONTEND DESIGN AUDIT - UTF-8 PLAIN SOURCE
+This is uncompressed source text, not a directory index or archive.
+Snapshot: f724d24fea1fbd124c97e5eed4c0ec617eefc200
+Each section includes its original path and line range. Demo adapters are under web/src/audit.
+
+
+========================================================================
+FILE: shared/agent-capabilities.ts
+LINES: 1-6
+========================================================================
+/** Additive execution capability; persisted message schema stays independently versioned. */
+export const DIRECTOR_AGENT_CAPABILITY = 'director-sequence-v2';
+export const AGENT_CAPABILITIES_HEADER = 'x-sundas-agent-capabilities';
+export function supportsDirectorAgent(header: unknown): boolean {
+    return typeof header === 'string' && header.split(',').map(value => value.trim()).includes(DIRECTOR_AGENT_CAPABILITY);
+}
+
+
+========================================================================
+FILE: shared/director-actor-path.ts
+LINES: 1-42
+========================================================================
+import type { DirectorKeyframe, DirectorObject, DirectorVec3 } from "../web/src/types/director";
+export type DirectorActorPathKind = "line" | "ring" | "rectangle";
+
+export function buildDirectorActorPath(object: DirectorObject, kind: DirectorActorPathKind, duration: number, createId: () => string, startTime = 0): DirectorObject {
+    const seconds = Number.isFinite(duration) && duration > 0 ? duration : 10;
+    const [x, y, z] = object.transform.position;
+    const positions: DirectorVec3[] = kind === "line"
+        ? [[x, y, z], [x, y, z + 4]]
+        : kind === "ring"
+            ? Array.from({ length: 33 }, (_, index) => {
+                const angle = index * Math.PI / 16;
+                return [x - 2 + 2 * Math.cos(angle), y, z + 2 * Math.sin(angle)];
+            })
+            : [[x, y, z], [x + 4, y, z], [x + 4, y, z + 3], [x, y, z + 3], [x, y, z]];
+    const center: DirectorVec3 = kind === "line" ? [x, y, z + 2] : kind === "ring" ? [x - 2, y, z] : [x + 2, y, z + 1.5];
+    const keyframes: DirectorKeyframe[] = positions.map((position, index) => ({
+        id: createId(),
+        time: startTime + (index === positions.length - 1 ? seconds : seconds * index / (positions.length - 1)),
+        transform: { ...object.transform, position },
+        easing: kind === "ring" ? "smooth" : "linear",
+    }));
+    const withPath: DirectorObject = {
+        ...object,
+        keyframes,
+        motionPath: { kind, duration: seconds, ...(startTime ? { startTime } : {}), facePath: true, transform: { position: center, rotation: [0, 0, 0], scale: [1, 1, 1] }, originalKeyframes: object.motionPath?.originalKeyframes || object.keyframes, ...(kind === "ring" ? { controlKeyframeIds: [keyframes[0].id, keyframes[16].id, keyframes[32].id] } : {}) },
+    };
+    return setDirectorActorPathFacing(withPath, true);
+}
+
+
+export function setDirectorActorPathFacing(object: DirectorObject, facing: boolean): DirectorObject {
+    if (!object.motionPath) return object;
+    const keyframes = object.keyframes.map((frame, index, all) => {
+        const from = all[index === all.length - 1 && object.motionPath?.kind === "ring" ? 0 : index].transform.position;
+        const to = all[index === all.length - 1 ? index === 0 ? 0 : index - 1 : index + 1].transform.position;
+        const dx = index === all.length - 1 ? from[0] - to[0] : to[0] - from[0];
+        const dz = index === all.length - 1 ? from[2] - to[2] : to[2] - from[2];
+        const yaw = Math.hypot(dx, dz) > 1e-6 ? Math.atan2(dx, dz) : object.transform.rotation[1];
+        return { ...frame, transform: { ...frame.transform, rotation: facing ? [object.transform.rotation[0], yaw, object.transform.rotation[2]] as DirectorVec3 : [...object.transform.rotation] as DirectorVec3 } };
+    });
+    return { ...object, motionPath: { ...object.motionPath, facePath: facing }, keyframes };
+}
+
+
+========================================================================
+FILE: shared/director-commands.ts
+LINES: 1-86
+========================================================================
+import type { DirectorScene, DirectorVec3, DirectorPose } from '../web/src/types/director';
+import { clampDirectorSceneToGround } from './director-ground-clamp';
+import { buildDirectorMotionPresetKeyframes, type DirectorMotionPresetKind } from './director-motion-presets';
+import { buildDirectorActorPath, setDirectorActorPathFacing, type DirectorActorPathKind } from './director-actor-path';
+import { editDirectorSequence, validateDirectorSceneSequence, type DirectorSequenceCommand, type DirectorSequence } from './director-sequence';
+
+export type DirectorCommand =
+    | { type: 'sequence.create'; sequence: DirectorSequence }
+    | { type: 'sequence.edit'; command: DirectorSequenceCommand }
+    | { type: 'camera.clone'; sourceId: string; id: string; name: string }
+    | { type: 'camera.preset'; cameraId: string; id: string; preset: DirectorMotionPresetKind; startTime: number; endTime: number }
+    | { type: 'actor.frame'; objectId: string; id: string; time: number; position: DirectorVec3; rotation: DirectorVec3 }
+    | { type: 'actor.pose'; objectId: string; pose: DirectorPose }
+    | { type: 'actor.path'; objectId: string; id: string; kind: DirectorActorPathKind; startTime: number; endTime: number; facePath: boolean }
+    | { type: 'camera.frame'; cameraId: string; id: string; time: number; position: DirectorVec3; target: DirectorVec3; fov: number };
+
+/** One validated batch on a clone; callers commit via project CAS. */
+export function applyDirectorCommands(scene: DirectorScene, commands: DirectorCommand[]): DirectorScene {
+    const next = structuredClone(scene);
+    const objectIds = new Set<string>();
+    const cameraIds = new Set<string>();
+    validateDirectorSceneSequence(next);
+    for (const command of commands) {
+        if (command.type === 'sequence.create') {
+            if (next.cameraSequence) throw new Error('场景已有序列，请编辑现有切点');
+            next.cameraSequence = structuredClone(command.sequence);
+        } else if (command.type === 'sequence.edit') {
+            if (!next.cameraSequence) throw new Error('场景尚未建立序列');
+            next.cameraSequence = editDirectorSequence(next.cameraSequence, command.command, next.cameras.map(camera => camera.id));
+        } else if (command.type === 'camera.clone') {
+            const source = next.cameras.find(camera => camera.id === command.sourceId);
+            if (!source || source.locked) throw new Error('源机位不存在或已锁定');
+            if (!command.id || !command.name || next.cameras.some(camera => camera.id === command.id)) throw new Error('新机位标识无效或重复');
+            next.cameras.push({ ...structuredClone(source), id: command.id, name: command.name });
+            cameraIds.add(command.id);
+        } else if (command.type === 'camera.preset') {
+            const camera = next.cameras.find(camera => camera.id === command.cameraId);
+            if (!camera || camera.locked) throw new Error('机位不存在或已锁定');
+            if (!command.id || !Number.isFinite(command.startTime) || !Number.isFinite(command.endTime) || command.startTime < 0 || command.endTime <= command.startTime) throw new Error('运镜必须指定有效的全局起止时间');
+            if (camera.keyframes.some(frame => frame.time > command.startTime && frame.time <= command.endTime)) throw new Error('运镜范围内已有关键帧，请先在导演台处理，或复制机位后重新安排');
+            const start = camera.keyframes.find(frame => frame.time === command.startTime);
+            if (camera.keyframes.length && !start) throw new Error('请先明确起始时间的机位关键帧，再应用运镜预设');
+            let index = 0;
+            const generated = buildDirectorMotionPresetKeyframes(command.preset, 'replace', { ...camera, transform: start?.transform || camera.transform, target: start?.target || camera.target, fov: start?.fov ?? camera.fov }, command.endTime, () => `${command.id}:${index++}`).keyframes.map(frame => ({ ...frame, time: command.startTime + frame.time / 2 * (command.endTime - command.startTime), positionKeyed: true, rotationKeyed: false }));
+            if (generated.some(frame => camera.keyframes.some(old => old.id === frame.id))) throw new Error('运镜关键帧标识重复，请重新核对方案');
+            camera.keyframes = [...camera.keyframes, ...generated.filter((_, index) => !start || index !== 0)].sort((a,b) => a.time-b.time);
+            camera.lookAtMode = 'coordinates';
+            delete camera.lookAtObjectId;
+            cameraIds.add(camera.id);
+        } else if (command.type === 'actor.frame' || command.type === 'actor.pose' || command.type === 'actor.path') {
+            const actor = next.objects.find(object => object.id === command.objectId);
+            if (!actor || actor.locked || !(actor.kind === 'actor' || actor.primitive === 'character' || actor.kind === 'model')) throw new Error('人物不存在、已锁定或类型不支持');
+            if (command.type === 'actor.path') {
+                if (!command.id || !Number.isFinite(command.startTime) || !Number.isFinite(command.endTime) || command.startTime < 0 || command.endTime <= command.startTime) throw new Error('人物路径必须指定有效的全局起止时间');
+                let index = 0;
+                const path = setDirectorActorPathFacing(buildDirectorActorPath(actor, command.kind, command.endTime - command.startTime, () => `${command.id}:${index++}`, command.startTime), command.facePath);
+                if (path.keyframes.some(frame => actor.keyframes.some(old => old.id === frame.id))) throw new Error('路径关键帧标识重复，请重新核对方案');
+                Object.assign(actor, path, { animationTrackEnabled: true });
+                objectIds.add(actor.id);
+            } else if (command.type === 'actor.pose') actor.pose = command.pose;
+            else {
+                if (actor.motionPath) throw new Error('人物已有运动路径，请先在导演台确认移除路径后再安排关键帧');
+                if (!Number.isFinite(command.time) || command.time < 0 || ![command.position, command.rotation].every(vector => vector.length === 3 && vector.every(Number.isFinite))) throw new Error('人物关键帧参数无效');
+                if (actor.keyframes.some(frame => frame.id !== command.id && frame.time === command.time)) throw new Error('该时刻已有其他人物关键帧');
+                const existing = actor.keyframes.find(frame => frame.id === command.id);
+                actor.keyframes = [...actor.keyframes.filter(frame => frame.id !== command.id), { ...existing, id: command.id, time: command.time, transform: { ...structuredClone(existing?.transform || actor.transform), position: command.position, rotation: command.rotation }, positionKeyed: true, rotationKeyed: true, scaleKeyed: existing?.scaleKeyed ?? false }].sort((a, b) => a.time - b.time);
+                actor.animationTrackEnabled = true;
+                objectIds.add(actor.id);
+            }
+        } else {
+            const camera = next.cameras.find(camera => camera.id === command.cameraId);
+            if (!camera || camera.locked) throw new Error('机位不存在或已锁定');
+            if (!Number.isFinite(command.time) || command.time < 0 || !Number.isFinite(command.fov) || command.fov <= 0 || command.fov >= 180
+                || ![command.position, command.target].every(vector => vector.length === 3 && vector.every(Number.isFinite))) throw new Error('机位关键帧参数无效');
+            const existing = camera.keyframes.find(frame => frame.id === command.id);
+            if (camera.keyframes.some(frame => frame.id !== command.id && frame.time === command.time)) throw new Error('该时刻已有其他关键帧，请明确修改目标');
+            const frame = { ...existing, id: command.id, time: command.time, transform: { ...structuredClone(existing?.transform || camera.transform), position: command.position }, target: command.target, fov: command.fov, positionKeyed: true, rotationKeyed: existing?.rotationKeyed ?? false };
+            camera.keyframes = [...camera.keyframes.filter(frame => frame.id !== command.id), frame].sort((a, b) => a.time - b.time);
+            camera.lookAtMode = 'coordinates';
+            delete camera.lookAtObjectId;
+            cameraIds.add(camera.id);
+        }
+        validateDirectorSceneSequence(next);
+    }
+    return clampDirectorSceneToGround(next, { objectIds, cameraIds });
+}
+
+
+========================================================================
+FILE: shared/director-ground-clamp.ts
+LINES: 1-125
+========================================================================
+import type { DirectorCamera, DirectorKeyframe, DirectorObject, DirectorScene, DirectorTransform, DirectorVec3 } from "../web/src/types/director";
+import { directorGroundSettings } from "./director-ground";
+
+
+/**
+ * 摄影机贴地余量：镜头允许贴近地面取景，但不能钻进地面里穿模。
+ * 人物/道具没有余量——脚底、底面正好落在地面高度即视为合法。
+ */
+export const DIRECTOR_CAMERA_GROUND_CLEARANCE = 0.05;
+
+/** 自由视角（环绕相机）的贴地余量，比机位稍大，避免相机擦着地面出现地平线翻面。 */
+export const DIRECTOR_ORBIT_GROUND_CLEARANCE = 0.25;
+
+/**
+ * 内置几何体的半高（未乘缩放）。
+ *
+ * 这些 primitive 的 transform.position 是几何中心而不是底面，直接拿 y 和地面比，
+ * 会让一个 1×1×1 的箱子在 y=0 时正好埋掉一半。取值与 director-viewport 里的
+ * 几何参数一一对应，改那边记得同步这里。
+ */
+const DIRECTOR_PRIMITIVE_HALF_HEIGHT: Partial<Record<NonNullable<DirectorObject["primitive"]>, number>> = {
+    box: 0.5,
+    sphere: 0.6,
+    cylinder: 0.6,
+    plane: 0.5,
+    torus: 0.58,
+    cone: 0.6,
+    pyramid: 0.6,
+    empty: 0,
+    character: 0,
+};
+
+/**
+ * 对象锚点到「物体最低点」的距离，用来把「不许低于地面」翻译成「锚点至少要多高」。
+ * 角色与导入模型的枢轴就在脚底/原点（模型 bbox 在场景层不可知），因此偏移为 0。
+ */
+export function directorObjectGroundBase(object: Pick<DirectorObject, "kind" | "primitive">): number {
+    if (object.kind === "actor" || object.kind === "model") return 0;
+    return object.primitive ? DIRECTOR_PRIMITIVE_HALF_HEIGHT[object.primitive] ?? 0 : 0;
+}
+
+function scaleY(transform: DirectorTransform | undefined): number {
+    const value = Math.abs(transform?.scale?.[1] ?? 1);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+/** 对象（含当前缩放）的锚点下限。 */
+export function directorObjectGroundFloor(object: Pick<DirectorObject, "kind" | "primitive" | "transform">, groundHeight: number): number {
+    return groundHeight + directorObjectGroundBase(object) * scaleY(object.transform);
+}
+
+/** 只抬不压：低于地面的 Y 直接抬到地面，其余原样返回。 */
+export function clampDirectorGroundY(y: number, floor: number): number {
+    if (!Number.isFinite(y)) return floor;
+    return y < floor ? floor : y;
+}
+
+/**
+ * 把 transform 的 Y 抬到给定下限以上；X/Z、旋转、缩放完全不动。
+ * 无变化时返回原对象引用，让上层可以靠引用相等跳过无意义的场景写入。
+ */
+export function clampDirectorTransformToGround(transform: DirectorTransform, floor: number): DirectorTransform {
+    const y = transform?.position?.[1];
+    if (!Number.isFinite(y) || y >= floor) return transform;
+    return { ...transform, position: [transform.position[0], floor, transform.position[2]] as DirectorVec3 };
+}
+
+/** 关键帧按各自那一帧的缩放算下限：放大后的箱子比原尺寸更需要抬高。 */
+function clampKeyframesToGround(keyframes: DirectorKeyframe[], floorFor: (transform: DirectorTransform) => number): DirectorKeyframe[];
+function clampKeyframesToGround(keyframes: DirectorKeyframe[] | undefined, floorFor: (transform: DirectorTransform) => number): DirectorKeyframe[] | undefined;
+function clampKeyframesToGround(keyframes: DirectorKeyframe[] | undefined, floorFor: (transform: DirectorTransform) => number): DirectorKeyframe[] | undefined {
+    if (!keyframes?.length) return keyframes;
+    let changed = false;
+    const next = keyframes.map((frame) => {
+        const transform = clampDirectorTransformToGround(frame.transform, floorFor(frame.transform));
+        if (transform === frame.transform) return frame;
+        changed = true;
+        return { ...frame, transform };
+    });
+    return changed ? next : keyframes;
+}
+
+function clampObjectToGround(object: DirectorObject, groundHeight: number): DirectorObject {
+    const transform = clampDirectorTransformToGround(object.transform, directorObjectGroundFloor(object, groundHeight));
+    const floorFor = (frame: DirectorTransform) => groundHeight + directorObjectGroundBase(object) * scaleY(frame);
+    const keyframes = clampKeyframesToGround(object.keyframes, floorFor);
+    const originalKeyframes = clampKeyframesToGround(object.motionPath?.originalKeyframes, floorFor);
+    const motionPath = object.motionPath && originalKeyframes !== object.motionPath.originalKeyframes ? { ...object.motionPath, originalKeyframes: originalKeyframes ?? [] } : object.motionPath;
+    if (transform === object.transform && keyframes === object.keyframes && motionPath === object.motionPath) return object;
+    return { ...object, transform, keyframes, motionPath };
+}
+
+function clampCameraToGround(camera: DirectorCamera, groundHeight: number): DirectorCamera {
+    const floor = groundHeight + DIRECTOR_CAMERA_GROUND_CLEARANCE;
+    const transform = clampDirectorTransformToGround(camera.transform, floor);
+    const keyframes = clampKeyframesToGround(camera.keyframes, () => floor);
+    const originalKeyframes = clampKeyframesToGround(camera.drawnPath?.originalKeyframes, () => floor);
+    const drawnPath = camera.drawnPath && originalKeyframes !== camera.drawnPath.originalKeyframes ? { ...camera.drawnPath, originalKeyframes: originalKeyframes ?? [] } : camera.drawnPath;
+    if (transform === camera.transform && keyframes === camera.keyframes && drawnPath === camera.drawnPath) return camera;
+    return { ...camera, transform, keyframes, drawnPath };
+}
+
+/**
+ * 场景级的「不许钻到地面以下」归一化。
+ *
+ * 只夹 Y、只抬不压，且严格保持引用：没有任何对象越界时返回原 scene，
+ * 因此可以安全地挂在每次提交上而不会制造多余的重渲染或历史记录。
+ */
+export function clampDirectorSceneToGround(scene: DirectorScene, scope?: { objectIds: ReadonlySet<string>; cameraIds: ReadonlySet<string> }): DirectorScene {
+    const groundHeight = directorGroundSettings(scene).height;
+    let changed = false;
+    const objects = scene.objects.map((object) => {
+        if (scope && !scope.objectIds.has(object.id)) return object;
+        const next = clampObjectToGround(object, groundHeight);
+        if (next !== object) changed = true;
+        return next;
+    });
+    const cameras = scene.cameras.map((camera) => {
+        if (scope && !scope.cameraIds.has(camera.id)) return camera;
+        const next = clampCameraToGround(camera, groundHeight);
+        if (next !== camera) changed = true;
+        return next;
+    });
+    return changed ? { ...scene, objects, cameras } : scene;
+}
+
+
+========================================================================
+FILE: shared/director-ground.ts
+LINES: 1-15
+========================================================================
+import type { DirectorScene } from "../web/src/types/director";
+
+export const DIRECTOR_DEFAULT_GROUND = { visible: true, opacity: 0.4, height: 0 } as const;
+
+/** Legacy scenes retain their original opaque floor until the user edits ground settings. */
+export function directorGroundSettings(scene: Pick<DirectorScene, "ground">): { visible: boolean; opacity: number; height: number } {
+    const ground = scene.ground;
+    const opacity = ground?.opacity;
+    const height = ground?.height;
+    return {
+        visible: ground?.visible !== false,
+        opacity: Number.isFinite(opacity) ? Math.min(1, Math.max(0, opacity!)) : 1,
+        height: Number.isFinite(height) ? Math.min(2, Math.max(-2, height!)) : 0,
+    };
+}
+
+
+========================================================================
+FILE: shared/director-history.ts
+LINES: 1-41
+========================================================================
+import type { DirectorScene } from '../web/src/types/director';
+import { validateDirectorSceneSequence } from './director-sequence';
+
+export type DirectorChange = { collection?: 'cameras' | 'objects'; id?: string; field?: string; before?: unknown; after?: unknown };
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+export function directorChanges(before: DirectorScene, after: DirectorScene): DirectorChange[] {
+    const changes: DirectorChange[] = [];
+    if (!same(before.cameraSequence, after.cameraSequence)) changes.push({ field: 'cameraSequence', before: before.cameraSequence, after: after.cameraSequence });
+    for (const collection of ['cameras', 'objects'] as const) {
+        for (const item of after[collection]) {
+            const original = before[collection].find(entry => entry.id === item.id);
+            if (!original) { changes.push({ collection, id: item.id, after: item }); continue; }
+            for (const field of new Set([...Object.keys(original), ...Object.keys(item)])) {
+                const oldValue = (original as any)[field], newValue = (item as any)[field];
+                if (!same(oldValue, newValue)) changes.push({ collection, id: item.id, field, before: oldValue, after: newValue });
+            }
+        }
+    }
+    return changes;
+}
+/** Undo a persisted, server-generated diff, never a model-provided patch. */
+export function undoDirectorChanges(scene: DirectorScene, changes: DirectorChange[]): DirectorScene {
+    const next = structuredClone(scene);
+    for (const change of [...changes].sort((a, b) => Number(Boolean(a.collection)) - Number(Boolean(b.collection)))) {
+        const list = change.collection ? next[change.collection] : undefined;
+        const target = list ? list.find(item => item.id === change.id) : next;
+        if (!target) throw new Error('撤销目标已删除，请手动核对');
+        if (!change.field) {
+            if (!same(target, change.after)) throw new Error('新增对象已有后续修改，无法自动撤销');
+            if (change.collection === 'cameras' && (next.shots.some(shot => shot.cameraId === change.id) || next.cameraSequence?.cuts.some(cut => cut.cameraId === change.id))) throw new Error('新增机位已被其他镜头引用，无法自动撤销');
+            list!.splice(list!.findIndex(item => item.id === change.id), 1);
+        } else {
+            const record = target as unknown as Record<string, unknown>;
+            if (!same(record[change.field], change.after)) throw new Error('相关字段已有后续修改，原操作不能自动撤销');
+            if (change.before === undefined) delete record[change.field];
+            else record[change.field] = structuredClone(change.before);
+        }
+    }
+    validateDirectorSceneSequence(next);
+    return next;
+}
+
+
+========================================================================
+FILE: shared/director-motion-presets.ts
+LINES: 1-46
+========================================================================
+import type { DirectorCamera, DirectorKeyframe } from "../web/src/types/director";
+
+export type DirectorMotionPresetKind = "orbit" | "half_arc" | "push_in" | "pull_out" | "lift" | "truck" | "spiral";
+
+export function buildDirectorMotionPresetKeyframes(kind: DirectorMotionPresetKind, action: "replace" | "append", camera: DirectorCamera, duration: number, createId: () => string): { keyframes: DirectorKeyframe[]; duration: number } {
+    const previous = action === "append" ? [...camera.keyframes].sort((a, b) => a.time - b.time) : [];
+    const last = previous.at(-1);
+    const start = last?.transform || camera.transform;
+    const [x, y, z] = start.position;
+    const target = last?.target || camera.target;
+    const fov = last?.fov ?? camera.fov;
+    const [targetX, targetY, targetZ] = target;
+    const forward = [targetX - x, targetY - y, targetZ - z];
+    const forwardLength = Math.hypot(...forward) || 1;
+    const [forwardX, forwardY, forwardZ] = forward.map((axis) => axis / forwardLength);
+    const horizontalLength = Math.hypot(forwardX, forwardZ) || 1;
+    const rightX = -forwardZ / horizontalLength;
+    const rightZ = forwardX / horizontalLength;
+    const startPosition: [number, number, number] = [x, y, z];
+    const orbit = (steps: number, radians: number, rise: number): [number, number, number][] => Array.from({ length: steps + 1 }, (_, index) => {
+        if (index === 0) return startPosition;
+        if (index === steps && radians === 2 * Math.PI && rise === 0) return startPosition;
+        const angle = radians * index / steps;
+        const radialX = x - targetX;
+        const radialZ = z - targetZ;
+        return [targetX + radialX * Math.cos(angle) - radialZ * Math.sin(angle), y + rise * index / steps, targetZ + radialX * Math.sin(angle) + radialZ * Math.cos(angle)];
+    });
+    const positions: [number, number, number][] = kind === "orbit" ? orbit(8, 2 * Math.PI, 0)
+        : kind === "half_arc" ? orbit(4, Math.PI, 0)
+        : kind === "spiral" ? orbit(8, 2 * Math.PI, 2)
+        : kind === "push_in" ? [startPosition, [x + forwardX * 2, y + forwardY * 2, z + forwardZ * 2]]
+        : kind === "pull_out" ? [startPosition, [x - forwardX * 2, y - forwardY * 2, z - forwardZ * 2]]
+        : kind === "lift" ? [startPosition, [x, y + 2, z]]
+        : [startPosition, [x + rightX * 2, y, z + rightZ * 2]];
+    const startTime = last?.time || 0;
+    const generated = positions.map((position, index) => ({
+        id: createId(),
+        time: startTime + 2 * index / (positions.length - 1),
+        transform: { ...start, position },
+        target: [...target] as [number, number, number],
+        fov,
+        easing: (positions.length > 2 ? "smooth" : "linear") as DirectorKeyframe["easing"],
+    }));
+    const keyframes = previous.length ? [...previous, ...generated.slice(1)] : generated;
+    return { keyframes, duration: Math.max(duration, startTime + 2) };
+}
+
+
+========================================================================
+FILE: shared/director-production.ts
+LINES: 1-38
+========================================================================
+import { validateDirectorSequence, type DirectorSequence } from './director-sequence';
+import { defaultShotComposition, type ProductionDocument, type ProductionMedia } from './production';
+
+export type DirectorCutMapping = { shotId: string; cutId: string; title: string; cameraId: string; startFrame: number; endFrame: number; inMs: number; outMs: number };
+export const directorProductionShotId = (sceneId: string, sequenceId: string, cutId: string) => `director:${[sceneId, sequenceId, cutId].map(encodeURIComponent).join(':')}`;
+export function directorProductionMapping(scene: { id: string; cameras: Array<{ id: string; name: string }>; cameraSequence?: DirectorSequence }, parameters: { sequenceId: string; kind: string; startFrame: number; endFrame: number; fixedCameraId?: string }, durationMs: number): DirectorCutMapping[] {
+    const sequence = scene.cameraSequence;
+    if (!sequence || sequence.id !== parameters.sequenceId || parameters.kind !== 'video' || parameters.fixedCameraId) throw new Error('请选择按序列录制的参考视频');
+    validateDirectorSequence(sequence, scene.cameras.map(camera => camera.id));
+    if (!Number.isSafeInteger(parameters.startFrame) || !Number.isSafeInteger(parameters.endFrame) || parameters.startFrame < 0 || parameters.endFrame > sequence.durationFrames || parameters.endFrame <= parameters.startFrame) throw new Error('预演视频帧范围无效');
+    const requiredMs = (parameters.endFrame - parameters.startFrame) * 1000 / sequence.fps;
+    if (!Number.isFinite(durationMs) || durationMs < requiredMs) throw new Error('实际视频时长不足以覆盖切镜范围，请重新录制后采用');
+    return sequence.cuts.flatMap((cut, index) => {
+        const startFrame = Math.max(cut.startFrame, parameters.startFrame);
+        const endFrame = Math.min(sequence.cuts[index + 1]?.startFrame ?? sequence.durationFrames, parameters.endFrame);
+        if (startFrame >= endFrame) return [];
+        return [{ shotId: directorProductionShotId(scene.id, sequence.id, cut.id), cutId: cut.id,
+            title: `${scene.cameras.find(camera => camera.id === cut.cameraId)!.name} · 第 ${startFrame}–${endFrame} 帧`, cameraId: cut.cameraId,
+            startFrame, endFrame, inMs: (startFrame - parameters.startFrame) * 1000 / sequence.fps, outMs: (endFrame - parameters.startFrame) * 1000 / sequence.fps }];
+    });
+}
+
+/** Stable cut identity retains edited titles/order and unrelated shots across recordings. */
+export function adoptDirectorCuts(source: ProductionDocument, mapping: DirectorCutMapping[], media: ProductionMedia): ProductionDocument {
+    if (media.kind !== 'video') throw new Error('切镜采用需要视频素材');
+    const next = structuredClone(source);
+    for (const cut of mapping) {
+        let shot = next.shots.find(shot => shot.shotId === cut.shotId);
+        if (!shot) {
+            shot = { shotId: cut.shotId, title: cut.title, description: '', action: '', prompt: '', references: [], revision: 1 };
+            next.shots.push(shot);
+        }
+        shot.adoptedMedia = { ...media };
+        shot.mediaRevision = shot.revision || 1;
+        next.composition.shots[cut.shotId] = { ...defaultShotComposition(), ...next.composition.shots[cut.shotId], inMs: cut.inMs, outMs: cut.outMs, durationMs: cut.outMs - cut.inMs };
+    }
+    return next;
+}
+
+
+========================================================================
+FILE: shared/director-sequence.ts
+LINES: 1-152
+========================================================================
+import type { DirectorScene } from '../web/src/types/director';
+
+/** Frame-based camera cuts. All animation continues on the shared scene clock. */
+export type DirectorSequence = {
+    schemaVersion: 1;
+    id: string;
+    name: string;
+    fps: 24 | 25 | 30;
+    durationFrames: number;
+    cuts: Array<{ id: string; startFrame: number; cameraId: string }>;
+};
+
+export function validateDirectorSequence(value: unknown, cameraIds: readonly string[]): asserts value is DirectorSequence {
+    const sequence = value as DirectorSequence | null;
+    if (!sequence || sequence.schemaVersion !== 1 || typeof sequence.id !== 'string' || !sequence.id || typeof sequence.name !== 'string'
+        || ![24, 25, 30].includes(sequence.fps) || !Number.isSafeInteger(sequence.durationFrames) || sequence.durationFrames <= 0
+        || !Array.isArray(sequence.cuts) || !sequence.cuts.length) throw new Error('切镜序列格式或版本无效');
+    const ids = new Set<string>();
+    let previous = -1;
+    for (const cut of sequence.cuts) {
+        if (!cut || typeof cut.id !== 'string' || !cut.id || ids.has(cut.id) || !cameraIds.includes(cut.cameraId)
+            || !Number.isSafeInteger(cut.startFrame) || cut.startFrame <= previous || cut.startFrame >= sequence.durationFrames
+            || (previous === -1 && cut.startFrame !== 0)) throw new Error('切点必须从第 0 帧开始、严格递增，并引用有效机位');
+        ids.add(cut.id);
+        previous = cut.startFrame;
+    }
+}
+
+/** Call after validation when loading/changing the sequence, not on every animation tick. */
+export function sampleDirectorSequence(sequence: DirectorSequence, frame: number, fixedCameraId?: string) {
+    if (!Number.isFinite(frame)) throw new Error('预演帧号无效');
+    const resolvedFrame = Math.max(0, Math.min(sequence.durationFrames - 1, Math.floor(frame)));
+    let cut = sequence.cuts[0];
+    for (const next of sequence.cuts) {
+        if (next.startFrame > resolvedFrame) break;
+        cut = next;
+    }
+    return { frame: resolvedFrame, timeSeconds: resolvedFrame / sequence.fps, cameraId: fixedCameraId ?? cut.cameraId, cutId: cut.id };
+}
+
+/** A shot list describes saved cuts, not rendered media or generated footage. */
+export function directorShotList(scene: { id: string; title: string; cameras: Array<{ id: string; name: string }>; cameraSequence?: DirectorSequence }, source: { projectId: string; projectVersion: number }) {
+    if (!scene.cameraSequence) throw new Error('场景尚未建立切镜序列');
+    validateDirectorSequence(scene.cameraSequence, scene.cameras.map(camera => camera.id));
+    if (!source.projectId || !Number.isSafeInteger(source.projectVersion) || source.projectVersion < 1) throw new Error('镜头单需要已保存的项目版本');
+    const sequence = scene.cameraSequence;
+    return {
+        schemaVersion: 1, ...source, sceneId: scene.id, sceneTitle: scene.title,
+        sequenceId: sequence.id, sequenceName: sequence.name, fps: sequence.fps,
+        durationFrames: sequence.durationFrames, durationSeconds: sequence.durationFrames / sequence.fps,
+        interval: '[startFrame,endFrame)',
+        cuts: sequence.cuts.map((cut, index) => {
+            const endFrame = sequence.cuts[index + 1]?.startFrame ?? sequence.durationFrames;
+            return { ...cut, cameraName: scene.cameras.find(camera => camera.id === cut.cameraId)!.name,
+                endFrame, startSeconds: cut.startFrame / sequence.fps, endSeconds: endFrame / sequence.fps };
+        }),
+    };
+}
+
+/** Preserve seconds when changing fps; refuse collisions instead of dropping cuts. */
+export function retimeDirectorSequence(sequence: DirectorSequence, fps: DirectorSequence['fps'], cameraIds: readonly string[]) {
+    const next = { ...sequence, fps, durationFrames: Math.round(sequence.durationFrames * fps / sequence.fps),
+        cuts: sequence.cuts.map(cut => ({ ...cut, startFrame: Math.round(cut.startFrame * fps / sequence.fps) })) };
+    validateDirectorSequence(next, cameraIds);
+    return next;
+}
+
+export type DirectorSequenceCommand =
+    | { type: 'insert'; cut: DirectorSequence['cuts'][number] }
+    | { type: 'update'; id: string; startFrame?: number; cameraId?: string }
+    | { type: 'remove'; id: string }
+    | { type: 'duration'; durationFrames: number }
+    | { type: 'fps'; fps: DirectorSequence['fps'] };
+
+/** Review the actual rounding and sampling impact before committing a timing edit. */
+export function previewDirectorSequenceTiming(scene: DirectorScene, command: Extract<DirectorSequenceCommand, { type: 'fps' | 'duration' }>) {
+    const sequence = scene.cameraSequence;
+    if (!sequence) throw new Error('场景尚未建立序列');
+    const fps = command.type === 'fps' ? command.fps : sequence.fps;
+    const durationFrames = command.type === 'duration' ? command.durationFrames : Math.round(sequence.durationFrames * fps / sequence.fps);
+    const cuts = sequence.cuts.map(cut => ({ ...cut, previousFrame: cut.startFrame,
+        startFrame: command.type === 'fps' ? Math.round(cut.startFrame * fps / sequence.fps) : cut.startFrame }));
+    const lines = [`${sequence.fps}fps / ${sequence.durationFrames} 帧 → ${fps}fps / ${durationFrames} 帧`];
+    for (const cut of cuts) {
+        const name = scene.cameras.find(camera => camera.id === cut.cameraId)?.name || cut.cameraId;
+        lines.push(`${name}：第 ${cut.previousFrame} 帧 → 第 ${cut.startFrame} 帧（${(cut.previousFrame / sequence.fps).toFixed(3)} 秒 → ${(cut.startFrame / fps).toFixed(3)} 秒）${cut.startFrame >= durationFrames ? '，超出新范围' : ''}`);
+    }
+    const lastTime = (durationFrames - 1) / fps;
+    if (lastTime < (sequence.durationFrames - 1) / sequence.fps) {
+        for (const item of [...scene.objects, ...scene.cameras]) {
+            const times = item.keyframes.map(frame => frame.time);
+            if ('boneTracks' in item) times.push(...(item.boneTracks || []).flatMap(track => track.keyframes.map(frame => frame.time)));
+            if ('motionClips' in item) times.push(...(item.motionClips || []).map(clip => clip.start + clip.duration));
+            if ('motionPath' in item && item.motionPath) times.push((item.motionPath.startTime || 0) + item.motionPath.duration);
+            if (times.some(time => time > lastTime)) lines.push(`${item.name}：部分动作或关键帧位于新的末帧时间 ${lastTime.toFixed(3)} 秒之后；原数据保留，但本次预演不会播放到该处。`);
+        }
+    }
+    try { return { lines, next: editDirectorSequence(sequence, command, scene.cameras.map(camera => camera.id)), error: '' }; }
+    catch (cause) { return { lines, next: null, error: cause instanceof Error ? cause.message : '序列调整无效' }; }
+}
+
+/** Pure atomic edit: validation failures never mutate the user's original sequence. */
+export function editDirectorSequence(sequence: DirectorSequence, command: DirectorSequenceCommand, cameraIds: readonly string[]): DirectorSequence {
+    validateDirectorSequence(sequence, cameraIds);
+    if (command.type === 'fps') return retimeDirectorSequence(sequence, command.fps, cameraIds);
+    const next = structuredClone(sequence);
+    if (command.type === 'duration') next.durationFrames = command.durationFrames;
+    else if (command.type === 'insert') next.cuts.push({ ...command.cut });
+    else {
+        const index = next.cuts.findIndex(cut => cut.id === command.id);
+        if (index < 0) throw new Error('切点不存在，请重新读取场景');
+        if (command.type === 'remove') {
+            if (index === 0) throw new Error('第 0 帧切点必须保留，可替换其机位');
+            next.cuts.splice(index, 1);
+        } else {
+            if (index === 0 && command.startFrame !== undefined && command.startFrame !== 0) throw new Error('首个切点必须位于第 0 帧');
+            if (command.startFrame !== undefined) next.cuts[index].startFrame = command.startFrame;
+            if (command.cameraId !== undefined) next.cuts[index].cameraId = command.cameraId;
+        }
+    }
+    next.cuts.sort((a, b) => a.startFrame - b.startFrame);
+    validateDirectorSequence(next, cameraIds);
+    return next;
+}
+
+export function validateDirectorSceneSequence(scene: { cameraSequence?: unknown; cameras: Array<{ id: string }> }): void {
+    if (scene.cameraSequence !== undefined) validateDirectorSequence(scene.cameraSequence, scene.cameras.map(camera => camera.id));
+}
+
+/** The capability marks an intentional edit/delete by a sequence-aware client. */
+export function validateDirectorSequenceWrite(previous: unknown, next: unknown, capability?: number): void {
+    const scenes = (content: unknown): Array<{ id: string; cameraSequence?: unknown; cameras: Array<{ id: string }> }> => {
+        if (!content || typeof content !== 'object') return [];
+        const value = (content as { directorScenes?: unknown }).directorScenes;
+        if (value === undefined) return [];
+        if (!Array.isArray(value)) throw new Error('导演场景列表格式无效');
+        return value;
+    };
+    const incoming = scenes(next);
+    for (const scene of incoming) {
+        if (!scene || typeof scene !== 'object') throw new Error('导演场景格式无效');
+        validateDirectorSceneSequence(scene);
+    }
+    for (const old of scenes(previous)) {
+        if (old?.cameraSequence === undefined) continue;
+        validateDirectorSceneSequence(old);
+        const replacement = incoming.find(scene => scene.id === old.id);
+        if (capability !== 1 && JSON.stringify(replacement?.cameraSequence) !== JSON.stringify(old.cameraSequence)) {
+            throw new Error('当前客户端未声明切镜序列支持，请刷新页面后再保存；云端序列已保留');
+        }
+    }
+}
+
+
+========================================================================
+FILE: shared/media-preview.ts
+LINES: 1-4
+========================================================================
+// Display-only derivatives keep the existing canvas thumbnail dimensions/quality.
+export const CANVAS_IMAGE_PREVIEW_MAX_EDGE = 768;
+export const CANVAS_IMAGE_PREVIEW_QUALITY = 86;
+export const MEDIA_PREVIEW_VERSION = 1;
+
+
+========================================================================
+FILE: shared/production-history.ts
+LINES: 1-30
+========================================================================
+import { parseProduction, type ProductionDocument } from './production';
+type Change = { path: string[]; before?: unknown; after?: unknown };
+const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+const scope = (p: ProductionDocument) => ({ composition: p.composition, subtitles: p.subtitles, shotIds: p.shots.map(shot => shot.shotId) });
+export function productionChanges(before: ProductionDocument, after: ProductionDocument): Change[] {
+    const changes: Change[] = [];
+    const diff = (a: unknown, b: unknown, path: string[]) => {
+        if (equal(a,b)) return;
+        if (object(a) && object(b)) for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) diff(a[key],b[key],[...path,key]);
+        else changes.push({ path, before: a, after: b });
+    };
+    diff(scope(before),scope(after),[]);
+    return changes;
+}
+export function undoProductionChanges(value: unknown, changes: Change[]): ProductionDocument {
+    const next = structuredClone(parseProduction(value));
+    const editable = scope(next);
+    for (const change of changes) {
+        let parent: any = editable;
+        for (const key of change.path.slice(0,-1)) { parent = parent?.[key]; if (!parent) throw new Error('编排字段已删除，无法自动撤销'); }
+        const key = change.path.at(-1)!;
+        if (!equal(parent[key],change.after)) throw new Error('编排字段已有后续修改，无法自动撤销');
+        if (change.before === undefined) delete parent[key]; else parent[key] = structuredClone(change.before);
+    }
+    if (editable.shotIds.length !== next.shots.length || editable.shotIds.some(id => !next.shots.some(shot => shot.shotId === id))) throw new Error('镜头列表已变化，无法撤销排序');
+    next.shots = editable.shotIds.map(id => next.shots.find(shot => shot.shotId === id)!);
+    next.composition = editable.composition; next.subtitles = editable.subtitles;
+    return parseProduction(next);
+}
+
+
+========================================================================
+FILE: shared/production.ts
+LINES: 1-196
+========================================================================
+/** Shared, environment-free production document. Array order in shots is the only edit order. */
+export type ProductionMedia = { kind: 'image' | 'video' | 'audio'; url?: string; storageKey?: string; mediaId?: string | number; durationMs?: number };
+export function sameProductionMedia(left?: ProductionMedia, right?: ProductionMedia): boolean {
+    if (!left || !right || left.kind !== right.kind) return false;
+    if (left.mediaId !== undefined && right.mediaId !== undefined) return String(left.mediaId) === String(right.mediaId);
+    return Boolean((left.url && left.url === right.url) || (left.storageKey && left.storageKey === right.storageKey));
+}
+export type ProductionAsset = { id: string; kind: 'character' | 'scene' | 'prop' | 'style'; name: string; aliases: string[]; description: string; revision: number; media?: ProductionMedia };
+export type ProductionShot = { shotId: string; title: string; description: string; action: string; prompt: string; references: Array<{ assetId: string; revision: number }>; nodeId?: string; adoptedMedia?: ProductionMedia; revision?: number; mediaRevision?: number };
+export type ProductionNarration = { id: string; shotIds: string[]; text: string; revision: number; model?: string; voice?: string; speed?: number; media?: ProductionMedia; mediaRevision?: number };
+export type ProductionSubtitle = { id: string; narrationId: string; text: string; startMs: number; endMs: number; source: 'model' | 'estimated' | 'manual'; reviewed: boolean };
+export type ShotComposition = { included: boolean; durationMs?: number; inMs?: number; outMs?: number; fit: 'contain' | 'cover'; motion: 'none' | 'zoom-in' | 'zoom-out'; focusX?: number; focusY?: number; transitionMs: number; originalAudioVolume: number };
+export type NarrationPlacement = { anchorShotId: string; offsetMs: number; volume: number; enabled: boolean };
+export type ProductionComposition = {
+    shots: Record<string, ShotComposition>;
+    narration: Record<string, NarrationPlacement>;
+    bgm?: { media: ProductionMedia; inMs: number; outMs?: number; loop: boolean; volume: number };
+    output?: { width: number; height: number; fps: number };
+    subtitles: { burnIn: boolean; fontSize?: number; fontFamily?: string };
+};
+export type ProductionDocument = {
+    schemaVersion: 1;
+    title: string;
+    script: { original: string; draft: string; revision: number; adopted?: string; adoptedRevision?: number };
+    library: ProductionAsset[];
+    shots: ProductionShot[];
+    narration: ProductionNarration[];
+    subtitles: ProductionSubtitle[];
+    composition: ProductionComposition;
+};
+export type ProductionOperation =
+    | { type: 'script.edit'; text: string; original?: string }
+    | { type: 'script.adopt' }
+    | { type: 'asset.upsert'; asset: ProductionAsset }
+    | { type: 'asset.remove'; id: string }
+    | { type: 'shot.upsert'; shot: ProductionShot }
+    | { type: 'shot.remove'; shotId: string }
+    | { type: 'shot.reorder'; shotIds: string[] }
+    | { type: 'shot.adopt'; shotId: string; media: ProductionMedia }
+    | { type: 'narration.upsert'; narration: ProductionNarration }
+    | { type: 'narration.remove'; id: string }
+    | { type: 'subtitles.replace'; narrationId: string; subtitles: ProductionSubtitle[] }
+    | { type: 'composition.replace'; composition: ProductionComposition }
+    | { type: 'replace'; production: ProductionDocument };
+
+export function createProduction(title = ''): ProductionDocument {
+    return { schemaVersion: 1, title, script: { original: '', draft: '', revision: 1 }, library: [], shots: [], narration: [], subtitles: [], composition: { shots: {}, narration: {}, subtitles: { burnIn: false } } };
+}
+export function defaultShotComposition(): ShotComposition {
+    return { included: true, fit: 'contain', motion: 'none', transitionMs: 0, originalAudioVolume: 1 };
+}
+const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+const text = (value: unknown): value is string => typeof value === 'string';
+const id = (value: unknown): value is string => text(value) && value.trim().length > 0 && !['__proto__', 'prototype', 'constructor'].includes(value);
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const positive = (value: unknown) => finite(value) && value > 0;
+const nonnegative = (value: unknown) => finite(value) && value >= 0;
+const revision = (value: unknown) => Number.isSafeInteger(value) && (value as number) > 0;
+const optional = (value: unknown, check: (v: unknown) => boolean) => value === undefined || check(value);
+export function isProductionMediaUrl(value: unknown): value is string {
+    if (!text(value) || !value.startsWith('/media/') || /[?#\\\s]/.test(value)) return false;
+    try { const url = new URL(value, 'https://production.invalid'); return url.pathname === value && !decodeURIComponent(value).split('/').some(part => part === '.' || part === '..' || part.includes('\\')); }
+    catch { return false; }
+}
+function mediaValid(value: unknown) {
+    return object(value) && ['image', 'video', 'audio'].includes(String(value.kind))
+        && (id(value.storageKey) || isProductionMediaUrl(value.url))
+        && optional(value.storageKey, text) && optional(value.url, isProductionMediaUrl)
+        && optional(value.mediaId, v => id(v) || positive(v)) && optional(value.durationMs, positive);
+}
+
+/** Validate editable data, not export readiness: incomplete timing and missing selections may be saved. */
+export function validateProduction(value: unknown): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    if (!object(value) || value.schemaVersion !== 1) return { valid: false, errors: ['不支持的制作文档版本，原内容未修改'] };
+    if (!text(value.title)) errors.push('制作标题格式无效');
+    const script = value.script;
+    if (!object(script) || !text(script.original) || !text(script.draft) || !revision(script.revision) || !optional(script.adopted, text) || !optional(script.adoptedRevision, revision)) errors.push('剧本版本格式无效');
+    const arrays = ['library', 'shots', 'narration', 'subtitles'] as const;
+    if (arrays.some(key => !Array.isArray(value[key]))) return { valid: false, errors: [...errors, '制作文档缺少资料、镜头、旁白或字幕列表'] };
+    const library = value.library as unknown[], shots = value.shots as unknown[], narration = value.narration as unknown[], subtitles = value.subtitles as unknown[];
+    const unique = (items: unknown[], key: string, label: string) => {
+        const seen = new Set<string>();
+        for (const item of items) { if (!object(item) || !id(item[key]) || seen.has(item[key] as string)) errors.push(`${label}身份缺失或重复`); else seen.add(item[key] as string); }
+        return seen;
+    };
+    const assetIds = unique(library, 'id', '资料'), shotIds = unique(shots, 'shotId', '镜头'), narrationIds = unique(narration, 'id', '旁白');
+    unique(subtitles, 'id', '字幕');
+    for (const item of library) if (!object(item) || !['character', 'scene', 'prop', 'style'].includes(String(item.kind)) || !text(item.name) || !text(item.description) || !revision(item.revision) || !Array.isArray(item.aliases) || !item.aliases.every(text) || !optional(item.media, mediaValid)) errors.push('资料内容格式无效');
+    for (const item of shots) {
+        if (!object(item) || !['title', 'description', 'action', 'prompt'].every(key => text(item[key])) || !optional(item.revision, revision) || !optional(item.mediaRevision, revision) || !optional(item.nodeId, id) || !optional(item.adoptedMedia, v => mediaValid(v) && (v as ProductionMedia).kind !== 'audio') || !Array.isArray(item.references)) { errors.push('镜头内容格式无效'); continue; }
+        for (const ref of item.references) if (!object(ref) || !assetIds.has(String(ref.assetId)) || !revision(ref.revision)) errors.push('镜头引用的资料或版本无效');
+    }
+    for (const item of narration) if (!object(item) || !text(item.text) || !revision(item.revision) || !optional(item.mediaRevision, revision) || !Array.isArray(item.shotIds) || !item.shotIds.every(v => id(v)) || new Set(item.shotIds).size !== item.shotIds.length || !optional(item.model, text) || !optional(item.voice, text) || !optional(item.speed, positive) || !optional(item.media, v => mediaValid(v) && (v as ProductionMedia).kind === 'audio')) errors.push('旁白内容格式无效');
+    for (const item of subtitles) if (!object(item) || !narrationIds.has(String(item.narrationId)) || !text(item.text) || !nonnegative(item.startMs) || !nonnegative(item.endMs) || !['model', 'estimated', 'manual'].includes(String(item.source)) || typeof item.reviewed !== 'boolean') errors.push('字幕内容格式无效');
+    const composition = value.composition;
+    if (!object(composition) || !object(composition.shots) || !object(composition.narration) || !object(composition.subtitles)) return { valid: false, errors: [...errors, '编排配置缺失'] };
+    for (const [key, item] of Object.entries(composition.shots)) if (!shotIds.has(key) || !object(item) || typeof item.included !== 'boolean' || !['contain', 'cover'].includes(String(item.fit)) || !['none', 'zoom-in', 'zoom-out'].includes(String(item.motion)) || !nonnegative(item.transitionMs) || !nonnegative(item.originalAudioVolume) || !['durationMs', 'inMs', 'outMs'].every(k => optional(item[k], nonnegative)) || !['focusX', 'focusY'].every(k => optional(item[k], v => finite(v) && v >= 0 && v <= 1))) errors.push('镜头编排配置无效');
+    for (const [key, item] of Object.entries(composition.narration)) if (!narrationIds.has(key) || !object(item) || !id(item.anchorShotId) || !nonnegative(item.offsetMs) || !nonnegative(item.volume) || typeof item.enabled !== 'boolean') errors.push('旁白放置配置无效');
+    if (!optional(composition.output, v => object(v) && Number.isSafeInteger(v.width) && positive(v.width) && Number.isSafeInteger(v.height) && positive(v.height) && positive(v.fps))) errors.push('输出尺寸或帧率无效');
+    if (typeof composition.subtitles.burnIn !== 'boolean' || !optional(composition.subtitles.fontSize, positive) || !optional(composition.subtitles.fontFamily, text)) errors.push('字幕样式无效');
+    if (!optional(composition.bgm, v => object(v) && mediaValid(v.media) && (v.media as ProductionMedia).kind === 'audio' && nonnegative(v.inMs) && optional(v.outMs, nonnegative) && nonnegative(v.volume) && typeof v.loop === 'boolean')) errors.push('背景音乐配置无效');
+    return { valid: !errors.length, errors: [...new Set(errors)] };
+}
+export function parseProduction(value: unknown): ProductionDocument {
+    const result = validateProduction(value);
+    if (!result.valid) throw new Error(result.errors.join('；'));
+    return value as ProductionDocument;
+}
+export function collectProductionMediaKeys(production: ProductionDocument): string[] {
+    const keys = new Set<string>();
+    const add = (media?: ProductionMedia) => { if (media?.storageKey) keys.add(media.storageKey); if (media?.url) keys.add(media.url); };
+    production.library.forEach(item => add(item.media)); production.shots.forEach(item => add(item.adoptedMedia)); production.narration.forEach(item => add(item.media)); add(production.composition.bgm?.media);
+    return [...keys];
+}
+const upsert = <T>(items: T[], next: T, key: (item: T) => string) => items.some(item => key(item) === key(next)) ? items.map(item => key(item) === key(next) ? next : item) : [...items, next];
+export function applyProductionOperation(source: ProductionDocument, operation: ProductionOperation): ProductionDocument {
+    const p = structuredClone(source);
+    switch (operation.type) {
+        case 'replace': return parseProduction(structuredClone(operation.production));
+        case 'script.edit': p.script = { ...p.script, draft: operation.text, original: operation.original ?? p.script.original, revision: p.script.revision + 1 }; break;
+        case 'script.adopt': p.script.adopted = p.script.draft; p.script.adoptedRevision = p.script.revision; break;
+        case 'asset.upsert': p.library = upsert(p.library, operation.asset, item => item.id); break;
+        case 'asset.remove': if (p.shots.some(shot => shot.references.some(ref => ref.assetId === operation.id))) throw new Error('仍有镜头引用该资料，请先调整引用'); p.library = p.library.filter(item => item.id !== operation.id); break;
+        case 'shot.upsert': { const previous = p.shots.find(item => item.shotId === operation.shot.shotId); const changed = previous && ['description', 'action', 'prompt', 'references'].some(key => JSON.stringify(previous[key as keyof ProductionShot]) !== JSON.stringify(operation.shot[key as keyof ProductionShot])); const next = { ...operation.shot, revision: previous ? (previous.revision || 1) + (changed ? 1 : 0) : operation.shot.revision || 1 }; p.shots = upsert(p.shots, next, item => item.shotId); break; }
+        case 'shot.remove': p.shots = p.shots.filter(item => item.shotId !== operation.shotId); delete p.composition.shots[operation.shotId]; break;
+        case 'shot.reorder': { const byId = new Map(p.shots.map(item => [item.shotId, item])); if (operation.shotIds.length !== p.shots.length || new Set(operation.shotIds).size !== p.shots.length || operation.shotIds.some(key => !byId.has(key))) throw new Error('镜头顺序必须完整且不能重复'); p.shots = operation.shotIds.map(key => byId.get(key)!); break; }
+        case 'shot.adopt': { const shot = p.shots.find(item => item.shotId === operation.shotId); if (!shot) throw new Error('镜头已删除，结果仅保留在生产记录'); shot.adoptedMedia = operation.media; shot.mediaRevision = shot.revision || 1; break; }
+        case 'narration.upsert': { const previous = p.narration.find(item => item.id === operation.narration.id); const changed = previous && (['text', 'model', 'voice', 'speed'] as const).some(key => previous[key] !== operation.narration[key]); const next = { ...operation.narration, revision: previous ? previous.revision + (changed ? 1 : 0) : operation.narration.revision }; p.narration = upsert(p.narration, next, item => item.id); break; }
+        case 'narration.remove': p.narration = p.narration.filter(item => item.id !== operation.id); p.subtitles = p.subtitles.filter(item => item.narrationId !== operation.id); delete p.composition.narration[operation.id]; break;
+        case 'subtitles.replace': if (operation.subtitles.some(item => item.narrationId !== operation.narrationId)) throw new Error('字幕旁白归属不一致'); p.subtitles = [...p.subtitles.filter(item => item.narrationId !== operation.narrationId), ...operation.subtitles]; break;
+        case 'composition.replace': p.composition = operation.composition; break;
+        default: throw new Error('未知制作操作');
+    }
+    return parseProduction(p);
+}
+
+export type TimelineShot = { shotId: string; media: ProductionMedia; startMs: number; endMs: number; durationMs: number; settings: ShotComposition };
+export type TimelineNarration = { narrationId: string; media: ProductionMedia; startMs: number; endMs: number; volume: number };
+export type ProductionTimeline = { valid: boolean; errors: string[]; durationMs: number; shots: TimelineShot[]; narration: TimelineNarration[]; subtitles: Array<ProductionSubtitle & { timelineStartMs: number; timelineEndMs: number }> };
+/** Pure timing compiler shared by subtitle export, preview and server rendering. No implicit retiming. */
+export function compileProductionTimeline(value: ProductionDocument): ProductionTimeline {
+    const validation = validateProduction(value);
+    const plan: ProductionTimeline = { valid: false, errors: [...validation.errors], durationMs: 0, shots: [], narration: [], subtitles: [] };
+    if (!validation.valid) return plan;
+    const p = value;
+    const included = p.shots.filter(shot => p.composition.shots[shot.shotId]?.included !== false);
+    for (let index = 0; index < included.length; index++) {
+        const shot = included[index], settings = p.composition.shots[shot.shotId] ?? defaultShotComposition();
+        const media = shot.adoptedMedia;
+        if (!media) { plan.errors.push(`「${shot.title}」尚未采用画面`); continue; }
+        if (shot.mediaRevision !== undefined && shot.mediaRevision !== (shot.revision || 1)) plan.errors.push(`「${shot.title}」采用画面对应旧输入，请重新生成或明确保留原画面`);
+        const duration = media.kind === 'video' ? (settings.outMs ?? media.durationMs ?? 0) - (settings.inMs ?? 0) : settings.durationMs ?? 0;
+        if (!(duration > 0)) { plan.errors.push(`「${shot.title}」需要有效的画面时长`); continue; }
+        if (media.kind === 'video' && (!media.durationMs || (settings.outMs ?? media.durationMs) > media.durationMs)) plan.errors.push(`「${shot.title}」需探测视频时长或修正裁剪区间`);
+        const previous = plan.shots.at(-1), overlap = previous ? settings.transitionMs : 0;
+        if (overlap >= duration || (previous && overlap >= previous.durationMs)) plan.errors.push(`「${shot.title}」转场必须短于相邻镜头`);
+        if (previous && (previous.settings.transitionMs + overlap >= previous.durationMs) && plan.shots.length > 1) plan.errors.push(`「${previous.shotId}」前后转场占满镜头，请缩短转场`);
+        const startMs = plan.durationMs - overlap, endMs = startMs + duration;
+        plan.shots.push({ shotId: shot.shotId, media, startMs, endMs, durationMs: duration, settings }); plan.durationMs = endMs;
+    }
+    if (!included.length) plan.errors.push('请至少加入一个镜头');
+    const positions = new Map(included.map((shot, index) => [shot.shotId, index]));
+    for (const line of p.narration) {
+        const placement = p.composition.narration[line.id];
+        if (placement?.enabled === false) continue;
+        if (!line.media || !line.media.durationMs) { plan.errors.push(`旁白「${line.text.slice(0, 16)}」缺少采用音频或真实时长`); continue; }
+        if (line.mediaRevision !== undefined && line.mediaRevision !== line.revision) plan.errors.push(`旁白「${line.text.slice(0, 16)}」音频对应旧文本或音色，请重新配音或明确采用原音频`);
+        if (!placement) { plan.errors.push(`旁白「${line.text.slice(0, 16)}」尚未安排位置`); continue; }
+        const indices = line.shotIds.map(key => positions.get(key));
+        if (!indices.length || indices.some((v, i) => v === undefined || (i > 0 && v !== indices[i - 1]! + 1)) || placement.anchorShotId !== line.shotIds[0]) { plan.errors.push(`旁白「${line.text.slice(0, 16)}」关联镜头不再连续或锚点已改变，请重新安排`); continue; }
+        const first = plan.shots.find(shot => shot.shotId === placement.anchorShotId), last = plan.shots.find(shot => shot.shotId === line.shotIds.at(-1));
+        if (!first || !last) continue;
+        const startMs = first.startMs + placement.offsetMs, endMs = startMs + line.media.durationMs;
+        if (endMs > last.endMs || startMs < first.startMs) plan.errors.push(`旁白「${line.text.slice(0, 16)}」超出关联画面，请调整时长或位置`);
+        plan.narration.push({ narrationId: line.id, media: line.media, startMs, endMs, volume: placement.volume });
+        let previousEnd = 0;
+        for (const cue of p.subtitles.filter(item => item.narrationId === line.id).sort((a, b) => a.startMs - b.startMs)) {
+            if (cue.endMs <= cue.startMs || cue.endMs > line.media.durationMs || cue.startMs < previousEnd) plan.errors.push(`旁白「${line.text.slice(0, 16)}」的字幕存在重叠或越界`);
+            previousEnd = cue.endMs;
+            plan.subtitles.push({ ...cue, timelineStartMs: startMs + cue.startMs, timelineEndMs: startMs + cue.endMs });
+        }
+    }
+    const narrations = [...plan.narration].sort((a, b) => a.startMs - b.startMs);
+    for (let i = 1; i < narrations.length; i++) if (narrations[i].startMs < narrations[i - 1].endMs) plan.errors.push('旁白段在成片中重叠，请重新安排');
+    const bgm = p.composition.bgm;
+    if (bgm) { const length = (bgm.outMs ?? bgm.media.durationMs ?? 0) - bgm.inMs; if (!bgm.media.durationMs || length <= 0 || (bgm.outMs ?? 0) > bgm.media.durationMs) plan.errors.push('背景音乐区间无效或缺少真实时长'); }
+    plan.errors = [...new Set(plan.errors)]; plan.valid = plan.errors.length === 0;
+    return plan;
+}
+
+export function productionSrt(plan: ProductionTimeline): string {
+    if (!plan.valid) throw new Error(plan.errors.join('；'));
+    const stamp = (ms: number) => { const time = Math.round(ms); return `${Math.floor(time / 3600000).toString().padStart(2, '0')}:${Math.floor(time / 60000 % 60).toString().padStart(2, '0')}:${Math.floor(time / 1000 % 60).toString().padStart(2, '0')},${(time % 1000).toString().padStart(3, '0')}`; };
+    return [...plan.subtitles].sort((a, b) => a.timelineStartMs - b.timelineStartMs).map((cue, i) => `${i + 1}\n${stamp(cue.timelineStartMs)} --> ${stamp(cue.timelineEndMs)}\n${cue.text.replace(/\r/g, '')}\n`).join('\n');
+}
+
+
+========================================================================
+FILE: web/index.html
+LINES: 1-107
+========================================================================
+<!doctype html>
+
+<html lang="zh-CN" class="font-sans">
+
+    <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' blob: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:* data: blob:; font-src 'self' data:; worker-src 'self' blob:;">
+
+        <meta charset="UTF-8" />
+
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+        <meta name="description" content="AI 视频创作工作台" />
+
+        <meta name="theme-color" content="#121212" />
+
+        <link rel="icon" href="/brand/sundas-favicon.svg" />
+
+        <style>
+
+            /* 首屏底色：CSS 加载前就铺 #121212，避免白闪 */
+
+            html, body { margin: 0; background: #121212; color: #ffffff; }
+
+        </style>
+
+        <title>sundas</title>
+
+        <script>
+
+            /* 发版后旧页面引用的 lazy chunk 已被替换时，先自动刷新一次，避免落到原始错误页。 */
+
+            (function () {
+
+                var key = "sundas:chunk-reload";
+
+                function isChunkError(value) {
+
+                    return /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|ChunkLoadError/i.test(String(value || ""));
+
+                }
+
+                function reloadOnce() {
+
+                    try {
+
+                        if (sessionStorage.getItem(key)) return;
+
+                        sessionStorage.setItem(key, "1");
+
+                    } catch (error) {}
+
+                    location.reload();
+
+                }
+
+                window.addEventListener("vite:preloadError", function (event) {
+
+                    event.preventDefault();
+
+                    reloadOnce();
+
+                });
+
+                window.addEventListener("unhandledrejection", function (event) {
+
+                    if (!isChunkError(event.reason && event.reason.message || event.reason)) return;
+
+                    event.preventDefault();
+
+                    reloadOnce();
+
+                });
+
+                window.addEventListener("error", function (event) {
+
+                    if (isChunkError(event.message)) reloadOnce();
+
+                });
+
+            })();
+
+        </script>
+
+        <script>
+
+            /* 主题锁定暗色（浅色模式已移除） */
+
+            document.documentElement.classList.add("dark");
+
+            document.documentElement.style.colorScheme = "dark";
+
+        </script>
+
+    </head>
+
+    <body class="bg-background text-foreground antialiased">
+
+        <div id="root"></div>
+
+        <script src="/config.js"></script>
+
+        <script type="module" src="/src/main.tsx"></script>
+
+    </body>
+
+</html>
+
+
+
+========================================================================
+FILE: web/package.json
+LINES: 1-71
+========================================================================
+{
+  "name": "@sundas/frontend-design-audit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 3021",
+    "build": "vite build",
+    "build:analyze": "vite build --mode analyze",
+    "typecheck": "tsc --noEmit",
+    "start": "vite preview --host 127.0.0.1 --port 3021",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.1.1",
+    "@ant-design/pro-components": "3.0.0-beta.3",
+    "@astryxdesign/core": "0.7.16",
+    "@astryxdesign/theme-neutral": "0.7.16",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-json": "^6.0.2",
+    "@fix-webm-duration/fix": "^1.0.1",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
+    "@stylexjs/stylex": "0.19.2",
+    "@tanstack/react-query": "^5.100.9",
+    "@types/three": "^0.187.0",
+    "@uiw/react-codemirror": "^4.25.9",
+    "antd": "^6.4.2",
+    "axios": "^1.16.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "copy-to-clipboard": "^4.0.2",
+    "dayjs": "^1.11.20",
+    "fast-deep-equal": "^3.1.3",
+    "fflate": "^0.8.3",
+    "file-saver": "^2.0.5",
+    "heic2any": "^0.0.4",
+    "i18next": "^26.3.6",
+    "localforage": "^1.10.0",
+    "lucide-react": "^1.16.0",
+    "motion": "^12.38.0",
+    "nanoid": "^5.1.11",
+    "radix-ui": "^1.4.3",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "react-i18next": "^17.0.11",
+    "react-router": "^7.12.0",
+    "react-router-dom": "^7.12.0",
+    "shadcn": "^4.7.0",
+    "streamdown": "^2.5.0",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4",
+    "three": "^0.185.1",
+    "three-stdlib": "^2.36.1",
+    "tw-animate-css": "^1.4.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/file-saver": "^2.0.7",
+    "@types/node": "^20",
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "@vitejs/plugin-react": "^5.2.0",
+    "prettier": "^3.8.3",
+    "rollup-plugin-visualizer": "^5.12.0",
+    "typescript": "^5",
+    "vite": "^7.3.0"
+  }
+}
+
+========================================================================
+FILE: web/postcss.config.mjs
+LINES: 1-14
+========================================================================
+const config = {
+
+    plugins: {
+
+        "@tailwindcss/postcss": {},
+
+    },
+
+};
+
+
+
+export default config;
+
+
+
+========================================================================
+FILE: web/src/audit/demo.ts
+LINES: 1-40
+========================================================================
+/** Synthetic presentation fixtures. No real account, generation, billing or storage service. */
+export const demoUser={id:'00000000-0000-4000-8000-000000000001',email:'reviewer@example.invalid',displayName:'设计审计',role:'admin',status:'active'};
+const wallet={balance:1000,availableCredits:1000,held:0,member:true,memberUntil:null,planName:'演示账户',generationDiscount:1,storage:{usedBytes:0,limitBytes:1073741824}};
+const gallery=['adventure','anime','cozy','cyber','ocean','portrait','surreal','wild'];
+const prompts=gallery.map((name,i)=>({id:`demo-${name}`,sourceId:'demo',category:i%2?'动画动漫':'影视作品',title:['奇遇之旅','动画世界','温暖时光','未来城市','海洋之梦','人物光影','超现实想象','自然探索'][i],prompt:'用于界面审计的示例提示词，展示构图、光影和叙事风格。',description:'本地演示素材',coverUrl:`/hero-media/hero-${name}.jpg`,previewVideoUrl:`/hero-media/hero-${name}.mp4`,referenceImageUrls:[],tags:['示例','灵感'],preview:'',githubUrl:'',createdAt:'2026-01-01T00:00:00Z',updatedAt:'2026-01-01T00:00:00Z'}));
+const models=['image','video','text','audio'].map((capability,i)=>({id:`00000000-0000-4000-8000-00000000001${i}`,name:['示例图片模型','Seedance 2.0 · 演示','示例视觉对话模型','示例语音模型'][i],capability,description:'仅供交互审计，不连接真实模型',metadata:capability==='text'?{supportsVision:true}:{},health:'healthy',minCredits:0,maxCredits:0,routeCount:1,unit:'request',resolutionMultipliers:{'720':1,'1080':1,'2160':1},routes:[{id:`demo-route-${i}`,channelName:'本地演示',unit:'request',baseCredits:0,health:'healthy',resolutionMultipliers:{'720':1,'1080':1,'2160':1}}]}));
+const projects=new Map<string,Record<string,any>>();
+let loggedIn=true;
+export class DemoOnlyError extends Error {status=400;errorCode='DESIGN_AUDIT_ONLY';}
+export async function demoRequest(path:string,init:{method?:string;json?:unknown;body?:unknown;signal?:AbortSignal|null}={}):Promise<any>{
+ if(init.signal?.aborted)throw new DOMException('Aborted','AbortError');
+ const url=new URL(path,location.origin),route=url.pathname.replace(/\/$/,''),method=(init.method||'GET').toUpperCase();
+ const body=(init.json??(typeof init.body==='string'?JSON.parse(init.body||'{}'):{})) as Record<string,any>;
+ if(route==='/api/auth/me')return{user:loggedIn?demoUser:null,wallet};
+ if(route==='/api/auth/logout'){loggedIn=false;return{};}
+ if(route==='/api/auth/login'||route==='/api/auth/register'){loggedIn=true;return{user:demoUser};}
+ if(route==='/api/wallet')return wallet;
+ if(route==='/api/models')return{models};
+ if(route==='/api/site')return{site:{name:'SUNDAS · 设计审计',description:'公开前端交互审计演示'},home:{},creditPriceCents:0,minCredits:0,payTypes:[],providers:[],announcements:[]};
+ if(route==='/api/prompts'){const keyword=url.searchParams.get('keyword')||'';const items=prompts.filter(x=>!keyword||(x.title+x.prompt).includes(keyword));return{items,tags:['示例','灵感'],categories:['影视作品','动画动漫'],total:items.length,page:1,pageSize:20,hasMore:false};}
+ if(route==='/api/prompts/sources')return{items:[{id:'demo',name:'演示素材',count:8}],sources:[{id:'demo',name:'演示素材',count:8}]};
+ if(route.startsWith('/api/pricing/'))return{minCredits:0,maxCredits:0,member:true};
+ if(route==='/api/prompts/optimize/estimate')return{credits:0,minCredits:0,maxCredits:0,available:true};
+ if(route==='/api/prompts/optimize')return{prompt:String(body.prompt||'')+'，注重构图和光影层次。',skill:{key:'demo',label:'本地示例'},creditsCharged:0};
+ if((route==='/api/creation-chat/settings'||route==='/api/creation-chat/config'))return{enabled:true,modelId:models[2].id,supportsVision:true};
+ if(route==='/api/canvas/projects'){
+  if(method==='POST'){const project={...body,id:body.id||crypto.randomUUID(),version:1,updatedAt:new Date().toISOString()};projects.set(project.id,project);return{project};}
+  return{projects:[...projects.values()],items:[...projects.values()],hasMore:false};
+ }
+ if(route.startsWith('/api/canvas/projects/')){const id=route.split('/')[4];
+  if(method==='DELETE'){projects.delete(id);return{};}
+  if(method==='PUT'||method==='PATCH'){const project={...projects.get(id),...body,id,version:Number(projects.get(id)?.version||0)+1};projects.set(id,project);return{project,...project};}
+  const project=projects.get(id);if(project)return{project,...project};throw new DemoOnlyError('此演示画布尚未建立，请从我的画布新建。');
+ }
+ if(route==='/api/uploads/config')return{direct:false};
+ if(/\/promo(?:\/|$)/.test(route))return{items:[],banners:[],slots:[],total:0};
+ if(route.includes('/generations/history'))return{items:[],hiddenTaskIds:[],hasMore:false};
+ if(method==='GET')return{items:[],assets:[],projects:[],threads:[],requests:[],plans:[],packages:[],skills:[],total:0,page:1,pageSize:20,hasMore:false,nextCursor:null};
+ throw new DemoOnlyError('这是前端设计审计演示，此操作需要真实服务，演示中未执行。');
+}
+
+
+========================================================================
+FILE: web/src/audit/install.ts
+LINES: 1-16
+========================================================================
+import axios from 'axios';
+import {demoRequest} from './demo';
+const localFetch=window.fetch.bind(window);
+window.fetch=async(input,init)=>{
+ const raw=input instanceof Request?input.url:String(input),url=new URL(raw,location.href);
+ if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/v1/')){
+  try{return Response.json(await demoRequest(url.href,{method:init?.method||(input instanceof Request?input.method:'GET'),body:init?.body,signal:init?.signal}));}
+  catch(error){return Response.json({message:error instanceof Error?error.message:'演示功能未连接'},{status:400});}
+ }
+ if(url.origin!==location.origin&&!['blob:','data:'].includes(url.protocol))throw new Error('公开审计演示只使用本地资源');
+ return localFetch(input,init);
+};
+axios.defaults.adapter=async config=>({data:await demoRequest(String(config.url||''),{method:config.method,body:config.data,signal:config.signal as AbortSignal}),status:200,statusText:'Demo',headers:{},config});
+window.__RUNTIME_CONFIG__={};
+const badge=document.createElement('div');badge.textContent='设计审计演示 · 所有数据为示例';badge.style.cssText='position:fixed;bottom:6px;left:10px;z-index:99999;font:11px system-ui;color:#aaa;pointer-events:none';
+if(document.body)document.body.append(badge);else document.addEventListener('DOMContentLoaded',()=>document.body.append(badge));
+
+
+========================================================================
+FILE: web/src/components/audio-settings-panel.tsx
+LINES: 1-102
+========================================================================
+import { type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+
+import { ImageSettingsTheme } from "@/components/image-settings-panel";
+import { audioFormatOptions, audioSpeedLabel, audioVoiceOptions, normalizeAudioFormatValue, normalizeAudioSpeedValue, normalizeAudioVoiceValue } from "@/lib/audio-generation";
+import { type CanvasTheme } from "@/lib/canvas-theme";
+import type { AiConfig } from "@/stores/use-config-store";
+
+const speedOptions = ["0.75", "1", "1.25", "1.5"];
+
+type AudioSettingKey = "audioVoice" | "audioFormat" | "audioSpeed" | "audioInstructions";
+
+type AudioSettingsPanelProps = {
+    config: AiConfig;
+    onConfigChange: (key: AudioSettingKey, value: string) => void;
+    theme: CanvasTheme;
+    showTitle?: boolean;
+    className?: string;
+};
+
+export function AudioSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: AudioSettingsPanelProps) {
+    const { t } = useTranslation();
+    const voice = normalizeAudioVoiceValue(config.audioVoice);
+    const format = normalizeAudioFormatValue(config.audioFormat);
+    const speed = normalizeAudioSpeedValue(config.audioSpeed);
+
+    return (
+        <ImageSettingsTheme theme={theme}>
+            <div className={className} style={{ color: theme.node.text }} onMouseDown={(event) => event.stopPropagation()}>
+                {showTitle ? <div className="text-lg font-semibold">{t("settingsPanels.audio.title")}</div> : null}
+                <SettingGroup title={t("settingsPanels.audio.voice")} color={theme.node.muted}>
+                    <div className="grid grid-cols-3 gap-2.5">
+                        {audioVoiceOptions.map((item) => (
+                            <OptionPill key={item.value} selected={voice === item.value} theme={theme} onClick={() => onConfigChange("audioVoice", item.value)}>
+                                {item.label}
+                            </OptionPill>
+                        ))}
+                    </div>
+                </SettingGroup>
+                <SettingGroup title={t("settingsPanels.audio.format")} color={theme.node.muted}>
+                    <div className="grid grid-cols-3 gap-2.5">
+                        {audioFormatOptions.map((item) => (
+                            <OptionPill key={item.value} selected={format === item.value} theme={theme} onClick={() => onConfigChange("audioFormat", item.value)}>
+                                {item.label}
+                            </OptionPill>
+                        ))}
+                    </div>
+                </SettingGroup>
+                <SettingGroup title={t("settingsPanels.audio.speed")} color={theme.node.muted}>
+                    <div className="grid grid-cols-4 gap-2.5">
+                        {speedOptions.map((value) => (
+                            <OptionPill key={value} selected={speed === value} theme={theme} onClick={() => onConfigChange("audioSpeed", value)}>
+                                {audioSpeedLabel(value)}
+                            </OptionPill>
+                        ))}
+                    </div>
+                    <input
+                        type="number"
+                        min={0.25}
+                        max={4}
+                        step={0.05}
+                        className="h-9 w-full rounded-full border bg-transparent px-3 text-center text-sm outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        style={{ borderColor: theme.node.stroke, color: theme.node.text, WebkitTextFillColor: theme.node.text }}
+                        value={config.audioSpeed || "1"}
+                        onChange={(event) => onConfigChange("audioSpeed", event.target.value)}
+                        onBlur={(event) => onConfigChange("audioSpeed", normalizeAudioSpeedValue(event.target.value))}
+                        onMouseDown={(event) => event.stopPropagation()}
+                    />
+                </SettingGroup>
+                <SettingGroup title={t("settingsPanels.audio.instructions")} color={theme.node.muted}>
+                    <textarea
+                        value={config.audioInstructions || ""}
+                        placeholder={t("settingsPanels.audio.instructionsPlaceholder")}
+                        className="thin-scrollbar h-20 w-full resize-none rounded-xl border bg-transparent px-3 py-2 text-sm leading-5 outline-none"
+                        style={{ borderColor: theme.node.stroke, color: theme.node.text }}
+                        onChange={(event) => onConfigChange("audioInstructions", event.target.value)}
+                        onMouseDown={(event) => event.stopPropagation()}
+                    />
+                </SettingGroup>
+            </div>
+        </ImageSettingsTheme>
+    );
+}
+
+function OptionPill({ selected, theme, onClick, children }: { selected: boolean; theme: CanvasTheme; onClick: () => void; children: ReactNode }) {
+    return (
+        <button type="button" className="h-9 cursor-pointer rounded-full border px-2 text-sm transition hover:opacity-80" style={{ background: "transparent", borderColor: selected ? theme.node.text : theme.node.stroke, color: theme.node.text }} onMouseDown={(event) => event.stopPropagation()} onClick={onClick}>
+            {children}
+        </button>
+    );
+}
+
+function SettingGroup({ title, color, children }: { title: string; color: string; children: ReactNode }) {
+    return (
+        <div className="space-y-2.5">
+            <div className="text-xs font-medium" style={{ color }}>
+                {title}
+            </div>
+            {children}
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/auth/auth-dialog.css
+LINES: 1-410
+========================================================================
+/* ===== 登录弹窗（参照即梦登录页：遮罩 + 居中深色卡片） =====
+   规范沿用 jimeng-theme：深色面 #1A1A1A、1px 白描边分层、8px 控件圆角、
+   单一强调色 #D8FF3E、无渐变发光。z-index 低于 antd message(2010)，提示仍可见。 */
+
+.auth-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    font-family: var(--font-sans);
+    color: #fff;
+}
+
+.auth-modal-mask {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.62);
+    backdrop-filter: blur(3px);
+    animation: auth-modal-fade 0.18s ease-out;
+}
+
+.auth-modal-card {
+    position: relative;
+    width: 400px;
+    max-width: 100%;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    padding: 20px 24px 20px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background: #1a1a1a;
+    box-shadow: 0 28px 72px rgba(0, 0, 0, 0.55);
+    animation: auth-modal-in 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.auth-modal-card::-webkit-scrollbar {
+    width: 6px;
+}
+
+.auth-modal-card::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+}
+
+@keyframes auth-modal-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes auth-modal-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.985); }
+    to { opacity: 1; transform: none; }
+}
+
+/* ---------------- 头部：品牌 + 语言 / 关闭 ---------------- */
+
+.auth-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.auth-modal-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    opacity: 0.86;
+}
+
+.auth-modal-symbol {
+    width: 20px;
+    height: 20px;
+}
+
+.auth-modal-head-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.auth-modal-locale {
+    height: 26px;
+    min-width: 30px;
+    padding: 0 7px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 11.5px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.auth-modal-locale:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.auth-modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.45);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.auth-modal-close svg {
+    width: 16px;
+    height: 16px;
+}
+
+.auth-modal-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+
+/* ---------------- 标题 ---------------- */
+
+.auth-modal-heading {
+    margin-top: 20px;
+}
+
+.auth-modal-title {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 26px;
+    letter-spacing: -0.005em;
+    color: #fff;
+}
+
+.auth-modal-subtitle {
+    margin: 6px 0 0;
+    font-size: 12.5px;
+    line-height: 19px;
+    color: rgba(255, 255, 255, 0.42);
+}
+
+/* ---------------- 表单 ---------------- */
+
+.auth-modal-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    margin-top: 20px;
+}
+
+.auth-modal-field {
+    display: block;
+}
+
+.auth-modal-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 7px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 16px;
+}
+
+.auth-modal-optional {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.auth-modal-shell {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 42px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: #262626;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.auth-modal-shell:focus-within {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: #2b2b2b;
+}
+
+.auth-modal-icon {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.32);
+}
+
+.auth-modal-icon svg {
+    width: 15px;
+    height: 15px;
+}
+
+.auth-modal-input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #fff;
+    font-family: inherit;
+    font-size: 13.5px;
+    line-height: 20px;
+}
+
+.auth-modal-input::placeholder {
+    color: rgba(255, 255, 255, 0.28);
+}
+
+/* 浏览器自动填充仍然保持深色底 */
+.auth-modal-input:-webkit-autofill,
+.auth-modal-input:-webkit-autofill:hover,
+.auth-modal-input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #fff;
+    -webkit-box-shadow: 0 0 0 1000px #262626 inset;
+    caret-color: #fff;
+}
+
+.auth-modal-eye {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+}
+
+.auth-modal-eye svg {
+    width: 15px;
+    height: 15px;
+}
+
+.auth-modal-eye:hover {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+/* 验证码：输入框 + 独立获取按钮，行为对齐即梦 */
+.auth-modal-code-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 112px;
+    gap: 8px;
+}
+
+.auth-modal-code-btn {
+    height: 42px;
+    padding: 0 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: #2c2c2c;
+    color: rgba(255, 255, 255, 0.86);
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.auth-modal-code-btn:hover:not(:disabled) {
+    background: #343434;
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.auth-modal-code-btn:disabled {
+    color: rgba(255, 255, 255, 0.32);
+    cursor: not-allowed;
+}
+
+.auth-modal-submit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 44px;
+    margin-top: 7px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 8px;
+    background: #d8ff3e;
+    color: #11130a;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.auth-modal-submit:hover:not(:disabled) {
+    background: #b8e81c;
+}
+
+.auth-modal-submit:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.auth-modal-spin {
+    animation: auth-modal-spin 0.9s linear infinite;
+}
+
+@keyframes auth-modal-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ---------------- 切换入口与脚注 ---------------- */
+
+.auth-modal-alt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.auth-modal-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.42);
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 18px;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.auth-modal-link:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.auth-modal-link-strong {
+    color: #fff;
+    font-weight: 500;
+}
+
+.auth-modal-link:hover .auth-modal-link-strong {
+    color: #d8ff3e;
+}
+
+.auth-modal-foot {
+    margin: 18px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.28);
+    font-size: 11.5px;
+    line-height: 18px;
+}
+
+/* ---------------- 窄屏 ---------------- */
+
+@media (max-width: 480px) {
+    .auth-modal {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .auth-modal-card {
+        width: 100%;
+        max-height: 92vh;
+        padding: 18px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+        border-radius: 14px 14px 0 0;
+        border-bottom: 0;
+        animation: auth-modal-sheet 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+    }
+
+    .auth-modal-code-row {
+        grid-template-columns: minmax(0, 1fr) 104px;
+    }
+
+    @keyframes auth-modal-sheet {
+        from { opacity: 0; transform: translateY(24px); }
+        to { opacity: 1; transform: none; }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .auth-modal-mask,
+    .auth-modal-card,
+    .auth-modal-spin {
+        animation: none;
+    }
+}
+
+
+========================================================================
+FILE: web/src/components/auth/auth-dialog.tsx
+LINES: 1-351
+========================================================================
+import { type InputHTMLAttributes, type ReactNode, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { App as AntApp } from "antd";
+import { Eye, EyeOff, KeyRound, LoaderCircle, LockKeyhole, Mail, Ticket, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate } from "react-router-dom";
+
+import { BrandName, BrandWordmark } from "@/components/brand/brand-wordmark";
+import { changeAppLocale, listLocales, type AppLocale } from "@/i18n";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { useAuthDialogStore, type AuthMode } from "@/stores/use-auth-dialog-store";
+import "./auth-dialog.css";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const AUTH_ROUTES = ["/login", "/register", "/forgot-password"];
+
+/**
+ * 即梦式登录弹窗：浮在当前页面之上，遮罩 + 居中卡片，不跳路由。
+ * 登录 / 注册 / 重置三种模式共用一套外壳，切换在弹窗内完成。
+ */
+export function AuthDialog() {
+    const { message } = AntApp.useApp();
+    const { i18n, t } = useTranslation();
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const mode = useAuthDialogStore((state) => state.mode);
+    const redirect = useAuthDialogStore((state) => state.redirect);
+    const presetInvite = useAuthDialogStore((state) => state.invite);
+    const setMode = useAuthDialogStore((state) => state.setMode);
+    const close = useAuthDialogStore((state) => state.close);
+
+    const login = useAuthStore((state) => state.login);
+    const register = useAuthStore((state) => state.register);
+    const resetPassword = useAuthStore((state) => state.resetPassword);
+    const sendCode = useAuthStore((state) => state.sendCode);
+
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [confirm, setConfirm] = useState("");
+    const [code, setCode] = useState("");
+    const [inviteCode, setInviteCode] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [sending, setSending] = useState(false);
+    const [cooldown, setCooldown] = useState(0);
+    const [passwordVisible, setPasswordVisible] = useState(false);
+    const [confirmVisible, setConfirmVisible] = useState(false);
+
+    const cardRef = useRef<HTMLDivElement>(null);
+    const open = mode !== null;
+
+    // 打开时预填邀请码；切换模式保留已输入的邮箱，避免重复输入。
+    useEffect(() => {
+        if (!open) return;
+        if (presetInvite) setInviteCode(presetInvite);
+    }, [open, presetInvite]);
+
+    useEffect(() => {
+        if (cooldown <= 0) return;
+        const timer = window.setTimeout(() => setCooldown((value) => value - 1), 1000);
+        return () => window.clearTimeout(timer);
+    }, [cooldown]);
+
+    // 关闭入口要清掉验证码与密码，邮箱留着方便再打开
+    function closeDialog() {
+        close();
+        setPassword("");
+        setConfirm("");
+        setCode("");
+        setCooldown(0);
+        setPasswordVisible(false);
+        setConfirmVisible(false);
+        // 通过 /login 等地址进来的，关闭后回首页（保留来源页更自然）
+        if (AUTH_ROUTES.includes(location.pathname)) {
+            navigate("/", { replace: true });
+        }
+    }
+
+    useEffect(() => {
+        if (!open) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") closeDialog();
+        };
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        document.addEventListener("keydown", onKeyDown);
+        // 打开时把焦点交给第一个输入框，键盘用户不用先摸到卡片
+        const timer = window.setTimeout(() => {
+            cardRef.current?.querySelector<HTMLInputElement>("input")?.focus();
+        }, 60);
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            document.removeEventListener("keydown", onKeyDown);
+            window.clearTimeout(timer);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
+
+    if (!open) return null;
+
+    const currentMode: AuthMode = mode;
+    const needsCode = currentMode !== "login";
+    const locale = i18n.resolvedLanguage as AppLocale;
+    const authLocales = listLocales();
+    const localeIndex = Math.max(0, authLocales.findIndex((item) => item.code === locale));
+    const nextLocaleItem = authLocales[(localeIndex + 1) % authLocales.length];
+
+    const copy =
+        currentMode === "login"
+            ? { title: t("auth.welcomeBack"), subtitle: t("auth.loginSubtitle"), action: t("auth.login") }
+            : currentMode === "register"
+              ? { title: t("auth.createWorkspace"), subtitle: t("auth.registerSubtitle"), action: t("auth.register") }
+              : { title: t("auth.resetAccess"), subtitle: t("auth.resetSubtitle"), action: t("auth.reset") };
+
+    async function handleSendCode() {
+        if (!EMAIL_RE.test(email)) {
+            message.error(t("auth.invalidEmail"));
+            return;
+        }
+        setSending(true);
+        try {
+            await sendCode(email, currentMode === "register" ? "register" : "reset");
+            message.success(t("auth.codeSent"));
+            setCooldown(60);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            setSending(false);
+        }
+    }
+
+    async function handleSubmit() {
+        if (!EMAIL_RE.test(email)) {
+            message.error(t("auth.invalidEmail"));
+            return;
+        }
+        if (password.length < 8) {
+            message.error(t("auth.passwordTooShort"));
+            return;
+        }
+        if (currentMode !== "login" && password !== confirm) {
+            message.error(t("auth.passwordMismatch"));
+            return;
+        }
+        if (needsCode && !code.trim()) {
+            message.error(t("auth.codeRequired"));
+            return;
+        }
+
+        setLoading(true);
+        try {
+            if (currentMode === "login") {
+                await login(email, password);
+                message.success(t("auth.loginSuccess"));
+                close();
+                navigate(redirect || "/", { replace: true });
+            } else if (currentMode === "register") {
+                await register(email, code.trim(), password, inviteCode.trim().toUpperCase());
+                message.success(t("auth.registerSuccess"));
+                close();
+                navigate(redirect || "/", { replace: true });
+            } else {
+                await resetPassword(email, code.trim(), password);
+                message.success(t("auth.resetSuccess"));
+                setPassword("");
+                setConfirm("");
+                setCode("");
+                setMode("login");
+            }
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    return createPortal(
+        <div className="auth-modal">
+            <div className="auth-modal-mask" onClick={closeDialog} />
+            <div className="auth-modal-card" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" ref={cardRef}>
+                <header className="auth-modal-head">
+                    <span className="auth-modal-brand">
+                        <img className="auth-modal-symbol" src="/brand/sundas-symbol.svg" alt="" />
+                        <BrandWordmark height={13} decorative />
+                    </span>
+                    <div className="auth-modal-head-actions">
+                        <button
+                            type="button"
+                            className="auth-modal-locale"
+                            onClick={() => void changeAppLocale(nextLocaleItem.code)}
+                            aria-label={t("topNav.switchLanguage", { language: nextLocaleItem.label })}
+                        >
+                            {nextLocaleItem.short}
+                        </button>
+                        <button type="button" className="auth-modal-close" onClick={closeDialog} aria-label={t("auth.backHome")}>
+                            <X />
+                        </button>
+                    </div>
+                </header>
+
+                <div className="auth-modal-heading">
+                    <h2 id="auth-modal-title" className="auth-modal-title">
+                        <BrandName text={copy.title} imageHeight="0.78em" />
+                    </h2>
+                    <p className="auth-modal-subtitle">{copy.subtitle}</p>
+                </div>
+
+                <form
+                    className="auth-modal-fields"
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        void handleSubmit();
+                    }}
+                >
+                    <AuthField
+                        label={t("auth.email")}
+                        icon={<Mail />}
+                        type="email"
+                        name="email"
+                        placeholder={t("auth.emailPlaceholder")}
+                        value={email}
+                        autoComplete="email"
+                        onChange={(event) => setEmail(event.target.value)}
+                    />
+                    <AuthField
+                        label={t("auth.password")}
+                        icon={<LockKeyhole />}
+                        type={passwordVisible ? "text" : "password"}
+                        name="password"
+                        placeholder={t("auth.passwordPlaceholder")}
+                        value={password}
+                        autoComplete={currentMode === "login" ? "current-password" : "new-password"}
+                        onChange={(event) => setPassword(event.target.value)}
+                        action={
+                            <button type="button" className="auth-modal-eye" onClick={() => setPasswordVisible((value) => !value)} aria-label={passwordVisible ? t("auth.hidePassword") : t("auth.showPassword")}>
+                                {passwordVisible ? <EyeOff /> : <Eye />}
+                            </button>
+                        }
+                    />
+                    {currentMode !== "login" ? (
+                        <AuthField
+                            label={t("auth.confirmPassword")}
+                            icon={<LockKeyhole />}
+                            type={confirmVisible ? "text" : "password"}
+                            name="confirmPassword"
+                            placeholder={t("auth.confirmPassword")}
+                            value={confirm}
+                            autoComplete="new-password"
+                            onChange={(event) => setConfirm(event.target.value)}
+                            action={
+                                <button type="button" className="auth-modal-eye" onClick={() => setConfirmVisible((value) => !value)} aria-label={confirmVisible ? t("auth.hidePassword") : t("auth.showPassword")}>
+                                    {confirmVisible ? <EyeOff /> : <Eye />}
+                                </button>
+                            }
+                        />
+                    ) : null}
+                    {needsCode ? (
+                        <label className="auth-modal-field">
+                            <span className="auth-modal-label">{t("auth.code")}</span>
+                            <span className="auth-modal-code-row">
+                                <span className="auth-modal-shell">
+                                    <KeyRound className="auth-modal-icon" />
+                                    <input
+                                        className="auth-modal-input"
+                                        name="code"
+                                        inputMode="numeric"
+                                        maxLength={6}
+                                        placeholder={t("auth.codePlaceholder")}
+                                        value={code}
+                                        autoComplete="one-time-code"
+                                        onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
+                                    />
+                                </span>
+                                <button type="button" className="auth-modal-code-btn" disabled={sending || cooldown > 0} onClick={() => void handleSendCode()}>
+                                    {cooldown > 0 ? t("auth.resendIn", { seconds: cooldown }) : t("auth.sendCode")}
+                                </button>
+                            </span>
+                        </label>
+                    ) : null}
+                    {currentMode === "register" ? (
+                        <label className="auth-modal-field">
+                            <span className="auth-modal-label">
+                                {t("auth.inviteCode")}
+                                <span className="auth-modal-optional">{t("auth.optional")}</span>
+                            </span>
+                            <span className="auth-modal-shell">
+                                <Ticket className="auth-modal-icon" />
+                                <input
+                                    className="auth-modal-input"
+                                    name="inviteCode"
+                                    maxLength={16}
+                                    placeholder={t("auth.inviteCodePlaceholder")}
+                                    value={inviteCode}
+                                    onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
+                                />
+                            </span>
+                        </label>
+                    ) : null}
+
+                    <button type="submit" className="auth-modal-submit" disabled={loading}>
+                        {loading ? <LoaderCircle className="auth-modal-spin" size={17} /> : copy.action}
+                    </button>
+                </form>
+
+                <div className="auth-modal-alt">
+                    {currentMode === "login" ? (
+                        <>
+                            <button type="button" className="auth-modal-link" onClick={() => setMode("register")}>
+                                {t("auth.noAccount")}
+                                <span className="auth-modal-link-strong">{t("auth.toRegister")}</span>
+                            </button>
+                            <button type="button" className="auth-modal-link" onClick={() => setMode("reset")}>
+                                {t("auth.forgot")}
+                            </button>
+                        </>
+                    ) : currentMode === "register" ? (
+                        <button type="button" className="auth-modal-link" onClick={() => setMode("login")}>
+                            {t("auth.hasAccount")}
+                            <span className="auth-modal-link-strong">{t("auth.toLogin")}</span>
+                        </button>
+                    ) : (
+                        <button type="button" className="auth-modal-link" onClick={() => setMode("login")}>
+                            {t("auth.backToLogin")}
+                        </button>
+                    )}
+                </div>
+
+                <p className="auth-modal-foot">{t("auth.formFootnote")}</p>
+            </div>
+        </div>,
+        document.body,
+    );
+}
+
+function AuthField({
+    label,
+    icon,
+    action,
+    ...props
+}: InputHTMLAttributes<HTMLInputElement> & { label: string; icon: ReactNode; action?: ReactNode }) {
+    return (
+        <label className="auth-modal-field">
+            <span className="auth-modal-label">{label}</span>
+            <span className="auth-modal-shell">
+                <span className="auth-modal-icon">{icon}</span>
+                <input className="auth-modal-input" {...props} />
+                {action}
+            </span>
+        </label>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/background/dot-field.css
+LINES: 1-16
+========================================================================
+/* 点阵底纹层：铺在页面内容之下，不接收指针事件（指针由 window 监听，穿透不影响交互） */
+.jm-dot-field {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.jm-dot-field canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+
+========================================================================
+FILE: web/src/components/background/dot-field.tsx
+LINES: 1-211
+========================================================================
+import { useEffect, useRef } from "react";
+
+import "./dot-field.css";
+
+/**
+ * 点阵底纹（参照 liblib.tv 的页面背景）。
+ *
+ * 效果：一整片均匀的暗点，光标移上去时附近的点被「点亮」并微微放大，
+ * 以光标为圆心柔和衰减，移开后回落到原亮度；光点带缓动拖尾，所以移动时是流动的而不是硬贴。
+ *
+ * 实现拆成两层 canvas：
+ *   底层整片点阵只在尺寸变化时画一次（几千个点合成一条 Path，一次 fill）；
+ *   上层每帧只重画光标半径内的点，并按亮度分桶批量 fill，
+ *   所以逐帧开销只跟「光斑内的点数」有关，与页面大小无关。
+ */
+
+/* 网格间距：参照图实测 18px，点径约 2px */
+const SPACING = 19;
+const BASE_RADIUS = 1;
+const PEAK_RADIUS = 1.85;
+const BASE_ALPHA = 0.12;
+const PEAK_ALPHA = 0.46;
+/* 光斑半径：超过这个距离的点保持基础亮度 */
+const FALLOFF = 200;
+/* 光标周围的柔光，让点亮区域像一小片被打亮的面而不是孤立亮点 */
+const HALO = 0.02;
+const TAU = Math.PI * 2;
+/* 亮度分档：把光斑内的点按衰减值分桶，每桶一次 fill */
+const BUCKETS = 14;
+
+export function DotField({ className = "" }: { className?: string }) {
+    const hostRef = useRef<HTMLDivElement>(null);
+    const baseRef = useRef<HTMLCanvasElement>(null);
+    const glowRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        const host = hostRef.current;
+        const baseCanvas = baseRef.current;
+        const glowCanvas = glowRef.current;
+        if (!host || !baseCanvas || !glowCanvas) return;
+        const baseCtx = baseCanvas.getContext("2d");
+        const glowCtx = glowCanvas.getContext("2d");
+        if (!baseCtx || !glowCtx) return;
+
+        const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+        let width = 0;
+        let height = 0;
+        let dpr = 1;
+        let frame = 0;
+
+        /* x/y 是缓动后的光斑中心，tx/ty 是真实光标；strength 控制整体亮灭 */
+        const pointer = { x: -9999, y: -9999, tx: -9999, ty: -9999, strength: 0, target: 0 };
+
+        const paintBase = () => {
+            baseCtx.setTransform(1, 0, 0, 1, 0, 0);
+            baseCtx.clearRect(0, 0, baseCanvas.width, baseCanvas.height);
+            if (!width || !height) return;
+            baseCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            baseCtx.fillStyle = `rgba(255, 255, 255, ${BASE_ALPHA})`;
+            baseCtx.beginPath();
+            for (let y = SPACING / 2; y < height; y += SPACING) {
+                for (let x = SPACING / 2; x < width; x += SPACING) {
+                    baseCtx.moveTo(x + BASE_RADIUS, y);
+                    baseCtx.arc(x, y, BASE_RADIUS, 0, TAU);
+                }
+            }
+            baseCtx.fill();
+        };
+
+        const paintGlow = () => {
+            glowCtx.setTransform(1, 0, 0, 1, 0, 0);
+            glowCtx.clearRect(0, 0, glowCanvas.width, glowCanvas.height);
+            const strength = pointer.strength;
+            if (!width || !height || strength <= 0.004) return;
+            glowCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            const cx = pointer.x;
+            const cy = pointer.y;
+
+            /* 柔光：被点亮的那一小片面 */
+            const halo = glowCtx.createRadialGradient(cx, cy, 0, cx, cy, FALLOFF);
+            halo.addColorStop(0, `rgba(255, 255, 255, ${HALO * strength})`);
+            halo.addColorStop(0.5, `rgba(255, 255, 255, ${HALO * 0.38 * strength})`);
+            halo.addColorStop(1, "rgba(255, 255, 255, 0)");
+            glowCtx.fillStyle = halo;
+            glowCtx.fillRect(cx - FALLOFF, cy - FALLOFF, FALLOFF * 2, FALLOFF * 2);
+
+            /* 逐点算衰减，按档位归桶；smoothstep 让中心是一片接近满亮的区域，边缘才快速淡出 */
+            const paths = Array.from({ length: BUCKETS }, () => new Path2D());
+            const firstCol = Math.floor((cx - FALLOFF) / SPACING);
+            const lastCol = Math.ceil((cx + FALLOFF) / SPACING);
+            const firstRow = Math.floor((cy - FALLOFF) / SPACING);
+            const lastRow = Math.ceil((cy + FALLOFF) / SPACING);
+            const spans: boolean[] = new Array(BUCKETS).fill(false);
+
+            for (let row = firstRow; row <= lastRow; row += 1) {
+                const y = SPACING / 2 + row * SPACING;
+                if (y < 0 || y > height) continue;
+                for (let col = firstCol; col <= lastCol; col += 1) {
+                    const x = SPACING / 2 + col * SPACING;
+                    if (x < 0 || x > width) continue;
+                    const distance = Math.hypot(x - cx, y - cy);
+                    if (distance >= FALLOFF) continue;
+                    const energy = 1 - distance / FALLOFF;
+                    const eased = energy * energy * (3 - 2 * energy);
+                    const slot = Math.min(BUCKETS - 1, Math.round(eased * (BUCKETS - 1)));
+                    const radius = BASE_RADIUS + (PEAK_RADIUS - BASE_RADIUS) * eased * strength;
+                    const path = paths[slot];
+                    path.moveTo(x + radius, y);
+                    path.arc(x, y, radius, 0, TAU);
+                    spans[slot] = true;
+                }
+            }
+
+            /* 由暗到亮依次铺，亮的覆盖在暗的上面 */
+            for (let slot = 0; slot < BUCKETS; slot += 1) {
+                if (!spans[slot]) continue;
+                const eased = slot / (BUCKETS - 1);
+                const alpha = BASE_ALPHA + (PEAK_ALPHA - BASE_ALPHA) * eased * strength;
+                glowCtx.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(4)})`;
+                glowCtx.fill(paths[slot]);
+            }
+        };
+
+        const tick = () => {
+            frame = 0;
+            const snap = motion.matches;
+            const follow = snap ? 1 : 0.18;
+            const rise = snap ? 1 : 0.1;
+            pointer.x += (pointer.tx - pointer.x) * follow;
+            pointer.y += (pointer.ty - pointer.y) * follow;
+            pointer.strength += (pointer.target - pointer.strength) * rise;
+            paintGlow();
+            const following = Math.abs(pointer.tx - pointer.x) > 0.4 || Math.abs(pointer.ty - pointer.y) > 0.4;
+            const changing = Math.abs(pointer.target - pointer.strength) > 0.003;
+            if (following || changing) frame = requestAnimationFrame(tick);
+        };
+
+        const wake = () => {
+            if (!frame) frame = requestAnimationFrame(tick);
+        };
+
+        const onMove = (event: PointerEvent) => {
+            if (event.pointerType === "touch") return;
+            const rect = host.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            if (x < 0 || y < 0 || x > rect.width || y > rect.height) {
+                if (pointer.target !== 0) {
+                    pointer.target = 0;
+                    wake();
+                }
+                return;
+            }
+            /* 熄着进来的话直接落位，不要从上一个位置飞过来 */
+            if (pointer.strength < 0.05) {
+                pointer.x = x;
+                pointer.y = y;
+            }
+            pointer.tx = x;
+            pointer.ty = y;
+            pointer.target = 1;
+            wake();
+        };
+
+        const onLeave = () => {
+            if (pointer.target === 0) return;
+            pointer.target = 0;
+            wake();
+        };
+
+        const resize = () => {
+            const rect = host.getBoundingClientRect();
+            width = Math.round(rect.width);
+            height = Math.round(rect.height);
+            dpr = Math.min(window.devicePixelRatio || 1, 2);
+            for (const canvas of [baseCanvas, glowCanvas]) {
+                canvas.width = Math.round(width * dpr);
+                canvas.height = Math.round(height * dpr);
+            }
+            paintBase();
+            glowCtx.setTransform(1, 0, 0, 1, 0, 0);
+            glowCtx.clearRect(0, 0, glowCanvas.width, glowCanvas.height);
+        };
+
+        const observer = new ResizeObserver(resize);
+        observer.observe(host);
+        resize();
+
+        window.addEventListener("pointermove", onMove, { passive: true });
+        window.addEventListener("blur", onLeave);
+        document.addEventListener("pointerleave", onLeave);
+        motion.addEventListener("change", wake);
+
+        return () => {
+            if (frame) cancelAnimationFrame(frame);
+            observer.disconnect();
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("blur", onLeave);
+            document.removeEventListener("pointerleave", onLeave);
+            motion.removeEventListener("change", wake);
+        };
+    }, []);
+
+    return (
+        <div ref={hostRef} aria-hidden="true" className={`jm-dot-field ${className}`.trim()}>
+            <canvas ref={baseRef} />
+            <canvas ref={glowRef} />
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/brand/brand-wordmark.tsx
+LINES: 1-45
+========================================================================
+import { cn } from "@/lib/utils";
+
+/** 全站唯一的文字 logo 资源（管理后台同款），矢量、可任意缩放 */
+const WORDMARK_SRC = "/brand/sundas-wordmark.svg";
+
+/**
+ * 品牌文字 logo。
+ * 资产已收到墨迹边界，height 即字母实际高度（含 d 的升部），宽度按约 6.05 : 1 自适应。
+ */
+export function BrandWordmark({ height = 16, className, decorative = false }: { height?: number; className?: string; decorative?: boolean }) {
+    return (
+        <img
+            src={WORDMARK_SRC}
+            alt={decorative ? "" : "sundas"}
+            draggable={false}
+            className={cn("block w-auto shrink-0 select-none", className)}
+            style={{ height }}
+        />
+    );
+}
+
+/**
+ * 行内品牌名：把文案里的 sundas 片段换成文字 logo，其余文字保持原样参与排版流。
+ * 用于「登录 sundas」「© 2026 sundas Inc.」「SUNDAS MEMBERSHIP」这类句子/标签。
+ */
+export function BrandName({ text, imageClassName, imageHeight = "0.82em" }: { text: string; imageClassName?: string; imageHeight?: string }) {
+    return (
+        <>
+            {text.split(/(sundas)/gi).map((part, index) =>
+                part.toLowerCase() === "sundas" ? (
+                    <img
+                        key={index}
+                        src={WORDMARK_SRC}
+                        alt="sundas"
+                        draggable={false}
+                        className={cn("inline-block w-auto select-none align-baseline", imageClassName)}
+                        style={{ height: imageHeight }}
+                    />
+                ) : (
+                    <span key={index}>{part}</span>
+                ),
+            )}
+        </>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/asset-picker-modal.tsx
+LINES: 1-149
+========================================================================
+import { MediaThumbnail } from "@/components/media-thumbnail";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Empty, Input, Modal, Pagination, Tag } from "antd";
+import { Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { cn } from "@/lib/utils";
+import { getImagePreviewRevision, subscribeImagePreviews } from "@/services/image-storage";
+import { assetCoverUrl, isAssetAccountActive, useAssetStore, type Asset } from "@/stores/use-asset-store";
+import { useAuthStore } from "@/stores/use-auth-store";
+
+export type InsertAssetPayload = { kind: "text"; content: string; title: string } | { kind: "image"; dataUrl: string; title: string; storageKey?: string } | ({ kind: "video" } | { kind: "audio" }) & { url: string; title: string; storageKey?: string; width?: number; height?: number };
+
+type Props = {
+    open: boolean;
+    defaultTab?: string;
+    onInsert: (payload: InsertAssetPayload) => void;
+    onClose: () => void;
+};
+
+export function AssetPickerModal({ open, onInsert, onClose }: Props) {
+    const { t } = useTranslation();
+    return (
+        <Modal title={t("canvas.assetPicker.title")} open={open} onCancel={onClose} footer={null} width={860} destroyOnHidden styles={{ body: { padding: "0 24px 24px", minHeight: 480 } }}>
+            <MyAssetsTab onInsert={onInsert} />
+        </Modal>
+    );
+}
+
+const PAGE_SIZE = 8;
+
+const kindOptions = ["all", "text", "image", "video", "audio"];
+
+function PickerCard({ title, kind, cover, video, onClick }: { title: string; kind: string; cover: string; video?:boolean; onClick: () => void }) {
+    const { t } = useTranslation();
+    return (
+        <button
+            type="button"
+            className="group relative cursor-pointer overflow-hidden rounded-lg border border-border bg-white text-left transition hover:border-muted-foreground/50 hover:shadow-md dark:border-border dark:bg-muted dark:hover:border-muted-foreground/60"
+            onClick={onClick}
+        >
+            {cover ? (
+                <MediaThumbnail source={cover} kind={video?"video":"image"} alt={title} className="grid aspect-[4/3] w-full place-items-center" fallback={<span className="text-xs opacity-60">{title}</span>} />
+            ) : (
+                <div className="flex aspect-[4/3] items-center justify-center bg-muted p-3 text-center text-xs leading-5 text-muted-foreground dark:bg-muted dark:text-muted-foreground">{title}</div>
+            )}
+            <div className="p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                    <span className="line-clamp-1 text-xs font-medium text-foreground dark:text-foreground">{title}</span>
+                    <Tag className="m-0 shrink-0 text-[10px]">{t(`assets.kinds.${kind}`)}</Tag>
+                </div>
+            </div>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 text-sm font-medium text-white opacity-0 transition group-hover:bg-black/55 group-hover:opacity-100">{t("canvas.assetPicker.insert")}</div>
+        </button>
+    );
+}
+
+function MyAssetsTab({ onInsert }: { onInsert: (payload: InsertAssetPayload) => void }) {
+    const { t } = useTranslation();
+    useSyncExternalStore(subscribeImagePreviews, getImagePreviewRevision);
+    const assets = useAssetStore((state) => state.assets);
+    const hydrated = useAssetStore((state) => state.hydrated);
+    const userId = useAuthStore((state) => state.user?.id ?? null);
+    const authReady = useAuthStore((state) => state.ready);
+    const [keyword, setKeyword] = useState("");
+    const [kindFilter, setKindFilter] = useState("all");
+    const [page, setPage] = useState(1);
+
+    const filtered = useMemo(() => {
+        const query = keyword.trim().toLowerCase();
+        return assets
+            .filter((a) => a.kind === "text" || a.kind === "image" || a.kind === "video" || a.kind === "audio")
+            .filter((a) => kindFilter === "all" || a.kind === kindFilter)
+            .filter((a) => !query || [a.title, ...(a.tags || [])].join(" ").toLowerCase().includes(query));
+    }, [assets, keyword, kindFilter]);
+
+    const visible = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page]);
+
+    useEffect(() => {
+        const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        setPage((v) => Math.min(v, maxPage));
+    }, [filtered.length]);
+
+    const handleInsert = (asset: Asset) => {
+        const auth = useAuthStore.getState();
+        if (!userId || !auth.ready || !useAssetStore.getState().hydrated || auth.user?.id !== userId || !isAssetAccountActive(userId)) return;
+        // 3D 模型只服务于导演台，不能作为画布资源插入。
+        if (asset.kind === "model") return;
+        if (asset.kind === "text") {
+            onInsert({ kind: "text", content: asset.data.content, title: asset.title });
+        } else if (asset.kind === "video" || asset.kind === "audio") {
+            onInsert({ kind: asset.kind, url: asset.data.url, storageKey: asset.data.storageKey, title: asset.title, width: asset.data.width, height: asset.data.height });
+        } else {
+            onInsert({ kind: "image", dataUrl: asset.data.dataUrl, storageKey: asset.data.storageKey, title: asset.title });
+        }
+    };
+
+    if (!authReady || !hydrated || !isAssetAccountActive(userId)) return <div className="py-8 text-center text-sm text-stone-500">{t("canvas.loading")}</div>;
+
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+                <Input
+                    className="w-full min-w-0 sm:w-56"
+                    size="small"
+                    prefix={<Search className="size-3.5 text-muted-foreground" />}
+                    placeholder={t("canvas.assetPicker.search")}
+                    value={keyword}
+                    allowClear
+                    onChange={(e) => {
+                        setPage(1);
+                        setKeyword(e.target.value);
+                    }}
+                />
+                <div className="flex gap-1.5">
+                    {kindOptions.map((option) => (
+                        <Tag.CheckableTag
+                            key={option}
+                            checked={kindFilter === option}
+                            className={cn("prompt-filter-tag", kindFilter === option && "is-active")}
+                            onChange={() => {
+                                setPage(1);
+                                setKindFilter(option);
+                            }}
+                        >
+                            {option === "all" ? t("common.all") : t(`assets.kinds.${option}`)}
+                        </Tag.CheckableTag>
+                    ))}
+                </div>
+            </div>
+
+            {visible.length ? (
+                <div className="grid grid-cols-3 gap-3 min-[480px]:grid-cols-4">
+                    {visible.map((asset) => (
+                        <PickerCard key={asset.id} title={asset.title} kind={asset.kind} video={asset.kind === "video" && !assetCoverUrl(asset)} cover={assetCoverUrl(asset) || (asset.kind === "video" ? asset.data.url : "")} onClick={() => handleInsert(asset)} />
+                    ))}
+                </div>
+            ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("canvas.assetPicker.empty")} className="py-12" />
+            )}
+
+            {filtered.length > PAGE_SIZE && (
+                <div className="flex justify-center">
+                    <Pagination size="small" current={page} pageSize={PAGE_SIZE} total={filtered.length} onChange={setPage} showSizeChanger={false} />
+                </div>
+            )}
+        </div>
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-ai-upscale-panel.tsx
+LINES: 1-238
+========================================================================
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { Alert, Button, Modal, Select, Spin } from 'antd';
+import { RefreshCw, WandSparkles } from 'lucide-react';
+import { canvasThemes } from '@/lib/canvas-theme';
+import { useThemeStore } from '@/stores/use-theme-store';
+import { useAuthStore } from '@/stores/use-auth-store';
+import { getUpscaleCapabilities, getUpscaleRuns, saveUpscaleDraft, quoteUpscaleRun, submitUpscaleRun, resumeUpscaleRun, type UpscaleCapabilities, type UpscaleRun, type UpscaleQuote } from '@/services/api/canvas-upscale';
+import type { CanvasNodeData } from '@/types/canvas';
+import { upscaleSources } from '@/lib/canvas/upscale-sources';
+import { ApiError } from '@/services/api/client';
+
+const statusLabels: Record<UpscaleRun['status'], string> = {
+    draft: '准备记录 · 未提交', queued: '等待处理', running: '处理中', succeeded: '已完成', failed: '处理失败',
+    review: '状态待核对，请勿重复提交', result_unavailable: '结果文件不可用',
+};
+
+function sourceKey(value: string) {
+    try {
+        const url = new URL(value, window.location.origin);
+        return url.origin === window.location.origin && url.pathname.startsWith('/media/') ? decodeURIComponent(url.pathname.slice(7)) : null;
+    } catch { return null; }
+}
+
+type PanelProps = { projectId: string; sourceNode?: CanvasNodeData | null; sourceNodes?: CanvasNodeData[]; instructions?: string; open: boolean; onClose: () => void; onResult?: (run: UpscaleRun) => void };
+type SourceActions = { quote: () => Promise<void>; submit: () => Promise<void> };
+
+export function CanvasAiUpscalePanel({ sourceNode, sourceNodes, instructions, ...props }: PanelProps) {
+    const nodes = upscaleSources(sourceNode, sourceNodes);
+    const identity = nodes.map(node => node.id + ':' + node.metadata?.content).join('|');
+    const userId = useAuthStore(state => state.ready ? state.user?.id : undefined);
+    const epoch = useAuthStore(state => state.sessionEpoch);
+    const [batchBusy, setBatchBusy] = useState(false);
+    const [quotes, setQuotes] = useState<Record<string, UpscaleQuote>>({});
+    const actions = useRef(new Map<string, SourceActions>());
+    const context = [props.projectId, identity, userId, epoch, props.open].join('|');
+    const batchSession = useRef({ context });
+    if (batchSession.current.context !== context) batchSession.current = { context };
+    const batchLock = useRef(false);
+    const onQuoteChange = useCallback((id: string, quote: UpscaleQuote | null) => setQuotes(previous => {
+        if (previous[id] === quote || (!previous[id] && !quote)) return previous;
+        const next = { ...previous }; if (quote) next[id] = quote; else delete next[id]; return next;
+    }), []);
+    useEffect(() => { setBatchBusy(false); batchLock.current = false; }, [context]);
+    async function batch(action: keyof SourceActions) {
+        if (batchLock.current) return;
+        batchLock.current = true; setBatchBusy(true);
+        const session = batchSession.current;
+        try {
+            for (const node of nodes) {
+                if (batchSession.current !== session || !props.open) break;
+                await actions.current.get(node.id)?.[action]();
+            }
+        } finally {
+            if (batchSession.current === session) { setBatchBusy(false); batchLock.current = false; }
+        }
+    }
+    const total = Object.values(quotes).reduce((sum, quote) => sum + quote.credits, 0);
+    return <Modal title={nodes.length > 1 ? '批量 AI 超分 · ' + nodes.length + ' 项' : 'AI 超分'} open={props.open && nodes.length > 0} onCancel={props.onClose} footer={null} width={760} centered destroyOnHidden>
+        {nodes.length > 1 && <div className="mb-4 space-y-2">
+            <p className="text-sm">逐项选择模型和规格；每项独立报价、提交和保留结果。关闭面板会停止尚未发送的项目，已发送任务继续处理。</p>
+            <div className="flex flex-wrap gap-2"><Button loading={batchBusy} onClick={() => void batch('quote')}>预估全部费用</Button>
+                <Button type="primary" disabled={batchBusy || !Object.keys(quotes).length} onClick={() => void batch('submit')}>确认已报价 {Object.keys(quotes).length} 项 · {total} 积分</Button></div>
+        </div>}
+        {instructions?.trim() && <Alert className="mb-4" type="info" showIcon message="助手处理建议" description={instructions} />}
+        <div className="max-h-[72vh] space-y-8 overflow-y-auto">
+            {nodes.map(node => <UpscaleSourcePanel key={props.projectId + ':' + userId + ':' + epoch + ':' + node.id + ':' + node.metadata?.content} {...props} sourceNode={node} batchBusy={batchBusy} onQuoteChange={onQuoteChange}
+                ref={value => { if (value) actions.current.set(node.id, value); else actions.current.delete(node.id); }} />)}
+        </div>
+    </Modal>;
+}
+
+const UpscaleSourcePanel = forwardRef<SourceActions, Omit<PanelProps, 'sourceNodes' | 'sourceNode'> & { sourceNode: CanvasNodeData; batchBusy: boolean; onQuoteChange: (id: string, quote: UpscaleQuote | null) => void }>(function UpscaleSourcePanel({ projectId, sourceNode, open, onResult, batchBusy, onQuoteChange }, ref) {
+    const theme = canvasThemes[useThemeStore(state => state.theme)];
+    const userId = useAuthStore(state => state.ready ? state.user?.id : undefined);
+    const epoch = useAuthStore(state => state.sessionEpoch);
+    const [capabilities, setCapabilities] = useState<UpscaleCapabilities | null>(null);
+    const [runs, setRuns] = useState<UpscaleRun[]>([]);
+    const [modelId, setModelId] = useState<string>();
+    const [targetId, setTargetId] = useState<string>();
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
+    const [quote, setQuote] = useState<UpscaleQuote | null>(null);
+    const [reload, setReload] = useState(0);
+    const controller = useRef<AbortController | null>(null);
+    const draftId = useRef<string | null>(null);
+    const operating = useRef(false);
+    const pendingSubmission = useRef(false);
+    const busy = saving || batchBusy;
+    const content = sourceNode?.metadata?.content ?? '';
+    const objectKey = sourceKey(content);
+    const kind = sourceNode?.type === 'video' ? 'video' : 'image';
+    const selectedModel = capabilities?.models.find(model => model.id === modelId);
+    const currentRuns = runs.filter(run => run.source.objectKey === objectKey);
+    const current = (signal: AbortSignal) => !signal.aborted && useAuthStore.getState().user?.id === userId && useAuthStore.getState().sessionEpoch === epoch;
+
+    useEffect(() => {
+        setCapabilities(null); setRuns([]); setError(''); setNotice(''); setSaving(false);
+        if (!open || !sourceNode || !userId) return;
+        const request = new AbortController();
+        controller.current = request;
+        const session = { userId, signal: request.signal };
+        setLoading(true);
+        void Promise.allSettled([getUpscaleCapabilities(kind, session), getUpscaleRuns(projectId, sourceNode.id, session)]).then(([catalog, history]) => {
+            if (!current(request.signal)) return;
+            if (catalog.status === 'fulfilled') setCapabilities(catalog.value);
+            if (history.status === 'fulfilled') {
+                setRuns(history.value.runs);
+                if (history.value.runs.some(run => run.id === draftId.current && run.taskId)) { pendingSubmission.current = false; setQuote(null); }
+            }
+            const failure = catalog.status === 'rejected' ? catalog.reason : history.status === 'rejected' ? history.reason : null;
+            if (failure) setError(failure instanceof Error ? failure.message : '读取超分配置失败');
+            setLoading(false);
+        });
+        return () => { request.abort(); if (controller.current === request) controller.current = null; };
+    }, [open, projectId, sourceNode?.id, content, kind, userId, epoch, reload]);
+
+    async function save(estimate = false) {
+        const request = controller.current;
+        if (!request || !current(request.signal) || !objectKey || !sourceNode || !userId || operating.current) return;
+        if (pendingSubmission.current) { setError('上次提交结果尚未确认，请先刷新记录并查询原任务。'); return; }
+        if (estimate && (!selectedModel?.available || !targetId)) { setError('请选择当前素材可用的超分模型与规格'); return; }
+        if (draftId.current && runs.some(run => run.id === draftId.current && run.taskId)) { setError('此记录已经提交，请查看原任务；选择新参数后才能另建任务。'); return; }
+        if (!draftId.current) draftId.current = crypto.randomUUID();
+        operating.current = true;
+        setSaving(true); setError(''); setNotice('');
+        if (estimate) setQuote(null);
+        try {
+            const { run } = await saveUpscaleDraft(projectId, {
+                id: draftId.current, sourceNodeId: sourceNode.id, sourceObjectKey: objectKey, mediaKind: kind,
+                ...(modelId ? { modelId, targetId } : {}),
+            }, { userId, signal: request.signal });
+            if (!current(request.signal)) return;
+            setRuns(items => [run, ...items.filter(item => item.id !== run.id)]);
+            if (estimate) {
+                const cost = await quoteUpscaleRun(projectId, run.id, { userId, signal: request.signal });
+                if (!current(request.signal)) return;
+                setQuote(cost); setNotice('已核验原始媒体，确认后将提交超分任务并冻结对应积分。');
+            } else setNotice('准备记录已保存到此画布；尚未提交模型任务，也未扣费。');
+        } catch (cause) {
+            if (current(request.signal)) setError(cause instanceof Error ? cause.message : '保存失败，请重试');
+        } finally { operating.current = false; if (current(request.signal)) setSaving(false); }
+    }
+
+    async function submit() {
+        const request = controller.current;
+        if (!request || !current(request.signal) || !draftId.current || !quote || !userId || operating.current) return;
+        operating.current = true; pendingSubmission.current = true;
+        setSaving(true); setError('');
+        try {
+            const { run } = await submitUpscaleRun(projectId, draftId.current, quote, { userId, signal: request.signal });
+            if (!current(request.signal)) return;
+            pendingSubmission.current = false;
+            setRuns(items => [run, ...items.filter(item => item.id !== run.id)]); setQuote(null);
+            setNotice('任务已提交。关闭面板后服务端继续处理，可刷新记录查看进度。');
+        } catch (cause) {
+            if (current(request.signal)) {
+                // An explicit input/quote rejection may be corrected. Network loss and
+                // server errors retain the same request ID until the original is known.
+                if (cause instanceof ApiError && cause.status >= 400 && cause.status < 500 && cause.status !== 408) {
+                    pendingSubmission.current = false; setQuote(null);
+                }
+                setError(cause instanceof Error ? cause.message : '提交结果未确认，请刷新记录查看原任务');
+            }
+        }
+        finally { operating.current = false; if (current(request.signal)) setSaving(false); }
+    }
+
+    async function resume(run: UpscaleRun) {
+        const request = controller.current;
+        if (!request || !current(request.signal) || !userId || operating.current) return;
+        operating.current = true;
+        setSaving(true); setError('');
+        try {
+            const result = await resumeUpscaleRun(projectId, run.id, { userId, signal: request.signal });
+            if (!current(request.signal)) return;
+            setRuns(items => items.map(item => item.id === run.id ? result.run : item)); setNotice('已恢复查询或保存原任务，不会重新调用模型。');
+        } catch (cause) { if (current(request.signal)) setError(cause instanceof Error ? cause.message : '恢复失败'); }
+        finally { operating.current = false; if (current(request.signal)) setSaving(false); }
+    }
+
+    useImperativeHandle(ref, () => ({ quote: () => save(true), submit }), [quote, modelId, targetId, runs, saving, capabilities]);
+    useEffect(() => { onQuoteChange(sourceNode.id, quote); return () => onQuoteChange(sourceNode.id, null); }, [sourceNode.id, quote, onQuoteChange]);
+    return (
+        <div className="space-y-5" style={{ color: theme.node.text }}>
+            <p className="text-sm" style={{ color: theme.node.muted }}>保留原素材，超分完成后生成独立结果。模型、输出规格与费用由可用渠道提供。</p>
+            <div className="grid gap-5 sm:grid-cols-2">
+                <div className="min-w-0 space-y-2">
+                    <div className="flex min-h-40 items-center justify-center overflow-hidden rounded-lg" style={{ background: theme.canvas.background }}>
+                        {open && content ? kind === 'video'
+                            ? <video key={content} src={content} controls playsInline preload="metadata" className="max-h-64 max-w-full" aria-label="原视频预览" />
+                            : <img src={content} alt={sourceNode?.title || '原图预览'} className="max-h-64 max-w-full object-contain" /> : <span>节点暂无媒体</span>}
+                    </div>
+                    <p className="truncate text-sm">{sourceNode?.title || '原素材'}</p>
+                    {objectKey && <a className="text-sm" href={content} download>下载原始素材</a>}
+                    {sourceNode?.metadata?.naturalWidth && sourceNode.metadata.naturalHeight ? <p className="text-xs" style={{ color: theme.node.muted }}>{sourceNode.metadata.naturalWidth} × {sourceNode.metadata.naturalHeight} 像素</p> : null}
+                    {!objectKey && <p className="text-sm" style={{ color: theme.node.muted }}>请先将素材上传并保存到当前画布，再保存超分准备记录。</p>}
+                </div>
+                <div className="min-w-0 space-y-4">
+                    <div><label htmlFor={"canvas-upscale-model-" + sourceNode.id} className="mb-2 block text-sm">超分模型</label><Select id={"canvas-upscale-model-" + sourceNode.id} className="w-full" value={modelId} loading={loading} disabled={busy || pendingSubmission.current || !capabilities?.models.length}
+                        placeholder="暂无已接入的超分模型" options={capabilities?.models.map(model => ({ value: model.id, label: model.name, disabled: !model.available }))}
+                        onChange={value => { setModelId(value); setTargetId(undefined); draftId.current = null; pendingSubmission.current = false; setQuote(null); }} /></div>
+                    <div><label htmlFor={"canvas-upscale-target-" + sourceNode.id} className="mb-2 block text-sm">输出规格</label><Select id={"canvas-upscale-target-" + sourceNode.id} className="w-full" value={targetId} disabled={busy || pendingSubmission.current || !selectedModel?.available}
+                        placeholder="由所选模型提供" options={selectedModel?.targets.map(target => ({ value: target.id, label: target.label }))}
+                        onChange={value => { setTargetId(value); draftId.current = null; pendingSubmission.current = false; setQuote(null); }} /></div>
+                    <p className="text-sm" style={{ color: theme.node.muted }}>预计费用：{quote ? `${quote.credits} 积分` : selectedModel?.available ? '选择规格后预估' : '暂无可用报价'}</p>
+                    {quote && <p className="text-sm">预计输出 {quote.target.width} × {quote.target.height} 像素</p>}
+                    <p className="text-xs" style={{ color: theme.node.muted }}>{kind === 'image' ? '输入不超过 5 MB，至少 32×32；长边≤1920、短边≤1080。超出时拒绝提交。' : '输入不超过 1 GB，两边均>360；长边<1920、短边<1080。输出固定 2 倍。'}</p>
+                    <p className="text-xs" style={{ color: theme.node.muted }}>成品文件沿用平台归档限制：{kind === 'image' ? '50 MiB' : '200 MiB'}。保存失败时保留任务与冻结积分供核对，不会重复调用模型。</p>
+                    {!loading && capabilities && !capabilities.available && <Alert type="info" showIcon title="暂不可生成" description={capabilities.reason} />}
+                </div>
+            </div>
+            {loading && <div className="flex items-center gap-2 text-sm" role="status"><Spin size="small" />正在读取配置与记录</div>}
+            {error && <Alert type="error" showIcon title={error} />}
+            {notice && <p role="status" className="text-sm">{notice}</p>}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button type="text" icon={<RefreshCw size={16} />} disabled={loading || busy} onClick={() => setReload(value => value + 1)}>刷新配置与记录</Button>
+                <Button disabled={!objectKey || !userId || loading || busy || Boolean(modelId && !targetId)} loading={saving} onClick={() => void save()}>保存准备记录</Button>
+                <Button disabled={!objectKey || !selectedModel?.available || !targetId || loading || busy} onClick={() => void save(true)}>预估费用</Button>
+                <Button type="primary" disabled={!quote || busy || loading} loading={saving && Boolean(quote)} icon={<WandSparkles size={16} />} onClick={() => void submit()}>{pendingSubmission.current ? "核对原提交" : "确认超分"}{quote ? ` · ${quote.credits} 积分` : ''}</Button>
+            </div>
+            {currentRuns.length > 0 && <section aria-label="此素材的超分记录" className="space-y-2 border-t pt-4" style={{ borderColor: theme.toolbar.border }}>
+                <h3 className="text-sm font-medium">此素材的处理记录</h3>
+                {currentRuns.map(run => <div key={run.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                    <div><p>{run.modelName || '待配置模型'}{run.parameters.target ? ` · ${run.parameters.target.label}` : ''}</p><p style={{ color: theme.node.muted }}>{statusLabels[run.status]} · {new Date(run.createdAt).toLocaleString()}</p></div>
+                    {run.error && <p className="w-full text-xs" role="status">{run.error}</p>}
+                    {run.resultUrl && <a href={run.resultUrl} target="_blank" rel="noreferrer">查看结果</a>}
+                    {run.resultUrl && <a href={run.resultUrl} download>下载结果</a>}
+                    {run.status === 'succeeded' && run.resultUrl && run.result && onResult && <Button type="text" onClick={() => onResult(run)}>添加到画布</Button>}
+                    {run.status === 'review' && <Button type="text" disabled={busy} onClick={() => void resume(run)}>查询 / 保存原任务</Button>}
+                    {run.result && <span>{run.result.width} × {run.result.height}{run.result.duration ? ` · ${run.result.duration.toFixed(2)} 秒` : ''}</span>}
+                    {run.creditsCharged !== null && <span>已扣 {run.creditsCharged} 积分</span>}
+                </div>)}
+            </section>}
+        </div>
+    );
+});
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-audio-settings-popover.tsx
+LINES: 1-116
+========================================================================
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { SlidersHorizontal } from "lucide-react";
+import { Button } from "antd";
+
+import { AudioSettingsPanel } from "@/components/audio-settings-panel";
+import { audioFormatLabel, audioSpeedLabel, audioVoiceLabel } from "@/lib/audio-generation";
+import { canvasThemes } from "@/lib/canvas-theme";
+import { useThemeStore } from "@/stores/use-theme-store";
+import type { AiConfig } from "@/stores/use-config-store";
+
+export type CanvasAudioSettingKey = "audioVoice" | "audioFormat" | "audioSpeed" | "audioInstructions";
+
+type CanvasAudioSettingsPopoverProps = {
+    config: AiConfig;
+    onConfigChange: (key: CanvasAudioSettingKey, value: string) => void;
+    buttonClassName?: string;
+    buttonStyle?: CSSProperties;
+    placement?: "topLeft" | "top" | "topRight" | "bottomLeft" | "bottom" | "bottomRight";
+};
+
+export function CanvasAudioSettingsPopover({ config, onConfigChange, buttonClassName, buttonStyle, placement = "topLeft" }: CanvasAudioSettingsPopoverProps) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const buttonRef = useRef<HTMLSpanElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const [open, setOpen] = useState(false);
+    const [buttonRect, setButtonRect] = useState<DOMRect | null>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const syncPosition = () => setButtonRect(buttonRef.current?.getBoundingClientRect() || null);
+        const closeOnOutsidePointer = (event: PointerEvent) => {
+            const target = event.target;
+            if (!(target instanceof Node)) return;
+            if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+            setOpen(false);
+        };
+
+        syncPosition();
+        window.addEventListener("resize", syncPosition);
+        window.addEventListener("scroll", syncPosition, true);
+        window.addEventListener("pointerdown", closeOnOutsidePointer, true);
+        return () => {
+            window.removeEventListener("resize", syncPosition);
+            window.removeEventListener("scroll", syncPosition, true);
+            window.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+        };
+    }, [open]);
+
+    const panel = open && buttonRect ? <AudioSettingsPortal buttonRect={buttonRect} panelRef={panelRef} placement={placement} theme={theme} config={config} onConfigChange={onConfigChange} /> : null;
+
+    return (
+        <>
+            <span ref={buttonRef} className="inline-flex min-w-0">
+                <Button size="small" type="text" className={buttonClassName || "!h-8 !max-w-[170px] !justify-start !rounded-full !px-2.5"} style={{ background: theme.node.fill, color: theme.node.text, ...buttonStyle }} icon={<SlidersHorizontal className="size-3.5" />} onClick={() => setOpen((current) => !current)}>
+                    <span className="truncate">
+                        {audioVoiceLabel(config.audioVoice)} · {audioFormatLabel(config.audioFormat)} · {audioSpeedLabel(config.audioSpeed)}
+                    </span>
+                </Button>
+            </span>
+            {panel}
+        </>
+    );
+}
+
+function AudioSettingsPortal({
+    buttonRect,
+    panelRef,
+    placement,
+    theme,
+    config,
+    onConfigChange,
+}: {
+    buttonRect: DOMRect;
+    panelRef: RefObject<HTMLDivElement | null>;
+    placement: CanvasAudioSettingsPopoverProps["placement"];
+    theme: (typeof canvasThemes)[keyof typeof canvasThemes];
+    config: AiConfig;
+    onConfigChange: (key: CanvasAudioSettingKey, value: string) => void;
+}) {
+    const width = 356;
+    const gap = 8;
+    const margin = 12;
+    const alignRight = placement?.endsWith("Right");
+    const alignCenter = placement === "top" || placement === "bottom";
+    const left = alignCenter ? buttonRect.left + buttonRect.width / 2 - width / 2 : alignRight ? buttonRect.right - width : buttonRect.left;
+    const topPlacement = placement?.startsWith("top");
+    const style = {
+        position: "fixed",
+        zIndex: 1200,
+        width,
+        left: Math.max(margin, Math.min(window.innerWidth - width - margin, left)),
+        ...(topPlacement ? { bottom: window.innerHeight - buttonRect.top + gap, maxHeight: Math.max(260, buttonRect.top - margin * 2) } : { top: buttonRect.bottom + gap, maxHeight: Math.max(260, window.innerHeight - buttonRect.bottom - margin * 2) }),
+        background: theme.toolbar.panel,
+        borderRadius: 16,
+        border: `1px solid ${theme.menu.border}`,
+        boxShadow: theme.menu.shadow,
+        padding: 18,
+        overflowY: "auto",
+        color: theme.node.text,
+    } as const;
+
+    return createPortal(
+        <div
+            ref={panelRef}
+            className="canvas-image-settings-popover"
+            style={style}
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+        >
+            <AudioSettingsPanel config={config} onConfigChange={(key, value) => onConfigChange(key, value)} theme={theme} className="space-y-4" />
+        </div>,
+        document.body,
+    );
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-blank-context-menu.tsx
+LINES: 1-117
+========================================================================
+import { useEffect } from "react";
+import type { ReactNode } from "react";
+import { CircleDot, ClipboardPaste, Eraser, Grid2x2, Maximize2, Scan, Square, SquareDashedMousePointer, Upload } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
+import { useThemeStore } from "@/stores/use-theme-store";
+
+/**
+ * 画布空白处右键菜单。迁移自 BeefTV：以前 sundas 在空白处右键只会被
+ * preventDefault 掉、什么都不弹，视口与画布级操作只能去 Dock 里找。
+ */
+export function CanvasBlankContextMenu({
+    x,
+    y,
+    backgroundMode,
+    hasNodes,
+    onClose,
+    onPaste,
+    onSelectAll,
+    onFitAll,
+    onResetZoom,
+    onBackgroundModeChange,
+    onUpload,
+    onClear,
+}: {
+    x: number;
+    y: number;
+    backgroundMode: CanvasBackgroundMode;
+    hasNodes: boolean;
+    onClose: () => void;
+    onPaste: () => void;
+    onSelectAll: () => void;
+    onFitAll: () => void;
+    onResetZoom: () => void;
+    onBackgroundModeChange: (mode: CanvasBackgroundMode) => void;
+    onUpload: () => void;
+    onClear: () => void;
+}) {
+    const { t } = useTranslation();
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+
+    useEffect(() => {
+        const close = (event: PointerEvent) => {
+            const target = event.target;
+            if (target instanceof Element && target.closest(".ant-popover")) return;
+            onClose();
+        };
+        window.addEventListener("pointerdown", close);
+        return () => window.removeEventListener("pointerdown", close);
+    }, [onClose]);
+
+    const maxLeft = Math.max(0, window.innerWidth - 220);
+    const maxTop = Math.max(0, window.innerHeight - 340);
+
+    return (
+        <div
+            className="fixed z-[80] w-[212px] overflow-hidden rounded-xl border py-1 shadow-2xl backdrop-blur-2xl"
+            style={{ left: Math.min(x, maxLeft), top: Math.min(y, maxTop), background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
+            onPointerDown={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.preventDefault()}
+        >
+            <MenuRow icon={<ClipboardPaste className="size-3.5" />} label={t("canvas.blankMenu.paste")} shortcut="⌘V" onClick={() => { onClose(); onPaste(); }} />
+            <MenuRow icon={<SquareDashedMousePointer className="size-3.5" />} label={t("canvas.blankMenu.selectAll")} shortcut="⌘A" onClick={() => { onClose(); onSelectAll(); }} />
+            <Divider theme={theme} />
+            <MenuRow icon={<Scan className="size-3.5" />} label={t("canvas.blankMenu.fitAll")} shortcut="⌘0" disabled={!hasNodes} onClick={() => { onClose(); onFitAll(); }} />
+            <MenuRow icon={<Maximize2 className="size-3.5" />} label={t("canvas.blankMenu.actualSize")} shortcut="⌘1" onClick={() => { onClose(); onResetZoom(); }} />
+            <Divider theme={theme} />
+            <div className="px-3 pb-1 pt-1.5 text-[10px] font-medium opacity-40">{t("canvas.blankMenu.background")}</div>
+            <div className="mx-2 mb-1 flex items-center gap-1">
+                <ModeChip icon={<CircleDot className="size-3.5" />} label={t("canvas.toolbar.dots")} active={backgroundMode === "dots"} onClick={() => { onBackgroundModeChange("dots"); onClose(); }} />
+                <ModeChip icon={<Grid2x2 className="size-3.5" />} label={t("canvas.toolbar.lines")} active={backgroundMode === "lines"} onClick={() => { onBackgroundModeChange("lines"); onClose(); }} />
+                <ModeChip icon={<Square className="size-3.5" />} label={t("canvas.toolbar.blank")} active={backgroundMode === "blank"} onClick={() => { onBackgroundModeChange("blank"); onClose(); }} />
+            </div>
+            <Divider theme={theme} />
+            <MenuRow icon={<Upload className="size-3.5" />} label={t("canvas.toolbar.upload")} onClick={() => { onClose(); onUpload(); }} />
+            <Divider theme={theme} />
+            <MenuRow icon={<Eraser className="size-3.5" />} label={t("canvas.blankMenu.clear")} danger onClick={() => { onClose(); onClear(); }} />
+        </div>
+    );
+}
+
+function MenuRow({ icon, label, shortcut, danger = false, disabled = false, onClick }: { icon: ReactNode; label: string; shortcut?: string; danger?: boolean; disabled?: boolean; onClick?: () => void }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    return (
+        <button
+            type="button"
+            disabled={disabled}
+            className="flex h-8 w-full items-center gap-2 px-3 text-left text-[11.5px] transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-35"
+            style={{ color: danger ? "#f87171" : theme.node.text }}
+            onClick={onClick}
+        >
+            <span className="grid size-4 place-items-center opacity-70">{icon}</span>
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+            {shortcut ? <span className="text-[10px] opacity-35">{shortcut}</span> : null}
+        </button>
+    );
+}
+
+function ModeChip({ icon, label, active, onClick }: { icon: ReactNode; label: string; active: boolean; onClick: () => void }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    return (
+        <button
+            type="button"
+            className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md text-[10.5px] font-medium transition-colors"
+            style={{ background: active ? theme.toolbar.activeBg : "transparent", color: active ? theme.toolbar.activeText : theme.node.muted }}
+            onClick={onClick}
+        >
+            {icon}
+            <span className="truncate">{label}</span>
+        </button>
+    );
+}
+
+function Divider({ theme }: { theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {
+    return <div className="my-1 h-px" style={{ background: theme.toolbar.border }} />;
+}
+
+
+========================================================================
+FILE: web/src/components/canvas/canvas-character-panel.tsx
+LINES: 1-180
+========================================================================
+import { useEffect, useRef, useState } from "react";
+import { Alert, Button, Drawer, Form, Input, InputNumber, Select, Space, Switch, Tag } from "antd";
+import { characterRequest, type CharacterMedia, type CharacterRun, type CharacterStepName } from "@/services/api/character-workflow";
+import { getMediaBlob, uploadMediaFile } from "@/services/file-storage";
+import { imageToDataUrl } from "@/services/image-storage";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { modelOptionName, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
+import { useCreditEstimate } from "@/hooks/use-credit-estimate";
+import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
+
+const stepNames: Record<CharacterStepName, string> = { prepare: "准备镜头", image: "生成替换参考帧", video: "生成替换视频", assemble: "回插并输出成片" };
+const stateNames = { queued: "等待处理", running: "处理中", succeeded: "已完成", failed: "失败", review: "待核对" };
+
+async function cloudKey(node: CanvasNodeData, owner: string) {
+    const content = node.metadata?.content || "";
+    const localKey = node.metadata?.storageKey;
+    const direct = mediaKey(content);
+    if (direct) return direct;
+    const input = node.type === CanvasNodeType.Image
+        ? await imageToDataUrl({ dataUrl: content, storageKey: localKey })
+        : localKey ? await getMediaBlob(localKey) : content;
+    if (!input) throw new Error("素材内容不可用，请重新上传");
+    const uploaded = await uploadMediaFile(input, node.type, { expectedOwner: owner });
+    const key = mediaKey(uploaded.url);
+    if (!key) throw new Error("素材尚未同步到服务端，请检查网络后重试");
+    return key;
+}
+
+function mediaKey(value: string) {
+    try { const url = new URL(value, window.location.origin); return url.origin === window.location.origin && url.pathname.startsWith("/media/private/") ? decodeURIComponent(url.pathname.slice(7)) : ""; }
+    catch { return ""; }
+}
+
+export function CanvasCharacterPanel({ projectId, nodes, initialSourceId, initialReferenceId, initialInstructions, prepareCanvas, onAddMedia, onClose }: {
+    projectId: string; nodes: CanvasNodeData[]; initialSourceId?: string | null; initialReferenceId?: string; initialInstructions?: string;
+    prepareCanvas: () => Promise<unknown>;
+    onAddMedia: (run: CharacterRun, media: CharacterMedia[]) => void;
+    onClose: () => void;
+}) {
+    const config = useEffectiveConfig();
+    const models = useConfigStore(state => state.serverModels);
+    const owner = useAuthStore(state => state.user?.id || "");
+    const sessionEpoch = useAuthStore(state => state.sessionEpoch);
+    const [sourceId, setSourceId] = useState(initialSourceId || "");
+    const [characterId, setCharacterId] = useState(initialReferenceId || "");
+    const [target, setTarget] = useState("");
+    const [instructions, setInstructions] = useState(initialInstructions || "");
+    const [imageModel, setImageModel] = useState(modelOptionName(config.imageModel));
+    const [videoModel, setVideoModel] = useState(modelOptionName(config.videoModel));
+    const [start, setStart] = useState(0);
+    const [end, setEnd] = useState<number | null>(null);
+    const [keepAudio, setKeepAudio] = useState(true);
+    const [resolution, setResolution] = useState(config.vquality.replace(/p$/i, "") || "720");
+    const [ratio, setRatio] = useState("16:9");
+    const [runs, setRuns] = useState<CharacterRun[]>([]);
+    const [run, setRun] = useState<CharacterRun | null>(null);
+    const [busy, setBusy] = useState(false);
+    const performing = useRef(false);
+    const [error, setError] = useState("");
+    const identity = `${owner}:${sessionEpoch}:${projectId}`;
+    const current = useRef(identity); current.current = identity;
+    const alive = useRef(true);
+    useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+    const active = (captured: string) => alive.current && current.current === captured;
+    const selectedSource = nodes.find(node => node.id === sourceId);
+    const duration = run?.steps?.find(step => step.name === "prepare" && step.status === "succeeded")?.output.range?.duration
+        ?? (end !== null ? end - start : (selectedSource?.metadata?.durationMs || 0) / 1000 - start);
+    const imageEstimate = useCreditEstimate(run?.input.imageModel || imageModel, "image", 0, "", identity);
+    const videoEstimate = useCreditEstimate(run?.input.videoModel || videoModel, "video", duration, run?.input.resolution || resolution, identity);
+    const estimateText = (estimate: typeof imageEstimate) => estimate.data ? `预计 ${estimate.data.minCredits === estimate.data.maxCredits ? estimate.data.minCredits : `${estimate.data.minCredits}–${estimate.data.maxCredits}`} 积分` : estimate.loading ? "费用计算中" : "暂时无法预估费用";
+    const refresh = async (id = run?.id) => {
+        if (!id) return;
+        const captured = identity;
+        const result = await characterRequest<{ run: CharacterRun }>(`/${id}`);
+        if (active(captured)) setRun(result.run);
+    };
+    useEffect(() => {
+        setRun(null); setRuns([]); setError(""); setBusy(false);
+        const controller = new AbortController();
+        void characterRequest<{ runs: CharacterRun[] }>(`?projectId=${encodeURIComponent(projectId)}`, { signal: controller.signal })
+            .then(result => { if (!controller.signal.aborted && active(identity)) setRuns(result.runs); })
+            .catch(cause => { if (!controller.signal.aborted && active(identity)) setError(cause instanceof Error ? cause.message : "记录读取失败"); });
+        return () => controller.abort();
+    }, [identity, projectId]);
+    useEffect(() => {
+        if (!run || !run.steps?.some(step => ["queued", "running"].includes(step.status))) return;
+        const controller = new AbortController();
+        // Same cadence as existing image/video task queries; no resubmission.
+        const timer = setTimeout(() => {
+            void characterRequest<{ run: CharacterRun }>(`/${run.id}`, { signal: controller.signal })
+                .then(result => { if (!controller.signal.aborted && active(identity)) setRun(result.run); })
+                .catch(cause => { if (!controller.signal.aborted && active(identity)) setError(cause instanceof Error ? cause.message : "查询失败，请刷新原任务"); });
+        }, 5000);
+        return () => { clearTimeout(timer); controller.abort(); };
+    }, [run, identity]);
+    const perform = async (action: () => Promise<void>) => {
+        if (performing.current) return;
+        performing.current = true;
+        const captured = identity; setBusy(true); setError("");
+        try { await action(); }
+        catch (cause) { if (active(captured)) setError(cause instanceof Error ? cause.message : "操作失败"); }
+        finally { performing.current = false; if (active(captured)) setBusy(false); }
+    };
+    const create = () => perform(async () => {
+        const source = nodes.find(node => node.id === sourceId), character = nodes.find(node => node.id === characterId);
+        if (!source || !character || !target.trim()) throw new Error("请选择原视频、人物参考图并说明替换对象");
+        const captured = identity;
+        await prepareCanvas();
+        const [sourceKey, characterKey] = await Promise.all([cloudKey(source, owner), cloudKey(character, owner)]);
+        if (!active(captured)) return;
+        const result = await characterRequest<{ run: CharacterRun }>("", { method: "POST", json: { id: crypto.randomUUID(), projectId, input: { sourceKey, characterKey, target, instructions, imageModel, videoModel, resolution, ratio, start, end, keepAudio } } });
+        if (active(captured)) { setRun(result.run); setRuns(items => [result.run, ...items]); }
+    });
+    const execute = (name: CharacterStepName) => perform(async () => {
+        if (!run) return;
+        const captured = identity;
+        const result = await characterRequest<{ run: CharacterRun }>(`/${run.id}/steps/${name}`, { method: "POST", json: {} });
+        if (active(captured)) setRun(result.run);
+    });
+    const patch = (body: { selectedKey?: string; paused?: boolean }) => perform(async () => {
+        if (!run) return;
+        const captured = identity;
+        const result = await characterRequest<{ run: CharacterRun }>(`/${run.id}`, { method: "PATCH", json: body });
+        if (active(captured)) setRun(result.run);
+    });
+    const lastSteps = Object.values(Object.fromEntries((run?.steps || []).map(step => [step.name, step])));
+    const preparation = lastSteps.find(step => step.name === 'prepare' && step.status === 'succeeded')?.output;
+    return <Drawer open title="人物替换工作流" onClose={onClose} width={560}>
+        <div className="flex flex-col gap-4">
+            <Alert type="info" showIcon message="原视频和每一步结果都会保留" description="先确认替换参考帧，再生成视频。效果取决于模型；回插时不会自动改变片段速度。关闭面板后可从运行记录继续。" />
+            <Select aria-label="运行记录" placeholder="选择已有运行记录" value={run?.id} disabled={busy} options={runs.map(item => ({ value: item.id, label: `${item.input.target} · ${new Date(item.createdAt).toLocaleString()}` }))} onChange={id => void perform(() => refresh(id))} />
+            {error && <Alert type="error" showIcon message={error} />}
+            {!run ? <Form layout="vertical">
+                <Form.Item label="原视频"><Select value={sourceId || undefined} onChange={setSourceId} options={nodes.filter(node => node.type === CanvasNodeType.Video && node.metadata?.content).map(node => ({ value: node.id, label: node.title }))} /></Form.Item>
+                <Form.Item label="目标人物参考图"><Select value={characterId || undefined} onChange={setCharacterId} options={nodes.filter(node => node.type === CanvasNodeType.Image && node.metadata?.content).map(node => ({ value: node.id, label: node.title }))} /></Form.Item>
+                <Form.Item label="替换谁"><Input value={target} onChange={event => setTarget(event.target.value)} placeholder="例如：画面左侧穿蓝衣的人物" /></Form.Item>
+                <Form.Item label="补充要求"><Input.TextArea value={instructions} onChange={event => setInstructions(event.target.value)} autoSize={{ minRows: 2 }} /></Form.Item>
+                <Form.Item label="替换区间（秒，结束留空表示原片结尾）"><Space wrap><InputNumber aria-label="开始秒数" value={start} onChange={value => setStart(value ?? 0)} min={0} /><InputNumber aria-label="结束秒数" value={end} onChange={value => setEnd(value)} min={0} /></Space></Form.Item>
+                <Form.Item label="参考帧编辑模型"><Select value={imageModel || undefined} onChange={setImageModel} options={models.filter(model => model.capability === "image").map(model => ({ value: model.id, label: model.name }))} /><div className="mt-1 text-xs opacity-70">{estimateText(imageEstimate)}</div></Form.Item>
+                <Form.Item label="视频编辑模型"><Select value={videoModel || undefined} onChange={setVideoModel} options={models.filter(model => model.capability === "video" && Number((model.metadata?.referenceLimits as { videos?: number })?.videos) > 0).map(model => ({ value: model.id, label: model.name }))} /><div className="mt-1 text-xs opacity-70">{estimateText(videoEstimate)}，实际费用按各次任务结算</div></Form.Item>
+                <Form.Item label="输出规格"><Space wrap><Input aria-label="清晰度" value={resolution} onChange={event => setResolution(event.target.value)} placeholder="模型支持的清晰度" /><Input aria-label="画面比例" value={ratio} onChange={event => setRatio(event.target.value)} placeholder="16:9" /></Space></Form.Item>
+                <Form.Item label="成片保留原声"><Switch checked={keepAudio} onChange={setKeepAudio} /> <span className="text-xs opacity-70">关闭后成片静音，生成片段仍单独保留</span></Form.Item>
+                <Button type="primary" loading={busy} disabled={!imageModel || !videoModel} onClick={() => void create()}>创建工作流</Button>
+            </Form> : <>
+                <div><strong>{run.input.target}</strong><div className="mt-1 text-sm opacity-70">区间 {run.input.start} 秒至 {run.input.end ?? "原片结尾"} · {run.input.keepAudio ? "保留原声" : "成片静音"}</div></div>
+                <Space wrap><Button loading={busy} onClick={() => void perform(() => refresh())}>刷新进度</Button><Button disabled={busy} onClick={() => void patch({ paused: !run.paused })}>{run.paused ? "恢复后续步骤" : "暂停后续步骤"}</Button><Button disabled={busy} onClick={() => setRun(null)}>新建运行</Button></Space>
+                {run.paused && <Alert type="warning" message="后续步骤已暂停；已提交的模型任务仍会完成并计费。" />}
+                {(Object.keys(stepNames) as CharacterStepName[]).map(name => {
+                    const step = lastSteps.find(item => item.name === name);
+                    const comparison: CharacterMedia | undefined = name === 'image' ? preparation?.frame : name === 'video' ? preparation?.clip : name === 'assemble' ? { key: run.input.sourceKey, kind: 'video' } : undefined;
+                    const ready = name === "prepare" || (name === "image" && lastSteps.some(item => item.name === "prepare" && item.status === "succeeded")) || (name === "video" && Boolean(run.selectedKey)) || (name === "assemble" && lastSteps.some(item => item.name === "video" && item.status === "succeeded"));
+                    return <section key={name} className="border-b border-current/10 pb-4">
+                        <div className="mb-2 flex items-center justify-between gap-2"><strong>{stepNames[name]}</strong>{step && <Tag>{stateNames[step.status]} · 第 {step.attempt} 次</Tag>}</div>
+                        {step?.error && <p role="alert" className="mb-2 text-sm">{step.error}</p>}
+                        {name === "image" && <p className="mb-2 text-xs opacity-70">{estimateText(imageEstimate)}</p>}
+                        {name === "video" && <p className="mb-2 text-xs opacity-70">{estimateText(videoEstimate)}</p>}
+                        {(!step || step.status === "failed") && <Button disabled={busy || run.paused || !ready} onClick={() => void execute(name)}>{step ? "重试此步骤" : "开始此步骤"}</Button>}
+                        {(step?.output.media || []).map(media => <div key={media.key} className="mt-3">
+                            <div className={comparison ? 'grid gap-3 sm:grid-cols-2' : ''}>
+                                {comparison && <div><p className="mb-1 text-xs opacity-70">{name === 'assemble' ? '完整原片' : name === 'video' ? '原始片段' : '原始参考帧'}</p>
+                                    {comparison.kind === 'image' ? <img src={comparison.url || `/media/${comparison.key}`} alt="原始参考帧" loading="lazy" className="max-h-64 max-w-full object-contain" /> : <video src={comparison.url || `/media/${comparison.key}`} aria-label={name === 'assemble' ? '完整原片' : '原始片段'} controls playsInline preload="none" className="max-h-64 max-w-full" />}
+                                    <Button type="text" size="small" href={comparison.url || `/media/${comparison.key}`} download>下载原始素材</Button>
+                                </div>}
+                                <div>{comparison && <p className="mb-1 text-xs opacity-70">{name === 'assemble' ? '回插成片' : '替换结果'}</p>}
+                                    {media.kind === "image" ? <img src={media.url || `/media/${media.key}`} alt="替换参考帧" loading="lazy" className="max-h-64 max-w-full object-contain" /> : <video src={media.url || `/media/${media.key}`} aria-label={name === 'assemble' ? '回插成片' : '替换结果'} controls playsInline preload="none" className="max-h-64 max-w-full" />}
+                                    <Button type="text" size="small" href={media.url || `/media/${media.key}`} download>下载结果</Button>
+                                </div>
+                            </div>
+                            <Space wrap className="mt-2">
+                                {name === "image" && <Button disabled={busy || lastSteps.some(item => item.name === "video")} type={run.selectedKey === media.key ? "primary" : "default"} onClick={() => void patch({ selectedKey: media.key })}>{run.selectedKey === media.key ? "已确认此帧" : "确认此帧用于视频"}</Button>}
+                                <Button onClick={() => onAddMedia(run, [media])}>放入画布</Button>
+                            </Space>
+                        </div>)}
+                    </section>;
+                })}
+                <p className="text-xs opacity-70">已完成步骤保留结果。参考帧确认后再开始视频；需要修改输入或更换已提交的参考帧时，创建新的运行。</p>
+            </>}
+        </div>
+    </Drawer>;
+}
+
