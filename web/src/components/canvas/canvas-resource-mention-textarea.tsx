@@ -1,4 +1,4 @@
-import { forwardRef, useMemo, useRef, useState } from "react";
+import { forwardRef, useDeferredValue, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent, PointerEvent, TextareaHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Image as ImageIcon, Music2, Video } from "lucide-react";
@@ -26,16 +26,19 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const overlayRef = useRef<HTMLDivElement | null>(null);
+    const composingRef = useRef(false);
     const [mention, setMention] = useState<MentionState | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
     const [hasSelection, setHasSelection] = useState(false);
+    const deferredValue = useDeferredValue(value);
+    const deferredQuery = useDeferredValue(mention?.query ?? "");
     const candidates = useMemo(() => {
         if (!mention) return [];
-        const query = mention.query.trim().toLowerCase();
+        const query = deferredQuery.trim().toLowerCase();
         const activeReferences = references.filter((item) => item.active);
         if (!query) return activeReferences;
         return activeReferences.filter((item) => `${item.label} ${item.title} ${item.kind} ${item.text || ""}`.toLowerCase().includes(query));
-    }, [mention, references]);
+    }, [mention, deferredQuery, references]);
     const activeLabels = useMemo(() => (highlightLabels ? Array.from(new Set(references.filter((item) => item.active).map((item) => item.label))).sort((a, b) => b.length - a.length) : []), [highlightLabels, references]);
 
     const updateValue = (next: string, selectionStart?: number) => {
@@ -99,7 +102,7 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
         <div className={`relative h-full w-full ${containerClassName || ""}`}>
             {showOverlay ? (
                 <div ref={overlayRef} className={`${className || ""} pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words`} style={{ ...style, color: theme.node.text }}>
-                    <MentionHighlightText value={value || props.placeholder?.toString() || ""} labels={activeLabels} placeholder={!value} />
+                    <MentionHighlightText value={deferredValue || props.placeholder?.toString() || ""} labels={activeLabels} placeholder={!value} />
                 </div>
             ) : null}
             <textarea
@@ -112,10 +115,21 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
                 value={value}
                 className={className}
                 style={mergedStyle}
+                onCompositionStart={(event) => {
+                    composingRef.current = true;
+                    props.onCompositionStart?.(event);
+                }}
+                onCompositionEnd={(event) => {
+                    composingRef.current = false;
+                    const target = event.currentTarget;
+                    syncMention(target.value, target.selectionStart);
+                    props.onCompositionEnd?.(event);
+                }}
                 onChange={(event) => {
                     const next = event.target.value;
+                    if (composingRef.current && !(event.nativeEvent as InputEvent).isComposing) composingRef.current = false;
                     onChange(next);
-                    syncMention(next, event.target.selectionStart);
+                    if (!composingRef.current) syncMention(next, event.target.selectionStart);
                     requestAnimationFrame(() => {
                         syncOverlayScroll();
                         updateSelectionState();
@@ -244,7 +258,7 @@ function MentionMenu({ textarea, caretIndex, references, activeIndex, theme, onS
     return createPortal(
         <div
             data-canvas-resource-mention-menu="true"
-            className="fixed z-[120] max-h-56 w-64 overflow-y-auto rounded-xl border p-1 shadow-2xl backdrop-blur-md"
+            className="fixed z-[var(--z-popover)] max-h-56 w-64 overflow-y-auto rounded-xl border p-1 shadow-2xl backdrop-blur-md"
             style={{ left, top, background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
             onPointerDown={stopCanvasInteraction}
             onMouseDown={stopCanvasInteraction}

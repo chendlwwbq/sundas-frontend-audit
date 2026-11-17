@@ -28,7 +28,7 @@ export function CanvasNodeContextMenu({ menu, canCaptureVideoFrame, canGroup, ca
 
     return (
         <div
-            className="fixed z-[80] min-w-44 overflow-hidden rounded-xl border py-1 shadow-2xl"
+            className="fixed z-[var(--z-canvas-menu)] min-w-44 overflow-hidden rounded-xl border py-1 shadow-2xl"
             style={{ left: Math.min(menu.x, maxLeft), top: Math.min(menu.y, maxTop), background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
             onPointerDown={(event) => event.stopPropagation()}
         >

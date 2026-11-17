@@ -1,18 +1,18 @@
 import { creationSystemCss } from "@/components/creation/creation-system";
 import "@/components/creation/creation-controls.css";
-import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 
-import { AppConfigModalHost } from "@/components/layout/lazy-overlays";
+import { AppConfigModalHost, PromoContactDialogHost } from "@/components/layout/lazy-overlays";
 import { AppTopNav } from "@/components/layout/app-top-nav";
 import { DotField } from "@/components/background/dot-field";
 import { CreationSidebar } from "@/components/layout/creation-sidebar";
 import { PageTransition } from "@/components/layout/page-transition";
-import { PromoContactDialog } from "@/components/promo/promo-contact-dialog";
-import { PromoCorner } from "@/components/promo/promo-corner";
-import { PromoTopBar } from "@/components/promo/promo-top-bar";
 import { loadPromoConfig, type PromoItem } from "@/services/api/promo";
 import { useThemeStore } from "@/stores/use-theme-store";
+
+const PromoCorner = lazy(() => import("@/components/promo/promo-corner").then((module) => ({ default: module.PromoCorner })));
+const PromoTopBar = lazy(() => import("@/components/promo/promo-top-bar").then((module) => ({ default: module.PromoTopBar })));
 
 export default function UserLayout({ children }: { children: ReactNode }) {
     const { pathname, search } = useLocation();
@@ -60,7 +60,11 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     return (
         <div className="creation-shell flex h-dvh flex-col overflow-hidden bg-background text-foreground" data-astryx-theme="neutral" style={{ colorScheme: theme }}>
             <style>{creationSystemCss}</style>
-            {pathname === "/" || pathname === "/explore" ? <PromoTopBar item={topbar} /> : null}
+            {topbar && (pathname === "/" || pathname === "/explore") ? (
+                <Suspense fallback={null}>
+                    <PromoTopBar item={topbar} />
+                </Suspense>
+            ) : null}
             <AppTopNav mobileOpen={mobileOpen} onMobileOpen={() => setMobileOpen(true)} onMobileClose={() => setMobileOpen(false)} />
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
                 {creation && <CreationSidebar />}
@@ -69,8 +73,12 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                     {content}
                 </main>
             </div>
-            <PromoContactDialog />
-            <PromoCorner item={corner} workbench={creation} />
+            <PromoContactDialogHost />
+            {corner ? (
+                <Suspense fallback={null}>
+                    <PromoCorner item={corner} workbench={creation} />
+                </Suspense>
+            ) : null}
         </div>
     );
 }

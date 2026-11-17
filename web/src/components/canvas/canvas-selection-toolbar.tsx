@@ -67,7 +67,7 @@ export function CanvasSelectionToolbar({
             </svg>
             {showActions ? (
                 <div
-                    className={`absolute z-[70] flex h-10 -translate-x-1/2 ${flipBelow ? "" : "-translate-y-full "}items-center gap-0.5 overflow-visible rounded-[14px] px-1.5 backdrop-blur-md`}
+                    className={`absolute z-[var(--z-node-toolbar)] flex h-10 -translate-x-1/2 ${flipBelow ? "" : "-translate-y-full "}items-center gap-0.5 overflow-visible rounded-[14px] px-1.5 backdrop-blur-md`}
                     style={{
                         left: toolbarLeft,
                         top: toolbarTop,

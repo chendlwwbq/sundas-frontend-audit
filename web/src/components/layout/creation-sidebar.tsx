@@ -73,7 +73,7 @@ export function CreationSidebar() {
     if (!user) return null;
     return <>
         <div className="hidden h-full lg:block">{sidebar}</div>
-        <button type="button" onClick={() => setOpen(true)} className="m-2 flex shrink-0 items-center gap-2 self-start rounded-lg px-3 py-2 text-xs text-muted-foreground hover:bg-muted lg:hidden" aria-label="打开最近作品" aria-expanded={open} aria-controls="creation-mobile-navigation"><Menu className="size-4" />最近作品</button>
+        <button type="button" onClick={() => setOpen(true)} className="mx-3 mt-1.5 flex h-8 shrink-0 items-center gap-1.5 self-start rounded-lg px-2.5 text-xs text-muted-foreground hover:bg-muted lg:hidden" aria-label="打开最近作品" aria-expanded={open} aria-controls="creation-mobile-navigation"><Menu className="size-3.5" />最近作品</button>
         <Drawer open={open} onClose={() => setOpen(false)} placement="left" size={220} closable={false} styles={{ body: { padding: 0 } }} rootClassName="creation-mobile-drawer" destroyOnHidden><div id="creation-mobile-navigation" className="creation-shell h-full">{sidebar}</div></Drawer>
     </>;
 }

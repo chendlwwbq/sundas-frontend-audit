@@ -34,7 +34,6 @@
 .home-landing .home-editor { padding: 0; background: transparent; border: 0; box-shadow: none; }
 .home-landing .home-editor-label { display: none; }
 .home-landing .home-editor .home-prompt { min-height: 66px; height: 66px; margin-top: 0; padding: 8px 38px 12px 4px; font-size: 14px; font-weight: 400; }
-.home-landing .home-editor .home-materials { padding-top: 8px; margin-top: 0; border-top: 0; }
 .home-landing .home-composer .home-toolbar { margin-top: 10px; }
 .home-landing .home-caption { margin-bottom: 12px; }
 .home-landing .landing-tools { margin-top: 24px; }

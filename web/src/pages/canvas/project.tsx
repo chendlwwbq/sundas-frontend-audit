@@ -309,8 +309,7 @@ function InfiniteCanvasPage() {
     const [superResolveNodeId, setSuperResolveNodeId] = useState<string | null>(null);
     const [creativePanel, setCreativePanel] = useState<"production" | "production-export" | "agent" | "character" | null>(null);
     const sidePanelOpen = useCanvasSidePanelStore((state) => state.panelOpen);
-    const syncState = useCloudSyncStatus();
-    const currentSyncStatus = syncState.owner === authUserId && syncState.session === authSessionEpoch ? (syncState.projects[projectId || ""] || syncState.status) : "reading";
+    const currentSyncStatus = useCloudSyncStatus((state) => (state.owner === authUserId && state.session === authSessionEpoch ? state.projects[projectId || ""] || state.status : "reading"));
 
     // < 1440px 笔记本屏幕下左右侧栏互斥展开，避免中间画布宽度过窄。
     useEffect(() => {
@@ -3958,7 +3957,7 @@ function InfiniteCanvasPage() {
 
                     {selectionBox ? (
                         <svg
-                            className="pointer-events-none absolute z-[100] overflow-visible"
+                            className="pointer-events-none absolute z-[var(--z-canvas-overlay)] overflow-visible"
                             style={{
                                 left: Math.min(selectionBox.startWorldX, selectionBox.currentWorldX),
                                 top: Math.min(selectionBox.startWorldY, selectionBox.currentWorldY),
@@ -3995,10 +3994,10 @@ function InfiniteCanvasPage() {
                     </div>
                 ) : null}
 
-                {referencePickerNodeId ? <button type="button" className="absolute left-1/2 top-4 z-[90] -translate-x-1/2 rounded-full border px-4 py-2 text-sm font-medium shadow-lg backdrop-blur" style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border }} onClick={exitNodeReferenceSelection}>{t("canvas.references.selectingHint")}</button> : null}
+                {referencePickerNodeId ? <button type="button" className="absolute left-1/2 top-4 z-[var(--z-canvas-overlay)] -translate-x-1/2 rounded-full border px-4 py-2 text-sm font-medium shadow-lg backdrop-blur" style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border }} onClick={exitNodeReferenceSelection}>{t("canvas.references.selectingHint")}</button> : null}
 
                 <div
-                    className="pointer-events-none absolute inset-0 z-[80] flex items-center justify-center transition-opacity duration-200 ease-out"
+                    className="pointer-events-none absolute inset-0 z-[var(--z-canvas-menu)] flex items-center justify-center transition-opacity duration-200 ease-out"
                     style={{ background: `color-mix(in srgb, ${theme.canvas.background} 76%, transparent)`, opacity: showHoverPreview ? 1 : 0 }}
                 >
                     <div

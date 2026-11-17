@@ -205,7 +205,7 @@ function MentionMenu({ inputs, allInputs, activeIndex, theme, onSelect }: { inpu
     };
 
     return (
-        <div className="absolute left-2 top-[calc(100%+6px)] z-[90] max-h-56 w-64 overflow-y-auto rounded-xl border p-1" style={{ background: theme.menu.panel, borderColor: theme.menu.border, boxShadow: theme.menu.shadow }}>
+        <div className="absolute left-2 top-[calc(100%+6px)] z-[var(--z-canvas-overlay)] max-h-56 w-64 overflow-y-auto rounded-xl border p-1" style={{ background: theme.menu.panel, borderColor: theme.menu.border, boxShadow: theme.menu.shadow }}>
             {inputs.map((input, index) => (
                 <button
                     key={input.nodeId}

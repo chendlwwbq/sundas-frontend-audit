@@ -1025,9 +1025,9 @@ body.admin-theme .ant-input-number {
    新增语言时按需扩展选择器（如 html[lang="ko-KR"]）。 */
 
 /* 英文：文案比中文长，放宽字距、收紧大标题行高，避免溢出 */
-html[lang="en-US"] .home-hero-title {
-    letter-spacing: -0.03em;
-    line-height: 1.04;
+html[lang="en-US"] .home-landing .landing-welcome h1 {
+    letter-spacing: -0.02em;
+    line-height: 1.08;
     text-wrap: balance;
 }
 
@@ -2772,10 +2772,14 @@ html[lang="en-US"] .home-composer {
    避免污染画布、后台等其它区域的全局样式。
    =========================================================================== */
 :root {
-    /* 与 BeefTV 保持一致：工作台整层必须低于 antd 弹层基准（1000），
-       否则 Dropdown / Select / Tooltip 会被工作台盖住，看得见但点不到。
-       画布内的浮层最高 z-100，500 足以覆盖。 */
+    /* 全局浮层层级契约：画布内浮层最高不超过 --z-toast (500)，确保低于 AntD 弹层基准 (1000)，
+       避免 Dropdown / Select / Tooltip 被画布或工作台盖住。 */
+    --z-canvas-node: 10;
+    --z-canvas-node-selected: 50;
     --z-toolbar: 60;
+    --z-node-toolbar: 70;
+    --z-canvas-menu: 80;
+    --z-canvas-overlay: 100;
     --z-popover: 200;
     --z-toast: 500;
 }

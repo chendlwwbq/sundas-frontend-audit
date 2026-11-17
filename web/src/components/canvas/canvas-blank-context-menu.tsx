@@ -55,7 +55,7 @@ export function CanvasBlankContextMenu({
 
     return (
         <div
-            className="fixed z-[80] w-[212px] overflow-hidden rounded-xl border py-1 shadow-2xl backdrop-blur-2xl"
+            className="fixed z-[var(--z-canvas-menu)] w-[212px] overflow-hidden rounded-xl border py-1 shadow-2xl backdrop-blur-md"
             style={{ left: Math.min(x, maxLeft), top: Math.min(y, maxTop), background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
             onPointerDown={(event) => event.stopPropagation()}
             onContextMenu={(event) => event.preventDefault()}

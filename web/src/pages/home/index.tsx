@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { App } from "antd";
 import { ArrowUp, ArrowUpRight, ChevronDown, ImagePlus, LoaderCircle, Minus, Music, PlayCircle, Plus, Sparkles, Video, X, Zap } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
@@ -15,7 +15,7 @@ import { PromptVideoCover } from "@/components/prompts/prompt-video-cover";
 import { HeroFilmWall } from "@/pages/home/hero-film-wall";
 import { LandingCanvasPanel } from "@/pages/home/landing-canvas-panel";
 import { PromptDetailDialog } from "@/components/prompts/prompt-detail-dialog";
-import { PromoPopup } from "@/components/promo/promo-popup";
+const PromoPopup = lazy(() => import("@/components/promo/promo-popup").then((module) => ({ default: module.PromoPopup })));
 import { inferMediaRatio, inferMediaScale, inferVideoRatio, mediaRatioOptions, videoRatioOptions, videoResolutionOptionsFromMap, parseVideoResolution, videoSecondsRangeForDurations } from "@/lib/media-size";
 import { useCopyText } from "@/hooks/use-copy-text";
 import { storePendingPrompt, type PendingMaterialKind, type PendingReference } from "@/lib/pending-prompt";
@@ -667,7 +667,11 @@ export default function HomePage({ landing = false, suppressPromo = false }: { l
 
             </div>
             <SiteFooter />
-            {landing && !suppressPromo && <PromoPopup item={promo?.popup ?? null} />}
+            {landing && !suppressPromo && promo?.popup ? (
+                <Suspense fallback={null}>
+                    <PromoPopup item={promo.popup} />
+                </Suspense>
+            ) : null}
             <PromptDetailDialog
                 prompt={selectedPrompt}
                 onClose={() => setSelectedPrompt(null)}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Image } from "antd";
@@ -55,12 +55,13 @@ export function CanvasPromptChipInput({ value, references, onChange, onSubmit, c
     const activeLabels = useMemo(() => Array.from(new Set(activeReferences.map((item) => item.label))).sort((a, b) => b.length - a.length), [activeReferences]);
     const tokens = useMemo(() => parseTokens(value, activeLabels), [value, activeLabels]);
 
+    const deferredMentionQuery = useDeferredValue(mention?.query ?? "");
     const candidates = useMemo(() => {
         if (!mention) return [];
-        const query = mention.query.trim().toLowerCase();
+        const query = deferredMentionQuery.trim().toLowerCase();
         if (!query) return activeReferences;
         return activeReferences.filter((item) => `${item.label} ${item.title} ${item.kind} ${item.text || ""}`.toLowerCase().includes(query));
-    }, [mention, activeReferences]);
+    }, [mention, deferredMentionQuery, activeReferences]);
 
     // Rebuild the DOM only when the content that should be displayed actually changed (value / chips / theme),
     // never on plain re-renders. An identical focused value is this component's own echo, so keep the live DOM
@@ -192,7 +193,9 @@ export function CanvasPromptChipInput({ value, references, onChange, onSubmit, c
                         placeCaretAtEnd(editor);
                     }
                     emit(serializeEditor(editor));
-                    requestAnimationFrame(syncMention);
+                    requestAnimationFrame(() => {
+                        if (!composingRef.current) syncMention();
+                    });
                 }}
                 onCompositionStart={() => {
                     composingRef.current = true;
@@ -237,7 +240,9 @@ export function CanvasPromptChipInput({ value, references, onChange, onSubmit, c
                         onSubmit();
                         return;
                     }
-                    requestAnimationFrame(syncMention);
+                    requestAnimationFrame(() => {
+                        if (!composingRef.current) syncMention();
+                    });
                 }}
                 onBlur={() => window.setTimeout(closeMention, 120)}
             />

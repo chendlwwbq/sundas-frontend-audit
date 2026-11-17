@@ -2,6 +2,7 @@
  * 路由预取：鼠标悬停/键盘聚焦导航时，提前把目标页面的 chunk 拉下来。
  * 只在浏览器空闲时下载，避免和首屏资源抢带宽；同一个路由只会预取一次。
  */
+import { useAuthStore } from "@/stores/use-auth-store";
 
 type Loader = () => Promise<unknown>;
 
@@ -20,6 +21,7 @@ const started = new Set<string>();
 
 export function prefetchRoute(to: string) {
     const path = to.split(/[?#]/)[0] || "/";
+    if ((path === "/admin" || path.startsWith("/admin/")) && useAuthStore.getState().user?.role !== "admin") return;
     const loader = ROUTE_LOADERS[path];
     if (!loader || started.has(path)) return;
     started.add(path);

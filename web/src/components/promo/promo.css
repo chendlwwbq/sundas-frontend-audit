@@ -240,38 +240,6 @@
     opacity: 0.7;
 }
 
-.promo-carousel-dashes {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    pointer-events: auto;
-}
-
-.promo-carousel-dash {
-    width: 16px;
-    height: 4px;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.28);
-    cursor: pointer;
-    transition: width 200ms ease, background 200ms ease;
-}
-
-.promo-carousel-dash:hover {
-    background: rgba(255, 255, 255, 0.55);
-}
-
-.promo-carousel-dash:focus-visible {
-    outline: 2px solid var(--brand);
-    outline-offset: 3px;
-}
-
-.promo-carousel-dash.is-active {
-    width: 26px;
-    background: var(--brand);
-}
-
 /* 右下角浮动卡片：品牌绿细描边 + 渐变 CTA，外发光已去掉，仅保留柔和投影，避免边框外侧泛光 */
 .promo-corner {
     position: fixed;
@@ -1253,24 +1221,6 @@
 
 .promo-carousel.is-hero .promo-carousel-arrow.is-next {
     right: -17px;
-}
-
-.promo-carousel.is-hero .promo-carousel-dots {
-    position: static;
-    justify-content: center;
-    margin-top: 12px;
-    gap: 6px;
-}
-
-.promo-carousel.is-hero .promo-carousel-dot {
-    width: 5px;
-    height: 5px;
-    background: var(--border);
-}
-
-.promo-carousel.is-hero .promo-carousel-dot.is-active {
-    width: 20px;
-    background: #D8FF3E;
 }
 
 @media (max-width: 760px) {

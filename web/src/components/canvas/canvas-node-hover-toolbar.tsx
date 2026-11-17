@@ -209,7 +209,7 @@ export function CanvasNodeHoverToolbar({
         <>
             <div
                 ref={toolbarRef}
-                className={`thin-scrollbar absolute z-[70] flex h-10 max-w-[calc(100vw-16px)] -translate-x-1/2 ${flipBelow ? "" : "-translate-y-full "}items-center gap-0.5 overflow-x-auto rounded-[14px] px-1.5 backdrop-blur-md [&>*]:shrink-0`}
+                className={`thin-scrollbar absolute z-[var(--z-node-toolbar)] flex h-10 max-w-[calc(100vw-16px)] -translate-x-1/2 ${flipBelow ? "" : "-translate-y-full "}items-center gap-0.5 overflow-x-auto rounded-[14px] px-1.5 backdrop-blur-md [&>*]:shrink-0`}
                 data-node-toolbar={node.id}
                 style={{
                     left,

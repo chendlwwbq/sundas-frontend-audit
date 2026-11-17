@@ -69,9 +69,10 @@ export function CanvasTopBar({
     const sidePanelOpen = useCanvasSidePanelStore((state) => state.panelOpen);
     const toggleSidePanel = useCanvasSidePanelStore((state) => state.togglePanel);
     const { id: projectId } = useParams();
-    const sync = useCloudSyncStatus();
-    const auth = useAuthStore();
-    const syncStatus = sync.owner === auth.user?.id && sync.session === auth.sessionEpoch ? (sync.projects[projectId || ''] || sync.status) : 'reading';
+    const authUserId = useAuthStore((state) => state.user?.id);
+    const authSessionEpoch = useAuthStore((state) => state.sessionEpoch);
+    const syncStatus = useCloudSyncStatus((state) => (state.owner === authUserId && state.session === authSessionEpoch ? state.projects[projectId || ""] || state.status : "reading"));
+    const syncError = useCloudSyncStatus((state) => (state.owner === authUserId && state.session === authSessionEpoch ? state.error : ""));
 
     useEffect(() => {
         if (!isTitleEditing) return;
@@ -86,7 +87,7 @@ export function CanvasTopBar({
         <>
             <div className="pointer-events-none absolute left-0 right-0 top-0 z-50 flex h-16 items-center justify-between pl-1 pr-4">
                 <div className="pointer-events-auto flex min-w-0 items-center gap-2">
-                    <Tooltip title={syncStatus === 'failed' ? sync.error || '点击重新同步' : syncStatus === 'local-media' ? '项目内容已提交，仍有本机媒体尚未上传；换设备前请核对。' : cloudSaveLabels[syncStatus]}>
+                    <Tooltip title={syncStatus === 'failed' ? syncError || '点击重新同步' : syncStatus === 'local-media' ? '项目内容已提交，仍有本机媒体尚未上传；换设备前请核对。' : cloudSaveLabels[syncStatus]}>
                         <button type="button" className="order-last ml-1 hidden shrink-0 text-[11px] opacity-60 hover:opacity-100 sm:block" style={{color:theme.node.text}} disabled={syncStatus === 'reading' || syncStatus === 'saving'} onClick={() => void retryCloudSync()} aria-label={`${cloudSaveLabels[syncStatus]}，重新同步`}>
                             {cloudSaveLabels[syncStatus]}
                         </button>
