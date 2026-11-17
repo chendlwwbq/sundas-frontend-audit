@@ -141,7 +141,7 @@ export function DotField({ className = "" }: { className?: string }) {
         };
 
         const onMove = (event: PointerEvent) => {
-            if (event.pointerType === "touch") return;
+            if (event.pointerType === "touch" || document.hidden) return;
             const rect = host.getBoundingClientRect();
             const x = event.clientX - rect.left;
             const y = event.clientY - rect.top;
@@ -187,9 +187,22 @@ export function DotField({ className = "" }: { className?: string }) {
         observer.observe(host);
         resize();
 
+        const onVisibilityChange = () => {
+            if (!document.hidden) return;
+            if (frame) {
+                cancelAnimationFrame(frame);
+                frame = 0;
+            }
+            pointer.strength = 0;
+            pointer.target = 0;
+            glowCtx.setTransform(1, 0, 0, 1, 0, 0);
+            glowCtx.clearRect(0, 0, glowCanvas.width, glowCanvas.height);
+        };
+
         window.addEventListener("pointermove", onMove, { passive: true });
         window.addEventListener("blur", onLeave);
         document.addEventListener("pointerleave", onLeave);
+        document.addEventListener("visibilitychange", onVisibilityChange);
         motion.addEventListener("change", wake);
 
         return () => {
@@ -198,6 +211,7 @@ export function DotField({ className = "" }: { className?: string }) {
             window.removeEventListener("pointermove", onMove);
             window.removeEventListener("blur", onLeave);
             document.removeEventListener("pointerleave", onLeave);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
             motion.removeEventListener("change", wake);
         };
     }, []);

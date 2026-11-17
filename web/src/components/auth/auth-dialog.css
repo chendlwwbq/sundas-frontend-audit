@@ -149,6 +149,17 @@
     color: rgba(255, 255, 255, 0.42);
 }
 
+.auth-modal-hint {
+    margin: 12px 0 0;
+    padding: 8px 12px;
+    border: 1px solid rgba(216, 255, 62, 0.28);
+    border-radius: 10px;
+    background: rgba(216, 255, 62, 0.08);
+    font-size: 12px;
+    line-height: 18px;
+    color: #d8ff3e;
+}
+
 /* ---------------- 表单 ---------------- */
 
 .auth-modal-fields {

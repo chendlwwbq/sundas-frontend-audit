@@ -57,21 +57,32 @@ export function HeroFilmWall() {
         return () => query.removeEventListener("change", sync);
     }, []);
 
-    // 滚出视口即暂停，避免 24 路解码在后台持续占用资源
+    const intersectingRef = useRef(true);
+
+    // 滚出视口或切出标签页即暂停，避免 6 路解码在后台持续占用资源
     useEffect(() => {
         const node = frames.current;
         if (!node || typeof IntersectionObserver === "undefined") return;
+        const syncPlayback = () => {
+            const shouldPlay = intersectingRef.current && !document.hidden && !reducedMotion;
+            for (const video of Array.from(node.querySelectorAll("video"))) {
+                if (shouldPlay && video.hasAttribute("src")) void video.play().catch(() => undefined);
+                else video.pause();
+            }
+        };
         const observer = new IntersectionObserver(
             ([entry]) => {
-                for (const video of Array.from(node.querySelectorAll("video"))) {
-                    if (entry.isIntersecting && !reducedMotion && video.hasAttribute("src")) void video.play().catch(() => undefined);
-                    else video.pause();
-                }
+                intersectingRef.current = entry.isIntersecting;
+                syncPlayback();
             },
             { rootMargin: "160px" },
         );
         observer.observe(node);
-        return () => observer.disconnect();
+        document.addEventListener("visibilitychange", syncPlayback);
+        return () => {
+            observer.disconnect();
+            document.removeEventListener("visibilitychange", syncPlayback);
+        };
     }, [reducedMotion, motionReady]);
 
     return (

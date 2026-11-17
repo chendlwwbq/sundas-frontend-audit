@@ -89,7 +89,7 @@ export function CanvasNodePromptPanel({
         <div
             data-canvas-no-zoom
             data-node-panel
-            className="canvas-redesigned canvas-gen-panel flex w-[480px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-[20px] border backdrop-blur-2xl transition-[border-color,box-shadow] duration-150 [border-color:var(--gen-border)] focus-within:[border-color:var(--gen-border-focus)]"
+            className="canvas-redesigned canvas-gen-panel flex w-[480px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-[20px] border backdrop-blur-md transition-[border-color,box-shadow] duration-150 [border-color:var(--gen-border)] focus-within:[border-color:var(--gen-border-focus)]"
             style={{
                 background: c.surface,
                 color: theme.node.text,

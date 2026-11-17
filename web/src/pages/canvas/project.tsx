@@ -57,6 +57,8 @@ const CanvasDirectorWorkbench = lazy(() =>
 );
 import { isCanvasAccountActive, useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { useAuthStore } from "@/stores/use-auth-store";
+import { useCanvasSidePanelStore } from "@/stores/use-canvas-side-panel-store";
+import { useCloudSyncStatus } from "@/stores/use-cloud-sync-status";
 import { createGenerationAccountBindings, guardGenerationUpdate } from "@/lib/canvas/generation-account";
 import { matchesCanvasSession } from "@/lib/canvas/canvas-session";
 import { friendlyErrorMessage } from "@/lib/error-messages";
@@ -306,6 +308,32 @@ function InfiniteCanvasPage() {
     const [upscaleNodeId, setUpscaleNodeId] = useState<string | null>(null);
     const [superResolveNodeId, setSuperResolveNodeId] = useState<string | null>(null);
     const [creativePanel, setCreativePanel] = useState<"production" | "production-export" | "agent" | "character" | null>(null);
+    const sidePanelOpen = useCanvasSidePanelStore((state) => state.panelOpen);
+    const syncState = useCloudSyncStatus();
+    const currentSyncStatus = syncState.owner === authUserId && syncState.session === authSessionEpoch ? (syncState.projects[projectId || ""] || syncState.status) : "reading";
+
+    // < 1440px 笔记本屏幕下左右侧栏互斥展开，避免中间画布宽度过窄。
+    useEffect(() => {
+        if (typeof window === "undefined" || window.innerWidth >= 1440) return;
+        if (creativePanel && useCanvasSidePanelStore.getState().panelOpen) useCanvasSidePanelStore.getState().closePanel();
+    }, [creativePanel]);
+
+    useEffect(() => {
+        if (typeof window === "undefined" || window.innerWidth >= 1440) return;
+        if (sidePanelOpen && creativePanel) setCreativePanel(null);
+    }, [sidePanelOpen, creativePanel]);
+
+    // 存在尚未落云端或本地媒体未上传完的改动时提醒拦截，避免误关标签页丢失。
+    useEffect(() => {
+        if (!projectLoaded) return;
+        if (currentSyncStatus !== "pending" && currentSyncStatus !== "saving" && currentSyncStatus !== "failed" && currentSyncStatus !== "conflict" && currentSyncStatus !== "local-media") return;
+        const onBeforeUnload = (event: BeforeUnloadEvent) => {
+            event.preventDefault();
+            event.returnValue = "";
+        };
+        window.addEventListener("beforeunload", onBeforeUnload);
+        return () => window.removeEventListener("beforeunload", onBeforeUnload);
+    }, [currentSyncStatus, projectLoaded]);
     const [toolHandoff, setToolHandoff] = useState<CreativeToolHandoff>();
     const toolBaseRef = useRef<{ projectId: string; owner: string; epoch: number; updatedAt: string; nodes: CanvasNodeData[]; connections: CanvasConnection[]; production?: ProductionDocument; directorScenes: DirectorScene[] } | null>(null);
     const [angleNodeId, setAngleNodeId] = useState<string | null>(null);
@@ -1875,6 +1903,18 @@ function InfiniteCanvasPage() {
                 }
             }
 
+            if (isModifierShortcut && !event.altKey && !event.shiftKey && (key === "\\" || event.code === "Backslash")) {
+                event.preventDefault();
+                const sideOpen = useCanvasSidePanelStore.getState().panelOpen;
+                if (sideOpen || creativePanel !== null) {
+                    if (sideOpen) useCanvasSidePanelStore.getState().closePanel();
+                    setCreativePanel(null);
+                } else {
+                    useCanvasSidePanelStore.getState().openPanel();
+                }
+                return;
+            }
+
             if (isModifierShortcut && !event.altKey && (key === "0" || key === "1" || key === "2")) {
                 event.preventDefault();
                 if (key === "0") fitAllNodes();
@@ -1944,7 +1984,7 @@ function InfiniteCanvasPage() {
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [copySelectedNodes, deleteConnection, deleteNodes, dialogNodeId, fitAllNodes, focusSelectedNode, groupSelection, pasteCopiedNodes, pasteSystemClipboard, redoCanvas, resetViewport, selectedConnectionId, setConnecting, undoCanvas, ungroupSelection]);
+    }, [copySelectedNodes, creativePanel, deleteConnection, deleteNodes, dialogNodeId, fitAllNodes, focusSelectedNode, groupSelection, pasteCopiedNodes, pasteSystemClipboard, redoCanvas, resetViewport, selectedConnectionId, setConnecting, undoCanvas, ungroupSelection]);
 
     const handleConnectStart = useCallback(
         (event: ReactMouseEvent, nodeId: string, handleType: "source" | "target") => {
@@ -3981,6 +4021,7 @@ function InfiniteCanvasPage() {
                 <CanvasNodeHoverToolbar
                     node={isNodeDragging || isNodeResizing || nodeImageSettingsOpen || Boolean(referencePickerNodeId) || expandedBatchNodeIds.has(toolbarNode?.id || "") ? null : toolbarNode}
                     viewport={viewport}
+                    viewportSize={size}
                     onKeep={keepNodeToolbar}
                     onLeave={hideNodeToolbar}
                     onInfo={(node) => setInfoNodeId(node.id)}
@@ -4009,6 +4050,7 @@ function InfiniteCanvasPage() {
                     <CanvasSelectionToolbar
                         nodes={selectedNodes}
                         viewport={viewport}
+                        viewportSize={size}
                         showToolbar={!isNodeDragging && !isNodeResizing}
                         canGroup={canGroupSelection}
                         canUngroup={canUngroupSelection}

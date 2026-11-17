@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { App, Modal, Segmented, Tooltip } from "antd";
 import { Download, Ellipsis, FolderPlus, Image as ImageIcon, Info, MessageSquare, Minus, Music2, Plus, RefreshCw, Settings2, Trash2, Ungroup, Upload, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -17,6 +17,7 @@ import { IMAGE_QUICK_TOOLS_STORAGE_KEY, buildImageToolbarTools, defaultImageQuic
 type CanvasNodeHoverToolbarProps = {
     node: CanvasNodeData | null;
     viewport: ViewportTransform;
+    viewportSize?: { width: number; height: number };
     onKeep: (nodeId: string) => void;
     onLeave: () => void;
     onInfo: (node: CanvasNodeData) => void;
@@ -55,6 +56,7 @@ type ToolbarTool = {
 export function CanvasNodeHoverToolbar({
     node,
     viewport,
+    viewportSize,
     onKeep,
     onLeave,
     onInfo,
@@ -89,6 +91,14 @@ export function CanvasNodeHoverToolbar({
     const copyText = useCopyText();
     const archive = useMediaArchive(node?.type === CanvasNodeType.Video ? node.metadata?.content : undefined);
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const toolbarRef = useRef<HTMLDivElement>(null);
+    const [toolbarWidth, setToolbarWidth] = useState(320);
+
+    useLayoutEffect(() => {
+        if (!node) return;
+        const measured = toolbarRef.current?.offsetWidth;
+        if (measured && measured !== toolbarWidth) setToolbarWidth(measured);
+    }, [node, quickImageToolIds, showImageToolLabels, toolbarWidth]);
 
     useEffect(() => {
         try {
@@ -110,9 +120,17 @@ export function CanvasNodeHoverToolbar({
     if (!node) return null;
 
     const activeNode = node;
-    const left = viewport.x + (node.position.x + node.width / 2) * viewport.k;
-    // 节点标题行挂在节点上方，工具栏再往上让出标题高度，避免两者叠在一起。
-    const top = viewport.y + node.position.y * viewport.k - 30;
+    const vw = viewportSize?.width || (typeof window !== "undefined" ? window.innerWidth : 1280);
+    const vh = viewportSize?.height || (typeof window !== "undefined" ? window.innerHeight : 720);
+    const halfW = Math.min((toolbarWidth || 320) / 2, Math.max(0, vw / 2 - 12));
+    const rawLeft = viewport.x + (node.position.x + node.width / 2) * viewport.k;
+    const left = Math.max(halfW + 12, Math.min(vw - halfW - 12, rawLeft));
+    // 节点标题行挂在节点上方，工具栏再往上让出标题高度；若接近顶栏则自动翻转到节点下方避免遮挡/裁切。
+    const rawTop = viewport.y + node.position.y * viewport.k - 30;
+    const flipBelow = rawTop < 112;
+    const top = flipBelow
+        ? Math.min(Math.max(72, viewport.y + (node.position.y + node.height) * viewport.k + 12), Math.max(72, vh - 56))
+        : Math.max(112, Math.min(vh - 16, rawTop));
     const isImage = node.type === CanvasNodeType.Image;
     const isVideo = node.type === CanvasNodeType.Video;
     const isAudio = node.type === CanvasNodeType.Audio;
@@ -190,7 +208,8 @@ export function CanvasNodeHoverToolbar({
     return (
         <>
             <div
-                className="thin-scrollbar absolute z-[70] flex h-10 max-w-[calc(100vw-16px)] -translate-x-1/2 -translate-y-full items-center gap-0.5 overflow-x-auto rounded-[14px] px-1.5 backdrop-blur-2xl [&>*]:shrink-0"
+                ref={toolbarRef}
+                className={`thin-scrollbar absolute z-[70] flex h-10 max-w-[calc(100vw-16px)] -translate-x-1/2 ${flipBelow ? "" : "-translate-y-full "}items-center gap-0.5 overflow-x-auto rounded-[14px] px-1.5 backdrop-blur-md [&>*]:shrink-0`}
                 data-node-toolbar={node.id}
                 style={{
                     left,

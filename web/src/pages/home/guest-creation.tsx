@@ -21,7 +21,7 @@ export function GuestCreation() {
     const openAuthDialog = useAuthDialogStore((state) => state.open);
     const login = () => {
         try { sessionStorage.setItem(GUEST_DRAFT_KEY, JSON.stringify({ mode, prompt })); } catch { /* login remains available if storage is blocked */ }
-        openAuthDialog("login", { redirect: "/create" });
+        openAuthDialog("login", { redirect: "/create", hint: "登录后立即为您继续生成刚才的创作" });
     };
     return <div className="creation-shell guest-creation flex h-full flex-col overflow-hidden bg-background text-foreground">
         <CreationStream composer={<div className="creation-composer mx-auto w-full"><ChatComposer

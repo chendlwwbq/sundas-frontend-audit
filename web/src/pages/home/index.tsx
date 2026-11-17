@@ -140,6 +140,30 @@ export default function HomePage({ landing = false, suppressPromo = false }: { l
         setMaterialBusy(false);
     }, [userId, sessionEpoch]);
 
+    // 访客在首页输入提示词并点击生成时暂存草稿；原地登录成功后自动接续进入创作工作台，不丢上下文。
+    useEffect(() => {
+        if (!authReady || !user || !userId || currentMediaOwner() !== userId || viewOwner !== userId || viewEpoch !== sessionEpoch) return;
+        let raw: string | null = null;
+        try {
+            raw = sessionStorage.getItem(PENDING_CREATION_KEY);
+            if (!raw) return;
+            sessionStorage.removeItem(PENDING_CREATION_KEY);
+        } catch {
+            return;
+        }
+        try {
+            const parsed = JSON.parse(raw) as { mode?: CreationMode; prompt?: string; references?: PendingReference[] };
+            const value = typeof parsed.prompt === "string" ? parsed.prompt.trim() : "";
+            if (!value) return;
+            const targetMode: CreationMode = parsed.mode === "image" ? "image" : "video";
+            const references = Array.isArray(parsed.references) ? parsed.references : [];
+            storePendingPrompt(targetMode, value, references, userId);
+            navigate(`/${targetMode}`, { replace: true });
+        } catch {
+            // 损坏草稿不阻塞首页渲染
+        }
+    }, [authReady, navigate, sessionEpoch, user, userId, viewEpoch, viewOwner]);
+
     // 灵感大厅数据来源：后台「首页文案」可指定只展示某个来源，留空表示不限。
     const inspirationSourceId = (home.inspirationSourceId ?? "").trim() || undefined;
     // 两个页签各自的条数，0 表示沿用统一的 promptLimit；接口一次最多取 60 条。
@@ -257,8 +281,10 @@ export default function HomePage({ landing = false, suppressPromo = false }: { l
         if (!value) return;
         const pendingReferences = materials.map((material) => ({ name: material.name, type: material.type, dataUrl: material.url, kind: material.kind }));
         if (!user) {
-            sessionStorage.setItem(PENDING_CREATION_KEY, JSON.stringify({ mode, prompt: value, references: pendingReferences }));
-            openAuthDialog("login", { redirect: "/" });
+            try {
+                sessionStorage.setItem(PENDING_CREATION_KEY, JSON.stringify({ mode, prompt: value, references: pendingReferences }));
+            } catch { /* 存储不可用时仍允许打开登录框 */ }
+            openAuthDialog("login", { redirect: "/", hint: "登录后立即为您继续生成刚才的创作" });
             return;
         }
         if (!userId || currentMediaOwner() !== userId) return;
@@ -277,8 +303,10 @@ export default function HomePage({ landing = false, suppressPromo = false }: { l
         const targetMode: CreationMode = isVideoPrompt(item) ? "video" : "image";
         setSelectedPrompt(null);
         if (!user) {
-            sessionStorage.setItem(PENDING_CREATION_KEY, JSON.stringify({ mode: targetMode, prompt: value }));
-            openAuthDialog("login", { redirect: "/" });
+            try {
+                sessionStorage.setItem(PENDING_CREATION_KEY, JSON.stringify({ mode: targetMode, prompt: value }));
+            } catch { /* 存储不可用时仍允许打开登录框 */ }
+            openAuthDialog("login", { redirect: "/", hint: "登录后立即为您继续生成刚才的创作" });
             return;
         }
         if (!userId || currentMediaOwner() !== userId) return;

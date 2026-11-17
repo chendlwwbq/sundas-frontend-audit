@@ -7,12 +7,15 @@ type OpenOptions = {
     redirect?: string;
     /** 邀请码，注册入口带过来时预填 */
     invite?: string;
+    /** 上下文引导文案，例如“登录后立即为您继续生成刚才的创作” */
+    hint?: string;
 };
 
 type AuthDialogState = {
     mode: AuthMode | null;
     redirect: string;
     invite: string;
+    hint: string;
     open: (mode?: AuthMode, options?: OpenOptions) => void;
     setMode: (mode: AuthMode) => void;
     close: () => void;
@@ -26,8 +29,9 @@ export const useAuthDialogStore = create<AuthDialogState>((set) => ({
     mode: null,
     redirect: "/",
     invite: "",
+    hint: "",
     open: (mode = "login", options) =>
-        set({ mode, redirect: options?.redirect ?? "/", invite: options?.invite ?? "" }),
+        set({ mode, redirect: options?.redirect ?? "/", invite: options?.invite ?? "", hint: options?.hint ?? "" }),
     setMode: (mode) => set({ mode }),
-    close: () => set({ mode: null }),
+    close: () => set({ mode: null, hint: "" }),
 }));

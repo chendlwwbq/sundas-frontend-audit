@@ -27,6 +27,7 @@ export function AuthDialog() {
     const mode = useAuthDialogStore((state) => state.mode);
     const redirect = useAuthDialogStore((state) => state.redirect);
     const presetInvite = useAuthDialogStore((state) => state.invite);
+    const hint = useAuthDialogStore((state) => state.hint);
     const setMode = useAuthDialogStore((state) => state.setMode);
     const close = useAuthDialogStore((state) => state.close);
 
@@ -229,6 +230,7 @@ export function AuthDialog() {
                         <BrandName text={copy.title} imageHeight="0.78em" />
                     </h2>
                     <p className="auth-modal-subtitle">{copy.subtitle}</p>
+                    {hint ? <p className="auth-modal-hint" role="status">{hint}</p> : null}
                 </div>
 
                 <form

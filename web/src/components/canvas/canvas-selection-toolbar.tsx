@@ -13,6 +13,7 @@ const SELECTION_PAD = 14;
 export function CanvasSelectionToolbar({
     nodes,
     viewport,
+    viewportSize,
     showToolbar,
     canGroup,
     canUngroup,
@@ -21,6 +22,7 @@ export function CanvasSelectionToolbar({
 }: {
     nodes: CanvasNodeData[];
     viewport: ViewportTransform;
+    viewportSize?: { width: number; height: number };
     showToolbar: boolean;
     canGroup: boolean;
     canUngroup: boolean;
@@ -37,6 +39,13 @@ export function CanvasSelectionToolbar({
     const width = (bounds.right - bounds.left) * viewport.k + SELECTION_PAD * 2;
     const height = (bounds.bottom - bounds.top) * viewport.k + SELECTION_PAD * 2;
     const showActions = showToolbar && (canGroup || canUngroup);
+    const vw = viewportSize?.width || (typeof window !== "undefined" ? window.innerWidth : 1280);
+    const vh = viewportSize?.height || (typeof window !== "undefined" ? window.innerHeight : 720);
+    const toolbarLeft = Math.max(96, Math.min(vw - 96, left + width / 2));
+    const flipBelow = top - 8 < 112;
+    const toolbarTop = flipBelow
+        ? Math.min(Math.max(72, top + height + 8), Math.max(72, vh - 56))
+        : Math.max(112, Math.min(vh - 16, top - 8));
 
     return (
         <>
@@ -58,10 +67,10 @@ export function CanvasSelectionToolbar({
             </svg>
             {showActions ? (
                 <div
-                    className="absolute z-[70] flex h-10 -translate-x-1/2 -translate-y-full items-center gap-0.5 overflow-visible rounded-[14px] px-1.5 backdrop-blur-2xl"
+                    className={`absolute z-[70] flex h-10 -translate-x-1/2 ${flipBelow ? "" : "-translate-y-full "}items-center gap-0.5 overflow-visible rounded-[14px] px-1.5 backdrop-blur-md`}
                     style={{
-                        left: left + width / 2,
-                        top: top - 8,
+                        left: toolbarLeft,
+                        top: toolbarTop,
                         background: theme.toolbar.panel,
                         border: `1px solid ${theme.toolbar.border}`,
                         color: theme.toolbar.item,
