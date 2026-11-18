@@ -1,0 +1,10 @@
+{
+  "name": "sundas-frontend-audit",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix web run dev -- --host 127.0.0.1",
+    "build": "npm --prefix web run build",
+    "preview": "npm --prefix web run start -- --host 127.0.0.1",
+    "setup": "npm --prefix web install"
+  }
+}

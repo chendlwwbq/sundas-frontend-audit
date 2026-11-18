@@ -1,0 +1,150 @@
+.home-landing { background: #121212; color: #ffffff; }
+.home-landing .home-content { width: min(1360px, 100%); margin: 0 auto; padding: 36px 40px 64px; }
+.home-landing .landing-welcome { position: relative; text-align: center; padding: 8px 0 30px; background: radial-gradient(ellipse 60% 80% at 50% 0%, rgba(216, 255, 62, 0.06), transparent 72%); }
+.home-landing .landing-eyebrow { color: #9aaba5; font-size: 11px; letter-spacing: .2em; margin-bottom: 14px; }
+.home-landing .landing-welcome h1 { font-size: clamp(24px, 2.4vw, 34px); font-weight: 600; letter-spacing: -.035em; }
+.home-landing .landing-intro { color: #92928c; margin-top: 12px; font-size: 13px; }
+.home-landing .landing-switch { display: flex; width: 320px; padding: 2px; gap: 2px; margin: 22px auto 0; border-radius: 110px; background: rgba(255, 255, 255, 0.08); }
+.home-landing .landing-switch > a,
+.home-landing .landing-switch > button { flex: 1; display: flex; align-items: center; justify-content: center; height: 36px; border: 0; border-radius: 999px; padding: 0 16px; background: transparent; font: inherit; font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.6); cursor: pointer; transition: background-color .16s cubic-bezier(.4,0,.2,1), color .16s cubic-bezier(.4,0,.2,1); }
+.home-landing .landing-switch > a:hover,
+.home-landing .landing-switch > button:hover { color: rgba(255, 255, 255, 0.9); }
+.home-landing .landing-switch .is-active { background: rgba(216, 255, 62, 0.14); color: #d8ff3e; box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.32); }
+.home-landing .landing-switch .is-active:hover { color: #d8ff3e; }
+.home-landing .home-composer { max-width: 1040px; margin: 0 auto; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; background: #1a1a1a; box-shadow: none; }
+.home-landing .home-composer::before { display: none; }
+.home-landing .home-prompt { min-height: 88px; }
+.home-landing .home-caption { text-align: center; margin: 12px 0 30px; }
+.home-landing .landing-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 34px 0 44px; }
+.home-landing .landing-tool { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 16px; background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.08); color: #ffffff; transition: background-color .14s cubic-bezier(.4,0,.2,1), border-color .14s cubic-bezier(.4,0,.2,1); }
+.home-landing .landing-tool:hover { background: #202020; border-color: rgba(255, 255, 255, 0.12); }
+.home-landing .landing-tool-art { display: grid; place-items: center; width: 56px; height: 56px; flex-shrink: 0; overflow: hidden; border-radius: 12px; background: rgba(216, 255, 62, 0.12); color: #e3ff6b; }
+.home-landing .landing-tool-art img { width: 100%; height: 100%; object-fit: cover; }
+.home-landing .landing-tool h2 { font-size: 14px; font-weight: 600; }
+.home-landing .landing-tool p { font-size: 12px; color: rgba(255, 255, 255, 0.6); margin-top: 4px; }
+.home-landing .home-prompt-grid { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 18px; }
+.home-landing .home-section { margin-top: 28px; }
+@media (max-width: 1200px) { .home-landing .landing-tools { grid-template-columns: repeat(2,minmax(0,1fr)); } .home-landing .home-prompt-grid { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media (max-width: 640px) { .home-landing .home-content { padding: 22px 16px 40px; } .home-landing .landing-tools { gap: 8px; margin: 24px 0; } .home-landing .landing-tool { gap: 8px; } .home-landing .landing-tool-art { width: 42px; height: 56px; } .home-landing .landing-tool p { line-height: 1.5; } .home-landing .landing-tool > svg { display: none; } .home-landing .home-prompt-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; } }
+
+.home-landing .landing-welcome { padding-bottom: 24px; }
+.home-landing .home-composer { padding: 16px 20px; }
+.home-landing .home-mode-row { margin-bottom: 8px; }
+.home-landing .home-mode { padding: 7px 14px; font-size: 13px; }
+.home-landing .home-editor { padding: 0; background: transparent; border: 0; box-shadow: none; }
+.home-landing .home-editor-label { display: none; }
+.home-landing .home-editor .home-prompt { min-height: 66px; height: 66px; margin-top: 0; padding: 8px 38px 12px 4px; font-size: 14px; font-weight: 400; }
+.home-landing .home-composer .home-toolbar { margin-top: 10px; }
+.home-landing .home-caption { margin-bottom: 12px; }
+.home-landing .landing-tools { margin-top: 24px; }
+
+/* ------------------------------------------------------------ 影幕展示背景
+   顶部铺满竖版片段墙（6 列循环播放），暗幕压到底色，向下渐隐到 #121212，
+   保证标题、合成器与卡片区仍是干净的深色底。 */
+.home-landing .home-backdrop {
+    height: clamp(560px, 88vh, 900px);
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 48%, rgba(0, 0, 0, 0.86) 72%, transparent 99%);
+    mask-image: linear-gradient(180deg, #000 0%, #000 48%, rgba(0, 0, 0, 0.86) 72%, transparent 99%);
+}
+
+/* 暗幕：只在中段与底部压深，顶部保留影片本色，整体比上一版透亮 */
+.home-landing .home-backdrop::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background:
+        radial-gradient(64% 52% at 50% 28%, rgba(18, 18, 18, 0.02), rgba(18, 18, 18, 0.54) 68%, #121212 100%),
+        linear-gradient(180deg, rgba(18, 18, 18, 0.4) 0%, rgba(18, 18, 18, 0.46) 42%, rgba(18, 18, 18, 0.9) 100%);
+}
+
+.home-landing .home-backdrop .home-film-wall {
+    opacity: 0.95;
+    filter: saturate(1.06) brightness(1.06);
+}
+
+/* 影片变亮后给标题补一层柔影，避免文字压在亮画面上发糊 */
+.home-landing .landing-welcome h1 { text-shadow: 0 1px 18px rgba(0, 0, 0, 0.55); }
+.home-landing .landing-eyebrow,
+.home-landing .landing-intro { text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6); }
+
+/* ------------------------------------------------------ 画布页签：最近画布面板
+   点击「画布」后替换生成对话框，宽度跟随 .home-content，与下方灵感大厅同一栅格；
+   一行四格：首格新建，其余三格是最近画布。 */
+.home-landing .home-canvas-panel {
+    margin: 0;
+    padding: 16px 18px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 16px;
+    background:
+        radial-gradient(120% 150% at 50% -40%, rgba(216, 255, 62, 0.05), rgba(216, 255, 62, 0) 62%),
+        #161616;
+}
+
+.home-landing .home-canvas-panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 14px;
+}
+
+.home-landing .home-canvas-panel-copy h2 {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.4;
+}
+
+.home-landing .home-canvas-panel-copy p {
+    margin: 3px 0 0;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11.5px;
+    line-height: 1.5;
+}
+
+.home-landing .home-canvas-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding-top: 1px;
+}
+
+.home-landing .home-canvas-panel-action {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    font: inherit;
+    font-size: 12px;
+    line-height: 20px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color .14s cubic-bezier(.4, 0, .2, 1);
+}
+
+.home-landing .home-canvas-panel-action:hover { color: #ffffff; }
+
+/* 卡片外观统一在 jimeng-theme.css 的 .jm-canvas-*（与 /canvas 画布库同一套） */
+
+@media (max-width: 560px) {
+    .home-landing .home-canvas-panel { padding: 14px 14px 16px; }
+    .home-landing .home-canvas-panel-head { gap: 12px; margin-bottom: 12px; }
+    .home-landing .home-canvas-panel-actions { gap: 14px; }
+    /* 窄屏卡宽不够，日期先让位，节点/连线数允许折两行，不做半截省略 */
+    .home-landing .home-canvas-date { display: none; }
+    .home-landing .jm-canvas-meta { white-space: normal; text-overflow: clip; }
+}
+
+@media (max-width: 767px) {
+    .home-landing .home-backdrop {
+        height: clamp(420px, 62vh, 620px);
+    }
+
+    .home-landing .home-backdrop .home-film-wall {
+        opacity: 0.66;
+    }
+}
